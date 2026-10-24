@@ -5,6 +5,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import DOMPurify from 'dompurify';
 import { Link as RouterLink } from 'react-router-dom';
 import { languageName } from '@/services/languages';
+import { recordLookup } from '@/services/events';
 import { dictImages, lookUp, preferredDict, setPreferredDict, type Lookup } from './lookup';
 import './dict.css';
 
@@ -35,7 +36,12 @@ function Definition({ html, dictId, onWord }: { html: string; dictId: string; on
   );
 }
 
-export function DictResults({ word, language, dark }: { word: string; language: string; dark: boolean }) {
+export function DictResults({ word, language, dark, record }: {
+  word: string; language: string; dark: boolean;
+  /** Record the lookup of `word` for the statistics (not the words followed from a definition) */
+  record?: { bookId: string; location: string };
+}) {
+  const recorded = useRef('');
   const [current, setCurrent] = useState(word);
   const [result, setResult] = useState<Lookup | null>(null);
   const [busy, setBusy] = useState(true);
@@ -46,7 +52,15 @@ export function DictResults({ word, language, dark }: { word: string; language: 
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
-    void lookUp(current, language).then((r) => { if (!cancelled) { setResult(r); setBusy(false); } })
+    void lookUp(current, language).then((r) => {
+      if (record && current === word && recorded.current !== `${word}|${record.location}`) {
+        recorded.current = `${word}|${record.location}`;
+        void recordLookup({ book_id: record.bookId, language, word: r.word, location: record.location,
+          matched: r.results[0]?.entries[0]?.headword ?? '', dictionaries: r.results.map((x) => x.dict.id),
+          found: r.results.length > 0 });
+      }
+      if (!cancelled) { setResult(r); setBusy(false); }
+    })
       .catch(() => { if (!cancelled) { setResult(null); setBusy(false); } });
     return () => { cancelled = true; };
   }, [current, language]);

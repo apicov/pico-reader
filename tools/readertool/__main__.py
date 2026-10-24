@@ -212,7 +212,9 @@ def index_books(args) -> None:
             continue
         print(f"  {len(found)} passages, embedding…")
         vectors = embed.embed([p.text for p in found])
-        api.post(f"/api/admin/books/{book['id']}/index/start", {"format": fmt, "sha256": sha, "model": embed.MODEL})
+        words = sum(len(p.text.split()) for p in found)
+        api.post(f"/api/admin/books/{book['id']}/index/start",
+                 {"format": fmt, "sha256": sha, "model": embed.MODEL, "word_count": words})
         for start in range(0, len(found), 100):
             batch = [{"seq": start + i, "location": p.location, "progress": round(p.progress, 5), "heading": p.heading,
                       "text": p.text, "embedding": [round(float(x), 6) for x in vectors[start + i]]}

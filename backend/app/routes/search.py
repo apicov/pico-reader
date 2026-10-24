@@ -31,6 +31,7 @@ class IndexStart(BaseModel):
     format: str
     sha256: str
     model: str
+    word_count: int | None = None  # words in the book's text, for reading statistics
 
 
 class Chunk(BaseModel):
@@ -59,6 +60,8 @@ def index_start(book_id: str, body: IndexStart, _: Reader = Depends(get_current_
         ON CONFLICT (book_id) DO UPDATE SET format = EXCLUDED.format, sha256 = EXCLUDED.sha256,
             model = EXCLUDED.model, chunks = 0, indexed_at = now()
     """), {"id": book_id, "f": body.format, "s": body.sha256, "m": body.model})
+    if body.word_count:
+        db.execute(text("UPDATE books SET word_count = :n WHERE id = :id"), {"n": body.word_count, "id": book_id})
     db.commit()
     return {"ok": True}
 

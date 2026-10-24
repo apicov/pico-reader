@@ -49,7 +49,8 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
       <Box sx={{ overflowY: 'auto', px: 2, pb: 2, pt: 1 }}>
         {showDict ? (
           <>
-            <DictResults word={showDict} language={language} dark={dark} />
+            <DictResults word={showDict} language={language} dark={dark}
+              record={term ? undefined : { bookId, location: selection.anchor?.location ?? location }} />
             {word && !term && selection.context && selection.context !== selection.text && (
               <Button size="small" sx={{ mt: 1 }} onClick={() => setSentence(true)}>Translate the sentence</Button>
             )}

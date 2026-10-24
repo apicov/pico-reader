@@ -23,6 +23,7 @@ import { ReflowView } from '@/reader/reflow/ReflowView';
 import { EpubView } from '@/reader/epub/EpubView';
 import { PdfView } from '@/reader/pdf/PdfView';
 import type { TocItem, ViewHandle } from '@/reader/types';
+import { flushEvents, saveSession, SessionTracker } from '@/services/events';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
 
@@ -155,12 +156,33 @@ export default function ReaderPage() {
     }
   };
 
+  // Reading time for the statistics: a session per stretch of reading, saved as it grows
+  const tracker = useRef<SessionTracker | null>(null);
+  useEffect(() => {
+    if (!book || !format) return;
+    const t = new SessionTracker(book.id, format);
+    tracker.current = t;
+    const finish = () => { const s = t.end(); if (s) void saveSession(s).then(() => flushEvents().catch(() => undefined)); };
+    const onVisibility = () => { if (document.hidden) finish(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { document.removeEventListener('visibilitychange', onVisibility); finish(); tracker.current = null; };
+  }, [book?.id, format]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const lastSessionSave = useRef(0);
+  const readingActivity = useCallback((progress?: number) => {
+    const s = tracker.current?.activity(progress);
+    if (s && Date.now() - lastSessionSave.current > 15_000) {
+      lastSessionSave.current = Date.now();
+      void saveSession(s);
+    }
+  }, []);
+
   // Remember the place: on the device at once, on the server every so often and when leaving
   const lastSync = useRef(0);
   const onLocation = useCallback((location: string, progress: number) => {
     if (!book || !format) return;
     const pos = { book_id: book.id, format, location, progress };
     setPosition({ location, progress });
+    readingActivity(progress);
     lastPosition.current = { ...pos, updated_at: new Date().toISOString() };
     void savePosition(pos).then(() => {
       if (Date.now() - lastSync.current > 15_000) {
@@ -168,8 +190,12 @@ export default function ReaderPage() {
         void flushPositions().catch(() => undefined);
       }
     });
-  }, [book, format]);
+  }, [book, format, readingActivity]);
   useEffect(() => () => { void flushPositions().catch(() => undefined); }, []);
+  const onSelection = useCallback((s: TextSelection | null) => {
+    setSelection(s);
+    if (s) readingActivity();
+  }, [readingActivity]);
 
   const switchFormat = (f: BookFormat) => {
     setFormatAnchor(null);
@@ -180,7 +206,7 @@ export default function ReaderPage() {
 
   const colors = READING_THEMES[settings.theme];
   const viewProps = {
-    ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection: setSelection, settings,
+    ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
     vars: readingVars(settings), dark: colors.mode === 'dark', highlights,
   };
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;

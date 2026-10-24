@@ -1,4 +1,6 @@
-import { lazy, Suspense, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { flushEvents } from '@/services/events';
+import { subscribeOnline } from '@/services/connectivity';
 import { Box, CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
@@ -17,6 +19,15 @@ const ReaderPage = lazy(() => import('@/pages/ReaderPage'));
 
 function Routed() {
   const { reader, loading } = useAuth();
+  // Send recorded reading and lookups: at start, every few minutes, and when the connection comes back
+  useEffect(() => {
+    if (!reader) return;
+    const flush = () => void flushEvents().catch(() => undefined);
+    flush();
+    const timer = setInterval(flush, 180_000);
+    const unsubscribe = subscribeOnline((online) => { if (online) flush(); });
+    return () => { clearInterval(timer); unsubscribe(); };
+  }, [reader]);
   const spinner = <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}><CircularProgress /></Box>;
   if (loading) return spinner;
   if (!reader) return <LoginPage />;
