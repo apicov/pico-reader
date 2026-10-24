@@ -39,6 +39,9 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Uploads and indexing** ([10](10-uploads-and-offline-search.md)): any reader adds books from the app;
   `book_events` keeps who uploaded, changed or deleted what and when; `index_jobs` + the
   `pico-reader-indexer` service make uploaded books searchable and write each book's offline search file.
+- **Community** ([11](11-community.md)): profiles, 0–10 reviews with "recommend", posts linked to books with
+  quotes that open the reader at the passage, comments with one level of replies, likes and top lists. Everyone
+  signed in sees everything; other readers are shown by handle, never by email. Admins can hide anything.
 - **AI usage** (`llm_usage`): every Groq call records its reader, purpose (translate, define, chat, chat_title,
   search, ask), model and tokens in and out (`groq_client._record`). Readers see their own on the statistics
   page and through the agent; `python -m app.cli usage` lists everyone's.
