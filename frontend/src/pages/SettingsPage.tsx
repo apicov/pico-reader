@@ -7,6 +7,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useInstalledDicts } from '@/hooks/useInstalledDicts';
 import { ReadingGoalSettings } from '@/components/ReadingGoalSettings';
+import { OfflineSearchSettings } from '@/components/OfflineSearchSettings';
 import { useSettings } from '@/contexts/SettingsContext';
 import { LANGUAGES } from '@/services/languages';
 import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
@@ -52,6 +53,8 @@ export default function SettingsPage() {
         </Select>
       </FormControl>
       <ReadingGoalSettings />
+      <Divider />
+      <OfflineSearchSettings />
       <Divider />
       <Box>
         <Typography variant="h6">Learning</Typography>

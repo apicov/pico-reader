@@ -13,7 +13,7 @@ import type { Book, FileRef } from '@/services/types';
 import { nativeStore } from './native';
 import { webStore } from './web';
 
-export type FileKind = 'pdf' | 'epub' | 'reflow' | 'cover';
+export type FileKind = 'pdf' | 'epub' | 'reflow' | 'cover' | 'search';
 
 export interface CachedFile {
   bookId: string;
@@ -67,7 +67,7 @@ export async function isCached(bookId: string, kind: FileKind, file: FileRef): P
 }
 
 /** Make sure the current version of a book's file is on the device. */
-export async function ensureFile(book: Book, kind: Exclude<FileKind, 'cover'>,
+export async function ensureFile(book: Book, kind: Exclude<FileKind, 'cover' | 'search'>,
                                  onProgress?: (fraction: number) => void): Promise<void> {
   const file = book.formats[kind];
   if (!file) throw new Error(`This book has no ${kind}`);
@@ -75,6 +75,16 @@ export async function ensureFile(book: Book, kind: Exclude<FileKind, 'cover'>,
   const link = await api<{ url: string }>(`/api/books/${encodeURIComponent(book.id)}/download?kind=${kind}`);
   await store.save(fileName(book.id, kind), link.url, file.size, onProgress);
   await record(book.id, kind, file);
+}
+
+/** Keep a book's offline search file (passages + vectors) on the device, when the server made one. */
+export async function ensureSearchFile(book: Book): Promise<boolean> {
+  if (!book.search) return false;
+  if (await isCached(book.id, 'search', book.search)) return true;
+  const link = await api<{ url: string }>(`/api/books/${encodeURIComponent(book.id)}/download?kind=search`);
+  await store.save(fileName(book.id, 'search'), link.url, book.search.size);
+  await record(book.id, 'search', book.search);
+  return true;
 }
 
 /** Keep a book's cover for offline use (links come with the library). */

@@ -26,6 +26,7 @@ import BuildCircleOutlinedIcon from '@mui/icons-material/BuildCircleOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { READING_FONT } from '@/theme/readingThemes';
+import { OfflineSearchPanel } from '@/search/OfflineSearchPanel';
 
 const SIDEBAR = 300;
 
@@ -303,7 +304,12 @@ export default function AskPage() {
         <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <Box sx={{ flex: 1, overflowY: 'auto', px: 2, py: 3 }}>
             <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-              {messages.length === 0 && !error && (
+              {!online && (
+                <Box sx={{ mb: 3 }}>
+                  <OfflineSearchPanel books={library?.books ?? []} onOpen={openPassage} />
+                </Box>
+              )}
+              {messages.length === 0 && !error && online && (
                 <Box sx={{ textAlign: 'center', color: 'text.secondary', mt: { xs: 4, md: 10 } }}>
                   <Typography variant="h5" sx={{ fontFamily: READING_FONT, color: 'text.primary', mb: 1 }}>Ask your library</Typography>
                   <Typography variant="body2">

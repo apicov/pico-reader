@@ -11,7 +11,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { ensureFile, fileBlob, isCached } from '@/services/bookCache';
+import { ensureFile, ensureSearchFile, fileBlob, isCached } from '@/services/bookCache';
 import { getPref, setPref } from '@/services/prefs';
 import type { Book, BookFormat } from '@/services/types';
 import { READING_THEMES, readingVars } from '@/theme/readingThemes';
@@ -26,6 +26,7 @@ import type { TocItem, ViewHandle } from '@/reader/types';
 import { flushEvents, saveSession, SessionTracker } from '@/services/events';
 import { lookedUpWords, wordsIn } from '@/services/words';
 import { setShelfStatus } from '@/services/shelf';
+import { offlineSearchEnabled } from '@/search/offlineSearch';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
 
@@ -128,6 +129,8 @@ export default function ReaderPage() {
   // Opening a book puts it on the reader's "Currently reading" list (unless finished or removed before)
   useEffect(() => {
     if (book) void setShelfStatus(book.id, 'reading', true);
+    // with offline search on, an opened book's search file comes along
+    if (book?.search && online) void offlineSearchEnabled().then((on) => on && ensureSearchFile(book).catch(() => undefined));
   }, [book?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Words looked up before in this book's language (underlined, and the "Words" tab)
