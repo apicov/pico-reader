@@ -54,6 +54,31 @@ Tests: `.venv/bin/pip install -r requirements-dev.txt && PYTHONPATH=. .venv/bin/
   computations are reused) and packages it as a **reflow** book. `--pdf` adds a PDF of the same book as a
   second format, and its first page as the cover.
 
+## Dictionaries
+
+StarDict dictionaries (`.ifo`, `.idx`, `.dict` or `.dict.dz`, optional `.syn` and `res/`) are converted on
+this computer and uploaded; the app installs the ones you pick (Settings → Dictionaries) and looks words up
+offline.
+
+```bash
+./reader dict-add ~/Documents/dic/converted/duden --from de --to de
+./reader dict-add-all ~/Documents/dic/converted          # every folder listed in dictionaries.json
+./reader dict-add-all ~/Documents/dic/converted --only duden,ldaf
+./reader dict-list
+./reader dict-delete <dictionary id>
+```
+
+- `dictionaries.json` maps each folder name to its language pair (headwords → definitions). StarDict files
+  don't state it reliably, so add new folders there.
+- The id comes from the folder name: converting a folder again replaces that dictionary.
+- Each dictionary becomes up to three packages: `sqlite` (a zip with `<id>SQLite.db`, for Android), `jsonl`
+  (gzip'd JSON lines, imported into the browser's IndexedDB) and `res` (the images its definitions use).
+  Definitions are stored as HTML (plain text is escaped, XDXF mapped to simple HTML).
+- Lookup keys: `key` = NFC + lower case, `fkey` = the key without accents (ß stays ß). The app computes the
+  same keys (`frontend/src/dict/normalize.ts`) and tries the selected word, then common dictionary forms
+  (`frontend/src/dict/forms.ts`), then the accent-free keys.
+- These dictionaries are for personal use: the bucket is private and every download needs a signed-in reader.
+
 ## The reflow format
 
 A zip the app reads chapter by chapter:
