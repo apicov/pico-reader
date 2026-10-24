@@ -204,7 +204,7 @@ def dict_add_all(args) -> None:
             continue
         try:
             _upload_dictionary(folder, *mapping[folder.name], None)
-        except ToolError as e:
+        except Exception as e:  # one broken dictionary mustn't stop the rest
             print(f"  failed: {e}")
 
 

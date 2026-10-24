@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 
 import requests
@@ -63,12 +64,28 @@ class Api:
         for kind, url in res["uploads"].items():
             path, ct = files[kind]
             print(f"  uploading {kind} ({path.stat().st_size / 1e6:.1f} MB)")
-            with path.open("rb") as f:
-                put = requests.put(url, data=f, headers={"Content-Type": ct}, timeout=3600)
-            if not put.ok:
-                raise ToolError(f"Upload of {kind} failed: HTTP {put.status_code} {put.text[:200]}")
+            _put(url, path, ct, kind)
         self.post(f"/api/admin/{collection}/{res['id']}/commit")
         return res["id"]
+
+
+def _put(url: str, path: Path, content_type: str, kind: str, attempts: int = 3) -> None:
+    """PUT a file to a signed link, again after a dropped connection (R2 sometimes resets long uploads)."""
+    for attempt in range(1, attempts + 1):
+        try:
+            with path.open("rb") as f:
+                put = requests.put(url, data=f, headers={"Content-Type": content_type}, timeout=3600)
+        except requests.RequestException as e:
+            if attempt == attempts:
+                raise ToolError(f"Upload of {kind} failed: {e}") from e
+            print(f"  connection dropped, retrying {kind} ({attempt}/{attempts - 1})")
+            time.sleep(3 * attempt)
+            continue
+        if put.ok:
+            return
+        if attempt == attempts or put.status_code < 500:
+            raise ToolError(f"Upload of {kind} failed: HTTP {put.status_code} {put.text[:200]}")
+        time.sleep(3 * attempt)
 
 
 def file_info(path: Path, content_type: str) -> dict:
