@@ -11,6 +11,8 @@ from app.db import get_db
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 
+FINISHED_AT = 0.98  # reading this far moves a book on the shelf from "reading" to "finished"
+
 
 class Position(BaseModel):
     book_id: str = Field(min_length=1)
@@ -39,6 +41,10 @@ def save_position(body: Position, reader: Reader = Depends(get_current_reader), 
         RETURNING book_id
     """), {"e": reader.email, "b": body.book_id, "f": body.format, "l": body.location, "p": body.progress,
            "u": body.updated_at}).fetchone()
+    if body.progress >= FINISHED_AT:
+        db.execute(text("""INSERT INTO shelf (reader_email, book_id, status) VALUES (:e, :b, 'finished')
+                           ON CONFLICT (reader_email, book_id) DO UPDATE SET status = 'finished', updated_at = now()
+                           WHERE shelf.status = 'reading'"""), {"e": reader.email, "b": body.book_id})
     if row is None:  # the server's copy is newer
         kept = db.execute(text("""SELECT book_id, format, location, progress, updated_at FROM reading_state
                                   WHERE reader_email = :e AND book_id = :b"""),

@@ -72,14 +72,17 @@ def _stats(ctx: Context, period: str, book_id: str | None = None) -> dict:
 
 def list_books(ctx: Context) -> dict:
     rows = ctx.db.execute(text("""
-        SELECT b.id, b.title, b.author, b.language, b.files, b.word_count, i.chunks, rs.progress, rs.updated_at
+        SELECT b.id, b.title, b.author, b.language, b.files, b.word_count, i.chunks, rs.progress, rs.updated_at,
+               sh.status AS shelf
         FROM books b LEFT JOIN book_index i ON i.book_id = b.id
         LEFT JOIN reading_state rs ON rs.book_id = b.id AND rs.reader_email = :e
+        LEFT JOIN shelf sh ON sh.book_id = b.id AND sh.reader_email = :e
         WHERE b.status = 'ready' ORDER BY lower(b.title)"""), {"e": ctx.reader.email}).fetchall()
     return {"books": [{"id": r.id, "title": r.title, "author": r.author, "language": r.language,
                        "formats": sorted(k for k in r.files if k != "cover"), "words": r.word_count,
                        "searchable": bool(r.chunks), "progress_percent": round((r.progress or 0) * 100),
-                       "last_opened": r.updated_at.isoformat() if r.updated_at else None} for r in rows]}
+                       "last_opened": r.updated_at.isoformat() if r.updated_at else None,
+                       "shelf": r.shelf or "not started"} for r in rows]}
 
 
 def book_details(ctx: Context, book: str) -> dict:
@@ -265,7 +268,8 @@ def _obj(props: dict, required: list[str] | None = None) -> dict:
 
 
 TOOLS = {t.name: t for t in [
-    Tool("list_books", "All books in the library: language, formats, size, whether searchable, reading progress.",
+    Tool("list_books", "All books in the (shared) library with the reader's own shelf status (reading, finished, "
+         "removed, not started), language, formats, size, whether searchable, reading progress.",
          _obj({}), list_books),
     Tool("book_details", "One book: progress, time spent, reading speed, time left, lookups, highlights.",
          _obj({"book": BOOK}, ["book"]), book_details),

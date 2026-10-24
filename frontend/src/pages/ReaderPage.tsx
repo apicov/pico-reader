@@ -25,6 +25,7 @@ import { PdfView } from '@/reader/pdf/PdfView';
 import type { TocItem, ViewHandle } from '@/reader/types';
 import { flushEvents, saveSession, SessionTracker } from '@/services/events';
 import { lookedUpWords, wordsIn } from '@/services/words';
+import { setShelfStatus } from '@/services/shelf';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
 
@@ -123,6 +124,11 @@ export default function ReaderPage() {
     // `online` only matters for the first open; a connection change mustn't reload the book
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book?.id, format]);
+
+  // Opening a book puts it on the reader's "Currently reading" list (unless finished or removed before)
+  useEffect(() => {
+    if (book) void setShelfStatus(book.id, 'reading', true);
+  }, [book?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Words looked up before in this book's language (underlined, and the "Words" tab)
   useEffect(() => {
