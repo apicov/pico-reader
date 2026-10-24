@@ -69,7 +69,8 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     });
 
     void (async () => {
-      await view.open(blob);
+      // foliate tells formats apart by file name and type
+      await view.open(new File([blob], 'book.epub', { type: 'application/epub+zip' }));
       if (closed) return;
       const s = settingsRef.current;
       view.renderer.setAttribute('flow', 'paginated');
