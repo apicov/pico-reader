@@ -12,16 +12,23 @@ class DictDb extends Dexie {
   entries!: Table<EntryRow, [string, number]>;
   syn!: Table<SynRow, number>;
   constructor() {
-    super('pico-reader-dicts');
+    // Relaxed durability: Chrome doesn't flush to disk after every batch (an interrupted install is redone)
+    super('pico-reader-dicts', { chromeTransactionDurability: 'relaxed' });
     this.version(1).stores({
       entries: '[dictId+id], [dictId+key], [dictId+fkey]',
       syn: '++, [dictId+key], [dictId+fkey]',
+    });
+    // One lookup index instead of two: exact matches are the accent-free matches filtered by `key`.
+    // Each index costs a write per row, and this halves the install time.
+    this.version(2).stores({
+      entries: '[dictId+id], [dictId+fkey]',
+      syn: '++, [dictId+fkey]',
     });
   }
 }
 
 const db = new DictDb();
-const BATCH = 5000;
+const BATCH = 20000;
 
 /** Lines of a gzip'd text download, with the share of compressed bytes read so far (fflate's streaming
  *  gunzip: DecompressionStream is missing from older browsers). */
@@ -62,36 +69,39 @@ export const webDictStore: DictBackend = {
         syns.push({ dictId: dict.id, key, fkey: fold(key), entryId: row[1] });
       }
       if (entries.length + syns.length >= BATCH) {
-        await db.transaction('rw', db.entries, db.syn, async () => { await db.entries.bulkPut(entries); await db.syn.bulkAdd(syns); });
+        await db.transaction('rw', db.entries, db.syn, async () => { await db.entries.bulkAdd(entries); await db.syn.bulkAdd(syns); });
         entries = [];
         syns = [];
         onProgress(Math.min(0.99, fraction));
       }
     }
-    await db.transaction('rw', db.entries, db.syn, async () => { await db.entries.bulkPut(entries); await db.syn.bulkAdd(syns); });
+    await db.transaction('rw', db.entries, db.syn, async () => { await db.entries.bulkAdd(entries); await db.syn.bulkAdd(syns); });
     onProgress(1);
   },
 
   async remove(dictId) {
     await db.entries.where('[dictId+id]').between([dictId, Dexie.minKey], [dictId, Dexie.maxKey]).delete();
-    await db.syn.where('[dictId+key]').between([dictId, Dexie.minKey], [dictId, Dexie.maxKey]).delete();
+    await db.syn.where('[dictId+fkey]').between([dictId, Dexie.minKey], [dictId, Dexie.maxKey]).delete();
   },
 
   async lookup(dictId, keys, folded) {
-    const index = folded ? '[dictId+fkey]' : '[dictId+key]';
-    const pairs = keys.map((k) => [dictId, k]);
-    const [direct, viaSyn] = await Promise.all([
-      db.entries.where(index).anyOf(pairs).toArray(),
-      db.syn.where(index).anyOf(pairs).toArray(),
-    ]);
-    const synEntries = viaSyn.length
-      ? (await db.entries.bulkGet(viaSyn.map((s) => [dictId, s.entryId] as [string, number]))).filter((e): e is EntryRow => !!e)
-      : [];
+    // Both kinds go through the accent-free index; an exact lookup keeps the rows whose key is asked for
+    const pairs = [...new Set(keys.map((k) => (folded ? k : fold(k))))].map((k) => [dictId, k]);
     const field = folded ? 'fkey' : 'key';
-    const rank = (e: EntryRow, viaKey?: string) => keys.indexOf(viaKey ?? e[field]);
+    const wanted = new Set(keys);
+    const [direct, viaSyn] = await Promise.all([
+      db.entries.where('[dictId+fkey]').anyOf(pairs).toArray(),
+      db.syn.where('[dictId+fkey]').anyOf(pairs).toArray(),
+    ]);
+    const hits = direct.filter((e) => wanted.has(e[field]));
+    const synHits = viaSyn.filter((s) => wanted.has(s[field]));
+    const synEntries = synHits.length
+      ? (await db.entries.bulkGet(synHits.map((s) => [dictId, s.entryId] as [string, number]))).filter((e): e is EntryRow => !!e)
+      : [];
+    const rank = (k: string) => keys.indexOf(k);
     const ranked = [
-      ...direct.map((e) => ({ e, r: rank(e) })),
-      ...synEntries.map((e, i) => ({ e, r: rank(e, viaSyn[i][field]) + 0.5 })),
+      ...hits.map((e) => ({ e, r: rank(e[field]) })),
+      ...synEntries.map((e, i) => ({ e, r: rank(synHits[i][field]) + 0.5 })),
     ].sort((a, b) => a.r - b.r);
     const seen = new Set<number>();
     const out: DictEntry[] = [];
