@@ -4,6 +4,7 @@
     python -m app.cli remove someone@example.com
     python -m app.cli list
     python -m app.cli usage [--days 30]      (Groq tokens per reader and purpose)
+    python -m app.cli history [--days 30]    (who added, changed, deleted or indexed which book, and when)
 
 Admins can add books and dictionaries (the desktop tool signs in as one).
 """
@@ -25,6 +26,7 @@ def main() -> None:
     sub.add_parser("remove").add_argument("email")
     sub.add_parser("list")
     sub.add_parser("usage").add_argument("--days", type=int, default=30)
+    sub.add_parser("history").add_argument("--days", type=int, default=30)
     args = parser.parse_args()
 
     with get_engine().begin() as conn:
@@ -37,6 +39,12 @@ def main() -> None:
         elif args.cmd == "remove":
             conn.execute(text("UPDATE readers SET active = false WHERE email = :e"), {"e": args.email.lower().strip()})
             print(f"{args.email} can no longer sign in")
+        elif args.cmd == "history":
+            rows = conn.execute(text("""SELECT created_at, actor, action, title, book_id FROM book_events
+                                        WHERE created_at >= now() - make_interval(days => :d) ORDER BY id"""),
+                                {"d": args.days})
+            for r in rows:
+                print(f"{r.created_at:%Y-%m-%d %H:%M}  {r.actor:28} {r.action:14} {r.title}  ({r.book_id})")
         elif args.cmd == "usage":
             rows = conn.execute(text("""
                 SELECT reader_email, purpose, count(*) AS calls, sum(prompt_tokens) AS i, sum(completion_tokens) AS o
