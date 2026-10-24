@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     groq_model: str = "qwen/qwen3.8-27b"
     groq_reasoning_format: str = "hidden"  # for reasoning models; empty = don't send it
     groq_base_url: str = "https://api.groq.com/openai/v1"
+    # The chat agent (tool calling); empty = groq_model. qwen3.8 calls several tools at once and answers well.
+    groq_agent_model: str = ""
 
     @property
     def is_production(self) -> bool:

@@ -79,6 +79,25 @@ def chat_stream(messages: list[dict[str, str]], max_tokens: int = 1500) -> Itera
         raise GroqError(f"Could not reach Groq: {e}") from e
 
 
+def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1500) -> dict[str, Any]:
+    """One step of the agent: the model's message, with `tool_calls` when it wants tools run."""
+    settings = get_settings()
+    payload = {**_payload(messages, max_tokens), "tools": tools, "tool_choice": "auto",
+               "model": settings.groq_agent_model or settings.groq_model}
+    try:
+        res = httpx.post(f"{settings.groq_base_url}/chat/completions", json=payload, timeout=90,
+                         headers={"Authorization": f"Bearer {settings.groq_api_key}"})
+    except httpx.HTTPError as e:
+        raise GroqError(f"Could not reach Groq: {e}") from e
+    if res.status_code != 200:
+        logger.error("Groq error %s: %s", res.status_code, res.text[:500])
+        raise GroqError(f"Groq answered {res.status_code}: {_error_message(res)}", 429 if res.status_code == 429 else 502)
+    try:
+        return res.json()["choices"][0]["message"]
+    except (KeyError, IndexError, ValueError) as e:
+        raise GroqError("Groq sent no message") from e
+
+
 def _call(system: str, user: str, max_tokens: int) -> dict[str, Any]:
     settings = get_settings()
     payload = {**_payload([{"role": "system", "content": system}, {"role": "user", "content": user}], max_tokens),

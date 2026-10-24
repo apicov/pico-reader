@@ -51,10 +51,11 @@ export default function ReaderPage() {
   const { bookId = '' } = useParams();
   // ?format=&location=&progress= opens the book at a place (a search result); used once, then dropped
   const [params, setParams] = useSearchParams();
-  const jump = useRef(params.get('format') ? {
-    format: params.get('format') as BookFormat, location: params.get('location') ?? '',
-    progress: Number(params.get('progress') ?? 0),
-  } : null);
+  const jump = useRef<{ format: BookFormat | null; location: string; progress: number } | null>(
+    params.get('format') || params.get('progress') ? {
+      format: (params.get('format') || null) as BookFormat | null, location: params.get('location') ?? '',
+      progress: Number(params.get('progress') ?? 0),
+    } : null);
   const navigate = useNavigate();
   const { library } = useLibrary();
   const online = useOnlineStatus();
@@ -82,7 +83,7 @@ export default function ReaderPage() {
   // The format: the last one used for this book, else the best available
   useEffect(() => {
     if (!book || format) return;
-    if (jump.current && book.formats[jump.current.format]) {
+    if (jump.current?.format && book.formats[jump.current.format]) {
       setFormat(jump.current.format);
       return;
     }
@@ -103,7 +104,7 @@ export default function ReaderPage() {
           (fraction) => !cancelled && setPhase({ kind: 'downloading', fraction }));
         opened = loaded;
         const pos = lastPosition.current ?? (await loadPosition(book.id));
-        const target = jump.current?.format === format ? jump.current : null;
+        const target = jump.current && (!jump.current.format || jump.current.format === format) ? jump.current : null;
         jump.current = null;
         if (target) setParams({}, { replace: true });
         // A search result opens at its passage; the same format resumes exactly; another one starts at the

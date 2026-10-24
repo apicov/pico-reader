@@ -6,6 +6,8 @@ import DOMPurify from 'dompurify';
 import { Link as RouterLink } from 'react-router-dom';
 import { languageName } from '@/services/languages';
 import { recordLookup } from '@/services/events';
+import { api } from '@/services/api';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import { addCard } from '@/services/review';
 import { markKnown } from '@/services/words';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -61,6 +63,7 @@ export function DictResults({ word, language, dark, record }: {
   const { settings } = useSettings();
   const online = useOnlineStatus();
   const [known, setKnown] = useState(false);
+  const [ai, setAi] = useState<{ lemma: string; part_of_speech: string; meaning: string; notes: string } | 'asking' | 'failed' | null>(null);
   const [carded, setCarded] = useState(false);
   const recorded = useRef('');
   const [current, setCurrent] = useState(word);
@@ -68,7 +71,7 @@ export function DictResults({ word, language, dark, record }: {
   const [busy, setBusy] = useState(true);
   const [preferred, setPreferred] = useState<string | null>(null);
 
-  useEffect(() => setCurrent(word), [word]);
+  useEffect(() => { setCurrent(word); setAi(null); setKnown(false); setCarded(false); }, [word]);
   useEffect(() => { void preferredDict(language).then(setPreferred); }, [language]);
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +83,17 @@ export function DictResults({ word, language, dark, record }: {
           matched: r.results[0]?.entries[0]?.headword ?? '', dictionaries: r.results.map((x) => x.dict.id),
           found: r.results.length > 0, context: record.context.slice(0, 1000) });
         if (settings.autoReview && r.results.length) void cardFor(r, record).then(setCarded);
+        // no dictionary has it: ask the model, with the sentence for context
+        if (!r.results.length && online) {
+          setAi('asking');
+          void api<{ lemma: string; part_of_speech: string; meaning: string; notes: string }>('/api/define', {
+            method: 'POST', body: { word: r.word, context: record.context.slice(0, 1500), language, target_lang: settings.targetLanguage },
+          }).then((d) => {
+            setAi(d);
+            if (settings.autoReview) void addCard({ language, term: d.lemma, meaning: d.meaning, example: record.context.slice(0, 500),
+              source: 'lookup', book_id: record.bookId }).then(setCarded);
+          }).catch(() => setAi('failed'));
+        }
       }
       if (!cancelled) { setResult(r); setBusy(false); }
     })
@@ -89,7 +103,26 @@ export function DictResults({ word, language, dark, record }: {
 
   if (busy && !result) return <Box sx={{ p: 2, textAlign: 'center' }}><CircularProgress size={20} /></Box>;
   if (!result) return null;
-  const nothingInstalled = !result.results.length && !result.suggestions.length;
+  const nothingInstalled = !result.results.length && !result.suggestions.length && !ai;
+  const aiBlock = ai && current === word && (
+    <Box sx={{ mb: 2 }}>
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+        <AutoAwesomeOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+        <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>AI · not in your dictionaries</Typography>
+      </Stack>
+      {ai === 'asking' && <CircularProgress size={16} />}
+      {ai === 'failed' && <Typography variant="body2" color="text.secondary">The AI couldn't define it right now.</Typography>}
+      {typeof ai === 'object' && (
+        <>
+          <Typography sx={{ fontWeight: 600, fontFamily: 'Literata, serif' }}>
+            {ai.lemma}{ai.part_of_speech ? <Typography component="span" variant="body2" color="text.secondary"> · {ai.part_of_speech}</Typography> : null}
+          </Typography>
+          <Typography className="dict-def">{ai.meaning}</Typography>
+          {ai.notes && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{ai.notes}</Typography>}
+        </>
+      )}
+    </Box>
+  );
   const headword = result.results[0]?.entries[0]?.headword ?? result.word;
   return (
     <Box className={dark ? 'dict-dark' : undefined}>
@@ -110,6 +143,7 @@ export function DictResults({ word, language, dark, record }: {
       {current !== word && (
         <Button size="small" onClick={() => setCurrent(word)} sx={{ mb: 1 }}>← {word}</Button>
       )}
+      {aiBlock}
       {result.results.map(({ dict, entries, loose }) => (
         <Box key={dict.id} sx={{ mb: 2 }}>
           <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
@@ -130,7 +164,7 @@ export function DictResults({ word, language, dark, record }: {
           ))}
         </Box>
       ))}
-      {!result.results.length && result.suggestions.length > 0 && (
+      {!result.results.length && result.suggestions.length > 0 && !(ai && typeof ai === 'object') && (
         <Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>“{result.word}” isn't in your dictionaries. Did you mean:</Typography>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>

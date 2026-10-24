@@ -26,6 +26,29 @@ export interface Conversation {
   snippet?: string;
 }
 
+export interface ChatLink {
+  kind: 'open' | 'download';
+  label: string;
+  book_id?: string;
+  format?: string;
+  location?: string;
+  progress?: number;
+  path?: string;
+  filename?: string;
+}
+
+export interface ChatAction {
+  id: string;
+  label: string;
+  status: 'pending' | 'done' | 'cancelled' | 'failed';
+}
+
+export interface MessageExtras {
+  tools?: string[];
+  links?: ChatLink[];
+  actions?: ChatAction[];
+}
+
 export interface Message {
   id: number;
   conversation_id?: string;
@@ -33,6 +56,7 @@ export interface Message {
   content: string;
   sources: Passage[];
   created_at: string;
+  extras?: MessageExtras;
 }
 
 class ChatDb extends Dexie {
@@ -101,6 +125,16 @@ export async function deleteConversation(id: string): Promise<void> {
 export interface StreamHandlers {
   onSources: (sources: Passage[]) => void;
   onDelta: (text: string) => void;
+  onTool?: (label: string) => void;
+  onLink?: (link: ChatLink) => void;
+  onAction?: (action: ChatAction) => void;
+}
+
+/** Confirm (or cancel) a change the agent proposed; returns the chat message saying what happened. */
+export async function decideAction(conversationId: string, actionId: string, approve: boolean): Promise<Message> {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return api<Message>(`/api/conversations/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}?tz=${encodeURIComponent(tz)}`,
+    { method: 'POST', body: { approve } });
 }
 
 /** Split a server-sent event stream into (event, data) pairs; `feed` returns the complete ones so far. */
@@ -132,7 +166,7 @@ export async function sendMessage(conversationId: string, content: string, h: St
   const res = await fetch(`${API_URL}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
   });
   if (!res.ok || !res.body) {
     const detail = await res.json().then((d) => d.detail).catch(() => null);
@@ -148,6 +182,9 @@ export async function sendMessage(conversationId: string, content: string, h: St
     for (const { event, data } of feed(decoder.decode(value, { stream: true }))) {
       if (event === 'sources') h.onSources(data as Passage[]);
       else if (event === 'delta') h.onDelta(data as string);
+      else if (event === 'tool') h.onTool?.((data as { label: string }).label);
+      else if (event === 'link') h.onLink?.(data as ChatLink);
+      else if (event === 'action') h.onAction?.(data as ChatAction);
       else if (event === 'error') throw new Error((data as { message: string }).message);
       else if (event === 'done') result = { title: (data as { title: string }).title };
     }

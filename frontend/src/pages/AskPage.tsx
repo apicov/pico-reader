@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import {
   Alert, AppBar, Box, Button, Card, CardActionArea, CardContent, CircularProgress, Collapse, Dialog, DialogActions,
   DialogContent, DialogTitle, Drawer, IconButton, InputAdornment, List, ListItemButton, ListItemText, Menu, MenuItem,
-  Stack, TextField, Toolbar, Tooltip, Typography, useMediaQuery, useTheme,
+  Chip, Stack, TextField, Toolbar, Tooltip, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -18,9 +18,13 @@ import { Markdown } from '@/components/Markdown';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import {
-  createConversation, deleteConversation, listConversations, loadConversation, localConversations, sendMessage,
-  updateConversation, type Conversation, type Message, type Passage,
+  createConversation, decideAction, deleteConversation, listConversations, loadConversation, localConversations, sendMessage,
+  updateConversation, type ChatLink, type Conversation, type Message, type Passage,
 } from '@/services/chat';
+import { downloadExport } from '@/services/download';
+import BuildCircleOutlinedIcon from '@mui/icons-material/BuildCircleOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { READING_FONT } from '@/theme/readingThemes';
 
 const SIDEBAR = 300;
@@ -182,6 +186,28 @@ export default function AskPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [messages]);
 
+  const openLink = (l: ChatLink) => {
+    if (l.kind === 'download' && l.path) { void downloadExport(l.path, l.filename ?? 'download').catch((e) => setError((e as Error).message)); return; }
+    if (!l.book_id) return;
+    const q = new URLSearchParams();
+    if (l.format) q.set('format', l.format);
+    if (l.location) q.set('location', l.location);
+    if (l.progress !== undefined) q.set('progress', String(l.progress));
+    navigate(`/read/${encodeURIComponent(l.book_id)}${q.toString() ? `?${q}` : ''}`);
+  };
+
+  const decide = async (messageId: number, actionId: string, approve: boolean) => {
+    if (!conversation) return;
+    try {
+      const outcome = await decideAction(conversation.id, actionId, approve);
+      setMessages((ms) => [...ms.map((m) => (m.id !== messageId ? m : { ...m, extras: { ...m.extras,
+        actions: m.extras?.actions?.map((a) => (a.id === actionId ? { ...a, status: approve ? 'done' as const : 'cancelled' as const } : a)) } })), outcome]);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const openPassage = (p: Passage) => navigate(`/read/${encodeURIComponent(p.book_id)}?${new URLSearchParams({
     format: p.format, location: p.location, progress: String(p.progress) })}`);
 
@@ -217,9 +243,13 @@ export default function AskPage() {
       setMessages((m) => [...m, { id: -2, role: 'user', content, sources: [], created_at: now }, pending]);
       const update = (patch: Partial<Message>) => setMessages((m) => m.map((x) => (x.id === -1 ? { ...x, ...patch } : x)));
       let text = '';
+      const extras = { tools: [] as string[], links: [] as ChatLink[], actions: [] as NonNullable<Message['extras']>['actions'] };
       const { title } = await sendMessage(convo.id, content, {
         onSources: (sources) => update({ sources }),
         onDelta: (piece) => { text += piece; update({ content: text }); },
+        onTool: (label) => { extras.tools.push(label); update({ extras: { ...extras } }); },
+        onLink: (link) => { extras.links.push(link); update({ extras: { ...extras } }); },
+        onAction: (action) => { extras.actions!.push(action); update({ extras: { ...extras } }); },
       });
       if (title && !convo.title) setConversation({ ...convo, title });
       // replace the provisional messages with the stored ones (real ids, for the offline copy)
@@ -299,9 +329,41 @@ export default function AskPage() {
                     ) : (
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary', fontSize: 14 }}>
                         <CircularProgress size={14} />
-                        <span>{m.sources.length ? 'Writing…' : 'Searching your books…'}</span>
+                        <span>{m.extras?.tools?.length ? `Using: ${m.extras.tools.join(', ')}…` : 'Thinking…'}</span>
                       </Stack>
                     )}
+                    {m.extras?.tools?.length ? (
+                      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                        {m.extras.tools.map((t) => (
+                          <Chip key={t} size="small" variant="outlined" icon={<BuildCircleOutlinedIcon />} label={t}
+                            sx={{ fontFamily: 'inherit', color: 'text.secondary' }} />
+                        ))}
+                      </Stack>
+                    ) : null}
+                    {m.extras?.links?.length ? (
+                      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+                        {m.extras.links.map((l, j) => (
+                          <Button key={j} variant="outlined" size="small" onClick={() => openLink(l)}
+                            startIcon={l.kind === 'download' ? <FileDownloadOutlinedIcon /> : <MenuBookOutlinedIcon />}>{l.label}</Button>
+                        ))}
+                      </Stack>
+                    ) : null}
+                    {m.extras?.actions?.map((a) => (
+                      <Card key={a.id} sx={{ mt: 1.5, fontFamily: 'Inter, sans-serif' }}>
+                        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                          <Typography variant="body2" sx={{ mb: a.status === 'pending' ? 1 : 0 }}>{a.label}</Typography>
+                          {a.status === 'pending' ? (
+                            <Stack direction="row" spacing={1}>
+                              <Button size="small" variant="contained" disableElevation disabled={m.id < 0 || !online}
+                                onClick={() => void decide(m.id, a.id, true)}>Confirm</Button>
+                              <Button size="small" disabled={m.id < 0 || !online} onClick={() => void decide(m.id, a.id, false)}>Cancel</Button>
+                            </Stack>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">{a.status === 'done' ? 'Done ✓' : a.status === 'failed' ? 'Failed' : 'Cancelled'}</Typography>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
                     {(m.id !== -1 || !busy) && <Sources sources={m.sources} onOpen={openPassage} />}
                   </Box>
                 ))}

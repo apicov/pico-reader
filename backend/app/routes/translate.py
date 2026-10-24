@@ -147,3 +147,46 @@ def delete_translation(translation_id: int, reader: Reader = Depends(get_current
                   {"id": translation_id, "e": reader.email}).rowcount == 0:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
     db.commit()
+
+
+# --- the dictionary fallback: a word no offline dictionary has ---
+
+class DefineRequest(BaseModel):
+    word: str = Field(min_length=1, max_length=100)
+    context: str = Field(default="", max_length=1500)
+    language: str = Field(pattern=r"^[a-z]{2,3}$")
+    target_lang: str = Field(pattern=r"^[a-z]{2,3}$")
+
+
+class Definition(BaseModel):
+    word: str
+    lemma: str
+    part_of_speech: str
+    meaning: str
+    notes: str
+
+
+def define_prompt(language: str, target: str) -> str:
+    source, goal = LANGUAGES.get(language, language), LANGUAGES.get(target, target)
+    return f"""You are a {source}–{goal} dictionary for a reader learning {source}. The WORD was not in their
+dictionaries: it may be inflected, compound, rare, regional, old or a name. Using the SENTENCE it appears in:
+- "lemma": its dictionary form in {source} (German nouns with their article);
+- "part_of_speech": in {goal}, short (e.g. "sustantivo", "verbo");
+- "meaning": its meaning in this sentence, in {goal}, short like a dictionary entry (alternatives separated by ";");
+- "notes": in {goal}, one short sentence on the form (e.g. "participio de …", "compuesto de … + …"), or "".
+Reply with one JSON object and nothing else with exactly those four keys."""
+
+
+@router.post("/define", response_model=Definition)
+def define(body: DefineRequest, _: Reader = Depends(get_current_reader)):
+    try:
+        data, _model = groq_client.chat_json(define_prompt(body.language, body.target_lang),
+                                             f"WORD: {body.word}\nSENTENCE: {body.context or body.word}", max_tokens=300)
+    except groq_client.GroqError as e:
+        raise HTTPException(e.status, str(e))
+    meaning = str(data.get("meaning") or "").strip()
+    if not meaning:
+        raise HTTPException(502, "The model returned no meaning")
+    return Definition(word=body.word, lemma=str(data.get("lemma") or body.word).strip(),
+                      part_of_speech=str(data.get("part_of_speech") or "").strip(), meaning=meaning,
+                      notes=str(data.get("notes") or "").strip())

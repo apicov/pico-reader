@@ -96,3 +96,14 @@ def test_since_id_returns_only_newer(client, auth_headers, groq):
     b = client.post("/api/translate", headers=auth_headers, json={**BODY, "text": "Er fuhr an."}).json()
     newer = client.get("/api/translations", headers=auth_headers, params={"since_id": a["id"]}).json()
     assert [t["id"] for t in newer] == [b["id"]]
+
+
+def test_define_a_word_missing_from_the_dictionaries(client, auth_headers, groq):
+    calls, replies = groq
+    replies.append({"lemma": "das Strahlenschutzgesetz", "part_of_speech": "sustantivo",
+                    "meaning": "ley de protección radiológica", "notes": "compuesto de Strahlenschutz + Gesetz"})
+    r = client.post("/api/define", headers=auth_headers, json={
+        "word": "Strahlenschutzgesetzes", "context": "Nach dem Strahlenschutzgesetzes…", "language": "de", "target_lang": "es"})
+    assert r.status_code == 200 and r.json()["lemma"] == "das Strahlenschutzgesetz"
+    assert "German–Spanish dictionary" in calls[0]["messages"][0]["content"]
+    assert "SENTENCE: Nach dem" in calls[0]["messages"][1]["content"]
