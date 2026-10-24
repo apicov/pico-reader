@@ -200,3 +200,18 @@ def test_the_model_learns_a_proposal_was_not_applied(client, admin_headers, inde
     ask(client, admin_headers, cid, "What is my goal?")
     history = groq.agent_calls[-1]["messages"]
     assert "NOT applied yet" in history[2]["content"]
+
+
+def test_community_tools(client, admin_headers, auth_headers, indexed_book, groq):
+    client.get("/api/profiles/me", headers=auth_headers)
+    client.put("/api/profiles/me", headers=auth_headers, json={"handle": "anna", "display_name": "Anna"})
+    client.put(f"/api/books/{indexed_book}/review", headers=auth_headers, json={"score": 9, "recommend": True, "body": "Loved it"})
+    client.post("/api/lists", headers=auth_headers, json={"title": "Favourites", "items": [{"book_id": indexed_book}]})
+    groq.steps += [call("book_opinions", {"book": "Efficient"}), call("member_lists", {"handle": "anna"}, "call_2"),
+                   say("Anna gave it 9/10.")]
+    cid = new(client, admin_headers)
+    ask(client, admin_headers, cid, "What did my friends think of Efficient ML?")
+    results = {m["tool_call_id"]: json.loads(m["content"]) for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"}
+    opinions, lists = results["call_1"], results["call_2"]
+    assert opinions["avg_score"] == 9.0 and opinions["reviews"][0] == {"by": "Anna", "score": 9, "recommend": True, "text": "Loved it"}
+    assert lists["lists"][0]["books"] == ["Efficient ML"]

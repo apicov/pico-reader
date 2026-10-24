@@ -13,6 +13,7 @@ from typing import Any, Callable
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app import community
 from app.auth import Reader
 from app.routes import stats as stats_routes
 from app.routes.search import retrieve
@@ -211,6 +212,31 @@ def ai_usage(ctx: Context, period: str = "month") -> dict:
     return stats_routes.usage_summary(ctx.db, ctx.reader.email, period if period in ("week", "month", "year", "all") else "month", ctx.tz)
 
 
+def book_opinions(ctx: Context, book: str) -> dict:
+    found, error = _book_or_error(ctx, book)
+    if error:
+        return error
+    summary = community.rating_summary(ctx.db, [found["id"]]).get(found["id"], {"review_count": 0})
+    reviews = [{"by": r["author"]["display_name"], "score": r["score"], "recommend": r["recommend"],
+                "text": "(spoiler)" if r["spoiler"] else r["body"][:400]}
+               for r in community.reviews(ctx.db, ctx.reader, book_id=found["id"], limit=20) if not r["hidden"]]
+    posts = [{"title": p["title"], "by": p["author"]["display_name"], "comments": p["comment_count"]}
+             for p in community.list_posts(ctx.db, ctx.reader, book_id=found["id"], limit=10) if not p["hidden"]]
+    return {"title": found["title"], **summary, "reviews": reviews, "discussions": posts}
+
+
+def member_lists(ctx: Context, handle: str | None = None) -> dict:
+    owner = None
+    if handle:
+        owner = ctx.db.execute(text("SELECT reader_email FROM profiles WHERE handle = :h OR lower(display_name) = :h"),
+                               {"h": handle.lower().lstrip("@")}).scalar()
+        if owner is None:
+            return {"error": f"No reader called {handle!r}"}
+    return {"lists": [{"title": l["title"], "by": l["author"]["display_name"],
+                       "books": [i["book"]["title"] for i in l["items"] if i["book"]["available"]]}
+                      for l in community.lists(ctx.db, ctx.reader, owner_email=owner) if not l["hidden"]][:20]}
+
+
 # --- tools that change something (run after the reader confirms) ---
 
 def set_reading_goal(ctx: Context, enabled: bool, minutes: int | None = None, days: list[int] | None = None) -> dict:
@@ -287,6 +313,11 @@ TOOLS = {t.name: t for t in [
          _obj({"period": PERIOD, "language": LANGUAGE}), lookup_stats),
     Tool("translations", "Saved translations of passages (newest first), optionally filtered by words or book.",
          _obj({"query": {"type": "string"}, "book": BOOK, "limit": {"type": "integer"}}), translations),
+    Tool("book_opinions", "What the readers' community thinks of a book: average score 0-10, how many recommend it, "
+         "their reviews and discussion posts. Use for 'what did my friends think of …'.",
+         _obj({"book": BOOK}, ["book"]), book_opinions),
+    Tool("member_lists", "The readers' top lists of favourite books (all, or one reader's by handle or name).",
+         _obj({"handle": {"type": "string"}}), member_lists),
     Tool("highlights", "The reader's highlights, notes and bookmarks.", _obj({"book": BOOK}), highlights),
     Tool("vocabulary_due", "Review cards (spaced repetition): how many, which are due.", _obj({"language": LANGUAGE}),
          vocabulary_due),
