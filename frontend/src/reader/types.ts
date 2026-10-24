@@ -25,6 +25,8 @@ export interface ViewProps {
   dark: boolean;
   /** Highlights to show (of the open format) */
   highlights: Highlight[];
+  /** Words looked up before, to underline (null: off) */
+  seenWords: Set<string> | null;
 }
 
 export interface Highlight {
@@ -38,4 +40,6 @@ export interface ViewHandle {
   goToToc: (id: string) => void;
   /** Go to a location this view wrote (or, failing that, a progress through the book) */
   goTo: (location: string, progress: number) => void;
+  /** The text of the chapter/section/pages open now */
+  currentText: () => string;
 }

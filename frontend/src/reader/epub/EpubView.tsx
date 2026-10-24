@@ -7,6 +7,7 @@ import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
 import type { Settings } from '@/contexts/SettingsContext';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
 import { watchSelection } from '../selection';
+import { markSeenWords } from '@/services/words';
 
 /** The app's @font-face rules with absolute URLs: the book's sections are separate documents (blob URLs),
  *  so they neither inherit the app's fonts nor resolve its relative font paths. */
@@ -47,6 +48,7 @@ function bookCss(s: Settings): string {
     img, svg { max-width: 100%; height: auto; }
     pre { white-space: pre-wrap !important; }
     ${c.mode === 'dark' ? 'img { filter: brightness(0.9); }' : ''}
+.seen { text-decoration: underline dotted ${c.accent}; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
     aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"] { display: none; }
   `;
 }
@@ -65,7 +67,7 @@ function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] 
 
 /** EPUB in pages (foliate-js). Location: the EPUB CFI. */
 export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; language: string }>(function EpubView(
-  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, settings, highlights }, ref) {
+  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, settings, highlights, seenWords }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
   const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection });
@@ -75,6 +77,8 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
   const highlightsRef = useRef(highlights);
   highlightsRef.current = highlights;
   const fraction = useRef(0);
+  const seenRef = useRef(seenWords);
+  seenRef.current = seenWords;
   const drawn = useRef(new Map<string, string>()); // cfi → color
 
   useEffect(() => {
@@ -100,6 +104,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
       if (!doc.documentElement.lang) doc.documentElement.lang = language;
       doc.addEventListener('keydown', onKey);
+      if (seenRef.current) markSeenWords(doc.body, seenRef.current);
       // the selection, with its CFI (for highlights)
       watchSelection(doc, (sel) => {
         const s = doc.getSelection();
@@ -179,6 +184,10 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     goTo: (location, progress) => {
       if (location.startsWith('epubcfi(')) void viewRef.current?.goTo(location);
       else void viewRef.current?.goToFraction(progress);
+    },
+    currentText: () => {
+      const contents = (viewRef.current?.renderer as unknown as { getContents?: () => { doc?: Document }[] })?.getContents?.() ?? [];
+      return contents.map((c) => c.doc?.body?.textContent ?? '').join('\n');
     },
   }), []);
 

@@ -1,4 +1,4 @@
-import { Box, Button, Divider, FormControl, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Select, Stack, Typography } from '@mui/material';
+import { Box, Button, Divider, FormControl, FormControlLabel, Switch, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Select, Stack, Typography } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useBookCache } from '@/hooks/useBookCache';
 import { useLibrary } from '@/hooks/useLibrary';
@@ -52,6 +52,13 @@ export default function SettingsPage() {
         </Select>
       </FormControl>
       <ReadingGoalSettings />
+      <Divider />
+      <Box>
+        <Typography variant="h6">Learning</Typography>
+        <FormControlLabel label="Add looked-up words to review" control={
+          <Switch checked={settings.autoReview} onChange={(e) => update({ autoReview: e.target.checked })} />} />
+        <Box><Button component={RouterLink} to="/review" variant="outlined" sx={{ mt: 1 }}>Review words</Button></Box>
+      </Box>
       <Divider />
       <Box>
         <Typography variant="h6">Dictionaries</Typography>

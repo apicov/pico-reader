@@ -6,6 +6,12 @@ import DOMPurify from 'dompurify';
 import { Link as RouterLink } from 'react-router-dom';
 import { languageName } from '@/services/languages';
 import { recordLookup } from '@/services/events';
+import { addCard } from '@/services/review';
+import { markKnown } from '@/services/words';
+import { useSettings } from '@/contexts/SettingsContext';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import CheckIcon from '@mui/icons-material/Check';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import { dictImages, lookUp, preferredDict, setPreferredDict, type Lookup } from './lookup';
 import './dict.css';
 
@@ -36,11 +42,26 @@ function Definition({ html, dictId, onWord }: { html: string; dictId: string; on
   );
 }
 
+/** A review card for a looked-up word: its dictionary form, the first definition as plain text, its sentence */
+function cardFor(r: Lookup, record: { bookId: string; context: string }): Promise<boolean> {
+  const first = r.results[0];
+  const entry = first.entries[0];
+  const tmp = document.createElement('div');
+  tmp.innerHTML = DOMPurify.sanitize(entry.def);
+  const meaning = (tmp.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return addCard({ language: first.dict.from_lang, term: entry.headword, meaning, example: record.context.slice(0, 500),
+    source: 'lookup', book_id: record.bookId });
+}
+
 export function DictResults({ word, language, dark, record }: {
   word: string; language: string; dark: boolean;
   /** Record the lookup of `word` for the statistics (not the words followed from a definition) */
-  record?: { bookId: string; location: string };
+  record?: { bookId: string; location: string; context: string };
 }) {
+  const { settings } = useSettings();
+  const online = useOnlineStatus();
+  const [known, setKnown] = useState(false);
+  const [carded, setCarded] = useState(false);
   const recorded = useRef('');
   const [current, setCurrent] = useState(word);
   const [result, setResult] = useState<Lookup | null>(null);
@@ -57,7 +78,8 @@ export function DictResults({ word, language, dark, record }: {
         recorded.current = `${word}|${record.location}`;
         void recordLookup({ book_id: record.bookId, language, word: r.word, location: record.location,
           matched: r.results[0]?.entries[0]?.headword ?? '', dictionaries: r.results.map((x) => x.dict.id),
-          found: r.results.length > 0 });
+          found: r.results.length > 0, context: record.context.slice(0, 1000) });
+        if (settings.autoReview && r.results.length) void cardFor(r, record).then(setCarded);
       }
       if (!cancelled) { setResult(r); setBusy(false); }
     })
@@ -68,8 +90,23 @@ export function DictResults({ word, language, dark, record }: {
   if (busy && !result) return <Box sx={{ p: 2, textAlign: 'center' }}><CircularProgress size={20} /></Box>;
   if (!result) return null;
   const nothingInstalled = !result.results.length && !result.suggestions.length;
+  const headword = result.results[0]?.entries[0]?.headword ?? result.word;
   return (
     <Box className={dark ? 'dict-dark' : undefined}>
+      {record && result.results.length > 0 && current === word && (
+        <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+          <Button size="small" variant="outlined" startIcon={<CheckIcon />} disabled={known || !online}
+            onClick={() => void markKnown(language, headword).then(() => setKnown(true))}>
+            {known ? 'Known' : 'I know this'}
+          </Button>
+          {!settings.autoReview && (
+            <Button size="small" startIcon={<SchoolOutlinedIcon />} disabled={carded}
+              onClick={() => void cardFor(result, record).then(() => setCarded(true))}>
+              {carded ? 'In review' : 'Add to review'}
+            </Button>
+          )}
+        </Stack>
+      )}
       {current !== word && (
         <Button size="small" onClick={() => setCurrent(word)} sx={{ mb: 1 }}>← {word}</Button>
       )}

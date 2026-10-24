@@ -85,3 +85,6 @@
 .reflow mark.hl { background: rgba(255, 210, 0, 0.38); color: inherit; border-radius: 2px; padding: 0 1px; }
 .reflow mark.hl-green { background: rgba(80, 200, 120, 0.32); }
 .reflow mark.hl-blue { background: rgba(80, 150, 255, 0.3); }
+/* words looked up before */
+.reflow .seen { text-decoration: underline dotted; text-decoration-color: var(--r-accent); text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px; }

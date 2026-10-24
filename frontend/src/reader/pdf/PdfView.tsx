@@ -270,6 +270,7 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
   }, [zoom]);
 
   useImperativeHandle(ref, () => ({
+    currentText: () => [...(pagesRef.current?.querySelectorAll('.textLayer') ?? [])].map((l) => l.textContent ?? '').join('\n'),
     goTo: (location, progress) => {
       const m = /^p(\d+):([\d.]+)$/.exec(location);
       if (m) scrollTo(Number(m[1]) - 1, Number(m[2]));

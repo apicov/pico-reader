@@ -24,6 +24,7 @@ import { EpubView } from '@/reader/epub/EpubView';
 import { PdfView } from '@/reader/pdf/PdfView';
 import type { TocItem, ViewHandle } from '@/reader/types';
 import { flushEvents, saveSession, SessionTracker } from '@/services/events';
+import { lookedUpWords, wordsIn } from '@/services/words';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
 
@@ -73,6 +74,8 @@ export default function ReaderPage() {
   const [noteFor, setNoteFor] = useState<Annotation | null>(null);
   const [noteText, setNoteText] = useState('');
   const [position, setPosition] = useState<{ location: string; progress: number } | null>(null);
+  const [looked, setLooked] = useState<Set<string> | null>(null);
+  const [chapterWords, setChapterWords] = useState<{ word: string; count: number }[]>([]);
   const viewRef = useRef<ViewHandle>(null);
   const lastPosition = useRef<Position | null>(null);
 
@@ -119,6 +122,18 @@ export default function ReaderPage() {
     // `online` only matters for the first open; a connection change mustn't reload the book
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book?.id, format]);
+
+  // Words looked up before in this book's language (underlined, and the "Words" tab)
+  useEffect(() => {
+    if (!book) return;
+    void lookedUpWords(book.language).then(setLooked);
+  }, [book?.language]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const seenWords = settings.markLookedUp ? looked : null;
+  const openToc = () => {
+    setTocOpen(true);
+    const text = viewRef.current?.currentText() ?? '';
+    setChapterWords(looked ? wordsIn(text, looked) : []);
+  };
 
   // Highlights and bookmarks of this book (synced with the other devices)
   useEffect(() => {
@@ -207,7 +222,7 @@ export default function ReaderPage() {
   const colors = READING_THEMES[settings.theme];
   const viewProps = {
     ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
-    vars: readingVars(settings), dark: colors.mode === 'dark', highlights,
+    vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords,
   };
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
 
@@ -229,7 +244,7 @@ export default function ReaderPage() {
             </IconButton>
           )}
           {phase.kind === 'ready' && (
-            <IconButton aria-label="Contents" onClick={() => setTocOpen(true)}><TocIcon /></IconButton>
+            <IconButton aria-label="Contents" onClick={openToc}><TocIcon /></IconButton>
           )}
           <IconButton edge="end" aria-label="Text settings" onClick={(e) => setSettingsAnchor(e.currentTarget)}>
             <FormatSizeIcon />
@@ -268,6 +283,7 @@ export default function ReaderPage() {
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}
         current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)}
         annotations={annotations} onAnnotation={openAnnotation}
+        words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
         onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
       <Dialog open={!!noteFor} onClose={() => setNoteFor(null)} fullWidth maxWidth="sm">
         <DialogTitle>Note</DialogTitle>

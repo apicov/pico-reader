@@ -6,6 +6,8 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { languageName } from '@/services/languages';
 import { findLocal, translate, type Translation } from '@/services/translations';
 import { READING_FONT } from '@/theme/readingThemes';
+import { addCard } from '@/services/review';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 
 /** Translate a passage on request; shows a stored translation of the same passage at once. */
 export function TranslationCard({ text, context, language, bookId, location, onTerm }: {
@@ -17,6 +19,7 @@ export function TranslationCard({ text, context, language, bookId, location, onT
   const [result, setResult] = useState<Translation | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [added, setAdded] = useState<number | null>(null);
   const target = settings.targetLanguage;
 
   useEffect(() => {
@@ -69,6 +72,13 @@ export function TranslationCard({ text, context, language, bookId, location, onT
             </Stack>
           ))}
         </Stack>
+      )}
+      {result.vocabulary.length > 0 && (
+        <Button size="small" startIcon={<SchoolOutlinedIcon />} sx={{ mt: 1 }} disabled={added !== null}
+          onClick={() => void Promise.all(result.vocabulary.map((v) => addCard({ language, term: v.term, meaning: v.meaning,
+            example: text, source: 'translation', book_id: bookId }))).then((r) => setAdded(r.filter(Boolean).length))}>
+          {added === null ? 'Add words to review' : `${added} added to review`}
+        </Button>
       )}
     </Box>
   );

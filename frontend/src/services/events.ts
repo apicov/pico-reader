@@ -27,6 +27,7 @@ export interface LookupEvent {
   dictionaries: string[];
   found: boolean;
   location: string;
+  context: string; // the sentence it was in
   created_at: string;
 }
 

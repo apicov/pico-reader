@@ -9,6 +9,8 @@ export interface ReadingGoal {
 }
 
 export interface Stats {
+  review_due: number;
+  known_words: number;
   period: string;
   bucket: 'day' | 'week';
   today: string;

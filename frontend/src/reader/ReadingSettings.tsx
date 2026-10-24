@@ -40,6 +40,8 @@ export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | nul
         </ToggleButtonGroup>
         <FormControlLabel control={<Switch checked={settings.justify} onChange={(e) => update({ justify: e.target.checked })} />}
           label="Justify text" />
+        <FormControlLabel control={<Switch checked={settings.markLookedUp} onChange={(e) => update({ markLookedUp: e.target.checked })} />}
+          label="Underline words I looked up" />
       </Stack>
     </Popover>
   );

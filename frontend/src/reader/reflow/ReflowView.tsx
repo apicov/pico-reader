@@ -13,7 +13,7 @@ function startTarget(bundle: ReflowBundle, initial: ViewProps['initial']): Reflo
 }
 
 export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBundle }>(function ReflowView(
-  { bundle, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars, dark, highlights }, ref) {
+  { bundle, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars, dark, highlights, seenWords }, ref) {
   const [target, setTarget] = useState<ReflowTarget>(() => startTarget(bundle, initial));
   const n = bundle.meta.chapters.length;
 
@@ -42,7 +42,12 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
   useImperativeHandle(ref, () => ({
     goToToc: (id) => { const m = /^c(\d+)$/.exec(id); if (m) navigate({ chapter: Number(m[1]), fraction: 0 }); },
     goTo: (location, progress) => navigate(startTarget(bundle, { location, progress })),
-  }), [navigate, bundle]);
+    currentText: () => {
+      const tpl = document.createElement('template');
+      tpl.innerHTML = bundle.chapterHtml(target.chapter);
+      return tpl.content.textContent ?? '';
+    },
+  }), [navigate, bundle, target.chapter]);
 
   const chapterHighlights = useMemo(() => highlights.flatMap((h) => {
     const m = /^c(\d+):([\d.]+)$/.exec(h.location);
@@ -50,5 +55,5 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
   }), [highlights, target.chapter]);
 
   return <ReflowReader bundle={bundle} target={target} onNavigate={navigate} onScroll={onScroll}
-    onSelection={onSelection} highlights={chapterHighlights} style={vars} justify={settings.justify} dark={dark} />;
+    onSelection={onSelection} highlights={chapterHighlights} seenWords={seenWords} style={vars} justify={settings.justify} dark={dark} />;
 });

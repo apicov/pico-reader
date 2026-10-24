@@ -180,6 +180,8 @@ def stats(period: str = "week", tz: str = "UTC", book_id: str | None = None,
         SELECT lower(coalesce(nullif(l.matched, ''), l.word)) AS word, l.language, count(*) AS times,
                max(l.created_at) AS last
         FROM lookups l WHERE l.reader_email = :e {lookup_filter}
+          AND lower(coalesce(nullif(l.matched, ''), l.word)) NOT IN
+              (SELECT k.word FROM known_words k WHERE k.reader_email = :e AND k.language = l.language)
         GROUP BY 1, 2 HAVING count(*) >= 2 ORDER BY count(*) DESC, max(l.created_at) DESC LIMIT 20"""), p)]
     not_found = [dict(r._mapping) for r in db.execute(text(f"""
         SELECT l.word, l.language, count(*) AS times FROM lookups l
@@ -192,7 +194,11 @@ def stats(period: str = "week", tz: str = "UTC", book_id: str | None = None,
         FROM translations t WHERE t.reader_email = :e AND t.created_at >= :since {translation_filter}
         GROUP BY 1 ORDER BY 1"""), {**p, "unit": "week" if weekly else "day"})]
 
+    due = db.execute(text("""SELECT count(*) FROM review_cards WHERE reader_email = :e AND NOT deleted
+                             AND due <= now()"""), p).scalar()
+    known = db.execute(text("SELECT count(*) FROM known_words WHERE reader_email = :e"), p).scalar()
     return {
+        "review_due": due, "known_words": known,
         "period": period, "bucket": "week" if weekly else "day", "today": today.isoformat(),
         "buckets": [buckets[k] for k in sorted(buckets)],
         "totals": {"seconds": sum(b["seconds"] for b in buckets.values()), "words": sum(b["words"] for b in buckets.values()),

@@ -36,6 +36,7 @@ class Lookup(BaseModel):
     dictionaries: list[str] = []
     found: bool
     location: str = ""
+    context: str = Field(default="", max_length=1000)  # the sentence it was in
     created_at: AwareDatetime
 
 
@@ -61,9 +62,9 @@ def record(batch: Batch, reader: Reader = Depends(get_current_reader), db: Sessi
     for lk in batch.lookups:
         db.execute(text("""
             INSERT INTO lookups (id, reader_email, book_id, language, word, matched, dictionaries, found, location,
-                                 created_at)
+                                 context, created_at)
             VALUES (:id, :e, :book_id, :language, :word, :matched, CAST(:dictionaries AS jsonb), :found, :location,
-                    :created_at)
+                    :context, :created_at)
             ON CONFLICT (id) DO NOTHING
         """), {"e": reader.email, **lk.model_dump(), "dictionaries": json.dumps(lk.dictionaries)})
     db.commit()

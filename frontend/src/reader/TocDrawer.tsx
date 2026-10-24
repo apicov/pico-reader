@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Chip, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Tab, Tabs, Typography } from '@mui/material';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import BorderColorIcon from '@mui/icons-material/BorderColor';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -10,15 +10,19 @@ import type { TocItem } from './types';
 const FORMAT_LABEL: Record<string, string> = { reflow: 'Text', epub: 'EPUB', pdf: 'PDF' };
 
 /** Contents and notes (highlights + bookmarks) of the open book. */
-export function TocDrawer({ open, onClose, title, items, current, onPick, annotations, onAnnotation, onEditNote, onDelete }: {
+export function TocDrawer({ open, onClose, title, items, current, onPick, annotations, onAnnotation, onEditNote, onDelete,
+  words, onWord }: {
   open: boolean; onClose: () => void; title: string; items: TocItem[]; current: string | null;
   onPick: (id: string) => void;
   annotations: Annotation[];
   onAnnotation: (a: Annotation) => void;
   onEditNote: (a: Annotation) => void;
   onDelete: (a: Annotation) => void;
+  /** Words looked up before that appear in the open chapter */
+  words: { word: string; count: number }[];
+  onWord: (word: string) => void;
 }) {
-  const [tab, setTab] = useState<'contents' | 'notes'>('contents');
+  const [tab, setTab] = useState<'contents' | 'notes' | 'words'>('contents');
   const formats = new Set(annotations.map((a) => a.format));
   return (
     <Drawer open={open} onClose={onClose} slotProps={{ paper: { sx: { width: 340, maxWidth: '88vw' } } }}>
@@ -26,8 +30,23 @@ export function TocDrawer({ open, onClose, title, items, current, onPick, annota
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tab value="contents" label="Contents" />
         <Tab value="notes" label={`Notes${annotations.length ? ` (${annotations.length})` : ''}`} />
+        <Tab value="words" label={`Words${words.length ? ` (${words.length})` : ''}`} />
       </Tabs>
-      {tab === 'contents' ? (
+      {tab === 'words' ? (
+        <Box sx={{ p: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            {words.length
+              ? 'Words here that you looked up before and haven\'t marked known. Tap one to look it up again.'
+              : 'None of the words you looked up before are in this part of the book.'}
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {words.map((w) => (
+              <Chip key={w.word} label={w.count > 1 ? `${w.word} ×${w.count}` : w.word} variant="outlined"
+                onClick={() => { onWord(w.word); onClose(); }} />
+            ))}
+          </Box>
+        </Box>
+      ) : tab === 'contents' ? (
         <List dense>
           {items.length === 0 && <ListSubheader disableSticky>This book has no table of contents.</ListSubheader>}
           {items.map((item) => item.header ? (

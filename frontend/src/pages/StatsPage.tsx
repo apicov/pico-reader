@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Card, CardContent, Chip, LinearProgress, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, LinearProgress, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, DataTable, GoalRing, Heatmap, LineChart } from '@/components/charts';
@@ -9,6 +9,8 @@ import { cachedStats, formatMinutes, getStats, type Stats } from '@/services/sta
 import { READING_FONT } from '@/theme/readingThemes';
 
 type Period = 'week' | 'month' | 'year' | 'all';
+
+const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 
 function shortLabel(iso: string, bucket: 'day' | 'week'): string {
   const d = new Date(`${iso}T12:00:00`);
@@ -100,12 +102,24 @@ export default function StatsPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Review</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {stats.review_due ? `${plural(stats.review_due, 'word')} due` : 'Nothing due'} · {plural(stats.known_words, 'word')} marked known
+            </Typography>
+          </Box>
+          <Button variant={stats.review_due ? 'contained' : 'outlined'} disableElevation onClick={() => navigate('/review')}>Review</Button>
+        </CardContent>
+      </Card>
+
       <Section title={`Minutes read per ${bucketWord}`}
-        hint={`${formatMinutes(stats.totals.seconds)} · ${stats.totals.words.toLocaleString()} words · ${stats.totals.lookups} lookups`}>
-        <BarChart format={(v) => `${Math.round(v / 60)}`}
-          reference={goal && stats.bucket === 'day' ? goal.minutes * 60 : undefined} referenceLabel="goal"
-          data={stats.buckets.map((b) => ({ label: shortLabel(b.start, stats.bucket), value: b.seconds,
-            tip: `${shortLabel(b.start, stats.bucket)}: ${formatMinutes(b.seconds)}, ${b.words.toLocaleString()} words, ${b.lookups} lookups` }))} />
+        hint={`${formatMinutes(stats.totals.seconds)} · ${stats.totals.words.toLocaleString()} words · ${plural(stats.totals.lookups, 'lookup')}`}>
+        <BarChart format={(v) => `${Math.round(v)}`}
+          reference={goal && stats.bucket === 'day' ? goal.minutes : undefined} referenceLabel="goal"
+          data={stats.buckets.map((b) => ({ label: shortLabel(b.start, stats.bucket), value: b.seconds / 60,
+            tip: `${shortLabel(b.start, stats.bucket)}: ${formatMinutes(b.seconds)}, ${b.words.toLocaleString()} words, ${plural(b.lookups, 'lookup')}` }))} />
         <DataTable head={[stats.bucket === 'day' ? 'Day' : 'Week of', 'Minutes', 'Words', 'Lookups']}
           rows={stats.buckets.map((b) => [b.start, minutes(b.seconds), b.words, b.lookups])} />
       </Section>
@@ -140,7 +154,7 @@ export default function StatsPage() {
             </Stack>
           )}
           <Typography variant="body2" sx={{ mb: 1 }}>
-            {languageName(lang!)}: <b>{density.per_1000 ?? '–'}</b> per 1,000 words ({density.lookups} lookups in {density.words.toLocaleString()} words)
+            {languageName(lang!)}: <b>{density.per_1000 ?? '–'}</b> per 1,000 words ({plural(density.lookups, 'lookup')} in {density.words.toLocaleString()} words)
           </Typography>
           <LineChart format={(v) => v.toFixed(v < 10 ? 1 : 0)}
             data={density.series.map((p) => ({ label: shortLabel(p.start, stats.bucket), value: p.value,
