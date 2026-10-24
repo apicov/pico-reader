@@ -55,7 +55,7 @@ function BookCard({ book, files, online, shelf }: {
         <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, lineHeight: 1.3 }} noWrap title={book.title}>{book.title}</Typography>
         <Typography variant="caption" color="text.secondary" noWrap component="div">{book.author || '\u00a0'}</Typography>
         {shelf?.status === 'reading' && progress > 0 && (
-          <Typography variant="caption" color="text.secondary" component="div">{Math.round(progress * 100)}% read</Typography>
+          <Typography variant="caption" color="text.secondary" component="div">{Math.max(1, Math.round(progress * 100))}% read</Typography>
         )}
         <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
           <Chip size="small" variant="outlined" label={languageName(book.language)} />
