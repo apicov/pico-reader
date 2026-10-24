@@ -4,6 +4,10 @@ import { Alert, Box, Button, Card, CardActionArea, Chip, IconButton, InputAdornm
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { cachedShelf, loadShelf, setShelfStatus, subscribeShelf, type ShelfEntry, type ShelfStatus } from '@/services/shelf';
 import { getPref, setPref } from '@/services/prefs';
+import { api } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface IndexJob { book_id: string; status: 'queued' | 'running' | 'failed'; position?: number; error: string }
 import { Link as RouterLink } from 'react-router-dom';
 import { localPosition } from '@/reader/position';
 import { cachedStats, formatMinutes, getReadingGoal, getStats, type ReadingGoal } from '@/services/stats';
@@ -22,8 +26,9 @@ import type { Book } from '@/services/types';
 
 const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', epub: 'EPUB', reflow: 'Text' };
 
-function BookCard({ book, files, online, shelf }: {
+function BookCard({ book, files, online, shelf, job, canDelete, onDeleted }: {
   book: Book; files: Record<string, CachedFile>; online: boolean; shelf?: ShelfEntry;
+  job?: IndexJob; canDelete: boolean; onDeleted: () => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const choose = (status: ShelfStatus) => { setMenu(null); void setShelfStatus(book.id, status); };
@@ -54,6 +59,12 @@ function BookCard({ book, files, online, shelf }: {
         </Box>
         <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, lineHeight: 1.3 }} noWrap title={book.title}>{book.title}</Typography>
         <Typography variant="caption" color="text.secondary" noWrap component="div">{book.author || '\u00a0'}</Typography>
+        {job && (
+          <Typography variant="caption" color={job.status === 'failed' ? 'error' : 'text.secondary'} component="div"
+            title={job.error || undefined}>
+            {job.status === 'queued' ? `Queued for search (${job.position})` : job.status === 'running' ? 'Making it searchable…' : 'Search index failed'}
+          </Typography>
+        )}
         {shelf?.status === 'reading' && progress > 0 && (
           <Typography variant="caption" color="text.secondary" component="div">{Math.max(1, Math.round(progress * 100))}% read</Typography>
         )}
@@ -71,6 +82,15 @@ function BookCard({ book, files, online, shelf }: {
         {shelf?.status !== 'reading' && <MenuItem onClick={() => choose('reading')}>{shelf?.status === 'finished' ? 'Read again' : 'Add to Currently reading'}</MenuItem>}
         {shelf?.status !== 'finished' && <MenuItem onClick={() => choose('finished')}>Mark as finished</MenuItem>}
         {shelf && shelf.status !== 'removed' && <MenuItem onClick={() => choose('removed')}>Remove from my lists</MenuItem>}
+        {canDelete && (
+          <MenuItem disabled={!online} sx={{ color: 'error.main' }} onClick={() => {
+            setMenu(null);
+            if (window.confirm(`Delete “${book.title}” from the library for everyone? Its files are removed.`)) {
+              void api(`/api/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' }).then(onDeleted)
+                .catch((e) => window.alert((e as Error).message));
+            }
+          }}>Delete book…</MenuItem>
+        )}
       </Menu>
     </Card>
   );
@@ -109,6 +129,25 @@ export default function LibraryPage() {
   const [query, setQuery] = useState('');
   const files = useBookCache();
   const online = useOnlineStatus();
+  const { reader } = useAuth();
+  // Books waiting for (or failing) their search index; polled while anything is waiting
+  const [jobs, setJobs] = useState<Map<string, IndexJob>>(new Map());
+  useEffect(() => {
+    if (!online) return;
+    let timer = 0;
+    let cancelled = false;
+    let waiting = 0;
+    const poll = () => void api<IndexJob[]>('/api/index-jobs').then((list) => {
+      if (cancelled) return;
+      const busy = list.filter((j) => j.status !== 'failed').length;
+      if (busy < waiting) void refresh(); // something finished: the library gains its search file
+      waiting = busy;
+      setJobs(new Map(list.map((j) => [j.book_id, j])));
+      if (busy) timer = window.setTimeout(poll, 15_000);
+    }).catch(() => undefined);
+    poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [online, refresh]);
 
   // The reader's shelf: "Currently reading" first when there's anything on it
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
@@ -160,7 +199,9 @@ export default function LibraryPage() {
         </Typography>
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
-        {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)} />)}
+        {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)}
+            job={jobs.get(book.id)} canDelete={!!reader && (reader.is_admin || book.uploaded_by === reader.email)}
+            onDeleted={() => void refresh()} />)}
       </Box>
     </>
   );

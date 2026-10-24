@@ -14,6 +14,7 @@ import TranslationsPage from '@/pages/TranslationsPage';
 import AskPage from '@/pages/AskPage';
 import StatsPage from '@/pages/StatsPage';
 import ReviewPage from '@/pages/ReviewPage';
+import UploadPage from '@/pages/UploadPage';
 import { createAppTheme } from '@/theme/readingThemes';
 
 // The readers (pdf.js, foliate, KaTeX) load only when a book is opened
@@ -43,6 +44,7 @@ function Routed() {
       <Route path="/translations" element={<AppShell><TranslationsPage /></AppShell>} />
       <Route path="/stats" element={<AppShell><StatsPage /></AppShell>} />
       <Route path="/review" element={<AppShell><ReviewPage /></AppShell>} />
+      <Route path="/upload" element={<AppShell><UploadPage /></AppShell>} />
       {/* the chat has its own full-screen layout */}
       <Route path="/ask" element={<AskPage />} />
       <Route path="/ask/:conversationId" element={<AskPage />} />

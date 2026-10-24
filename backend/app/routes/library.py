@@ -19,14 +19,14 @@ def library(request: Request, response: Response, _: Reader = Depends(get_curren
             db: Session = Depends(get_db)):
     """Books and dictionaries. The ETag covers the data, not the cover links (they're re-signed on every
     call), so a 304 means the app's cached manifest and covers are still right."""
-    rows = db.execute(text("""SELECT b.id, b.title, b.author, b.language, b.files, b.updated_at,
+    rows = db.execute(text("""SELECT b.id, b.title, b.author, b.language, b.files, b.updated_at, b.uploaded_by,
                                       i.sha256 AS index_sha, i.chunks AS index_chunks
                                FROM books b LEFT JOIN book_index i ON i.book_id = b.id
                                WHERE b.status = 'ready' ORDER BY lower(b.title)""")).fetchall()
     cover_keys = {r.id: r.files["cover"]["key"] for r in rows if "cover" in r.files}
     books = [
         {"id": r.id, "title": r.title, "author": r.author, "language": r.language,
-         "updated_at": r.updated_at.isoformat(),
+         "updated_at": r.updated_at.isoformat(), "uploaded_by": r.uploaded_by,
          "formats": assets.public_files({k: f for k, f in r.files.items() if k not in ("cover", "search")}),
          # passages + vectors for searching offline (written by the indexer)
          "search": assets.public_files({"s": r.files["search"]})["s"] if "search" in r.files else None,
