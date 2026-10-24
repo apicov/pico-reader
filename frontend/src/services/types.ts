@@ -9,7 +9,7 @@ export interface FileRef {
   sha256: string;
 }
 
-export type BookFormat = 'pdf' | 'epub' | 'mdbook';
+export type BookFormat = 'pdf' | 'epub' | 'reflow';
 
 export interface Book {
   id: string;

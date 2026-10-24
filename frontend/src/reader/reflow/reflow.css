@@ -1,0 +1,80 @@
+/* Reading styles for reflow chapters (Quarto HTML today). Colors and sizes come from CSS variables set by
+   ReflowReader from the reading settings, so every theme just works. */
+.reflow-scroll {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--r-bg);
+}
+.reflow {
+  max-width: var(--r-measure);
+  margin: 0 auto;
+  padding: 24px var(--r-margin) 48px;
+  color: var(--r-text);
+  font-family: var(--r-font);
+  font-size: var(--r-font-size);
+  line-height: var(--r-line-height);
+  overflow-wrap: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+.reflow.justify p, .reflow.justify li { text-align: justify; }
+.reflow h1, .reflow h2, .reflow h3, .reflow h4 { line-height: 1.25; margin: 1.6em 0 0.6em; font-weight: 600; }
+.reflow h1 { font-size: 1.7em; margin-top: 0.4em; }
+.reflow h2 { font-size: 1.35em; }
+.reflow h3 { font-size: 1.15em; }
+.reflow h4 { font-size: 1em; }
+.reflow .chapter-number, .reflow .header-section-number { color: var(--r-muted); margin-right: 0.35em; }
+.reflow p { margin: 0 0 0.9em; }
+.reflow a { color: var(--r-accent); text-decoration: none; }
+.reflow a.disabled-link { color: inherit; pointer-events: none; }
+.reflow ul, .reflow ol { padding-left: 1.4em; margin: 0 0 0.9em; }
+.reflow li { margin: 0.2em 0; }
+.reflow blockquote { margin: 1em 0; padding: 0.2em 1em; border-left: 3px solid var(--r-divider); color: var(--r-muted); }
+.reflow hr { border: 0; border-top: 1px solid var(--r-divider); margin: 2em 0; }
+.reflow img { max-width: 100%; height: auto; }
+.reflow figure { margin: 1.4em 0; text-align: center; }
+.reflow figcaption, .reflow .figure-caption { font-size: 0.85em; color: var(--r-muted); margin-top: 0.5em; text-align: left; }
+.reflow table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.9em; margin: 1em 0; max-width: 100%; }
+.reflow th, .reflow td { border-bottom: 1px solid var(--r-divider); padding: 0.35em 0.7em; text-align: left; vertical-align: top; }
+.reflow th { font-weight: 600; }
+.reflow .math.display { display: block; overflow-x: auto; overflow-y: hidden; padding: 0.3em 0; }
+.reflow .katex { font-size: 1.05em; }
+.reflow .visually-hidden, .reflow .d-none { display: none !important; }
+
+/* code */
+.reflow code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.86em; }
+.reflow :not(pre) > code { background: var(--r-code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+.reflow pre { background: var(--r-code-bg); padding: 0.8em 1em; border-radius: 6px; overflow-x: auto; line-height: 1.45;
+  margin: 1em 0; hyphens: none; -webkit-hyphens: none; }
+.reflow div.sourceCode { margin: 1em 0; }
+.reflow div.sourceCode pre { margin: 0; }
+.reflow pre code span a { display: none; }
+.reflow div.sourceCode[data-filename]::before { content: attr(data-filename); display: block; font-size: 0.75em; color: var(--r-muted);
+  font-family: ui-monospace, monospace; margin-bottom: 0.2em; }
+.reflow code span.co, .reflow code span.cm { color: var(--r-muted); font-style: italic; }
+.reflow code span.kw, .reflow code span.cf, .reflow code span.im { color: var(--r-code-kw); }
+.reflow code span.st, .reflow code span.ch, .reflow code span.ss, .reflow code span.vs { color: var(--r-code-str); }
+.reflow code span.dv, .reflow code span.fl, .reflow code span.bn, .reflow code span.cn { color: var(--r-code-num); }
+.reflow code span.fu, .reflow code span.bu { color: var(--r-code-fn); }
+.reflow code span.dt, .reflow code span.pp { color: var(--r-code-type); }
+.reflow .cell-output pre { background: transparent; border-left: 3px solid var(--r-divider); border-radius: 0; }
+
+/* Quarto callouts */
+.reflow .callout { border: 1px solid var(--r-divider); border-left: 4px solid var(--callout, var(--r-accent)); border-radius: 6px;
+  margin: 1.2em 0; padding: 0.6em 1em; }
+.reflow .callout-note { --callout: #3d7cc9; }
+.reflow .callout-tip { --callout: #2a9d72; }
+.reflow .callout-warning { --callout: #d4733a; }
+.reflow .callout-important, .reflow .callout-caution { --callout: #c0504d; }
+.reflow .callout-header { font-weight: 600; margin-bottom: 0.3em; display: flex; }
+.reflow .callout-icon-container { display: none; }
+.reflow .callout-body > :last-child, .reflow .callout-body-container > :last-child { margin-bottom: 0; }
+.reflow .callout-titled .callout-header { color: var(--callout); }
+
+/* margin notes and footnotes, inline on a narrow page */
+.reflow aside, .reflow .column-margin, .reflow .margin-aside { display: block; font-size: 0.85em; color: var(--r-muted);
+  border-left: 2px solid var(--r-divider); padding-left: 0.8em; margin: 0.8em 0; }
+.reflow .footnotes { font-size: 0.85em; color: var(--r-muted); }
+.reflow details { margin: 1em 0; }
+.reflow summary { cursor: pointer; font-weight: 500; }

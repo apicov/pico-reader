@@ -14,6 +14,7 @@ repository. Follow the guides in order for a fresh install.
 | [06 Web app](06-web-app.md) | Building and publishing the frontend |
 | [07 Local development](07-local-development.md) | Running and testing everything on a workstation |
 | [08 Operations](08-operations.md) | Deploying changes, logs, restoring a backup, rotating keys |
+| [tools/README](../tools/README.md) | Adding books from your computer; the reflow book format |
 
 Secrets are never in this repository. The server keeps them in `/etc/pico-reader/reader.env`; a local copy of
 every secret file lives outside any repo in `~/tsp-configs/pico-reader/`.

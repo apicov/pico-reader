@@ -58,13 +58,13 @@ def test_adding_a_format_keeps_the_book_visible_and_replaces_old_files(client, a
     client.post(f"/api/admin/books/{book_id}/commit", headers=admin_headers)
 
     new_pdf = PDF + b" second edition"
-    upload(client, admin_headers, {"pdf": (new_pdf, "application/pdf"), "mdbook": (b"zip", "application/zip")},
+    upload(client, admin_headers, {"pdf": (new_pdf, "application/pdf"), "reflow": (b"zip", "application/zip")},
            id=book_id)
     assert len(client.get("/api/library", headers=admin_headers).json()["books"]) == 1  # still listed
     client.post(f"/api/admin/books/{book_id}/commit", headers=admin_headers)
 
     formats = client.get("/api/library", headers=admin_headers).json()["books"][0]["formats"]
-    assert set(formats) == {"pdf", "mdbook"}
+    assert set(formats) == {"pdf", "reflow"}
     assert formats["pdf"]["sha256"] == hashlib.sha256(new_pdf).hexdigest()
     keys = [o["Key"] for o in bucket.list_objects_v2(Bucket="test-library")["Contents"]]
     assert len(keys) == 2  # the first PDF is gone

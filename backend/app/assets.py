@@ -28,7 +28,7 @@ class Kind:
 BOOK_KINDS = {
     "pdf": Kind(("application/pdf",), "pdf"),
     "epub": Kind(("application/epub+zip",), "epub"),
-    "mdbook": Kind(("application/zip",), "zip"),  # see tools/ for the bundle layout
+    "reflow": Kind(("application/zip",), "zip"),  # see tools/ for the bundle layout
     "cover": Kind(("image/jpeg", "image/png", "image/webp"), ""),
 }
 DICT_KINDS = {

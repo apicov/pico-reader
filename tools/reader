@@ -1,0 +1,4 @@
+#!/bin/sh
+# Desktop tool for the reader's library: ./reader --help
+DIR=$(cd "$(dirname "$0")" && pwd)
+PYTHONPATH="$DIR" exec "$DIR/.venv/bin/python" -m readertool "$@"

@@ -13,7 +13,7 @@ down_revision = None
 
 def _asset_table(name: str, *columns: sa.Column) -> None:
     """Books and dictionaries share the upload life cycle. `files` holds the files that are in R2, `pending`
-    the ones being uploaded; both map a kind (pdf, epub, mdbook, cover / sqlite, jsonl, res) to
+    the ones being uploaded; both map a kind (pdf, epub, reflow, cover / sqlite, jsonl, res) to
     {key, size, sha256, content_type}. A row is listed once its first upload is committed ('ready'), and
     adding a format later (a reflow copy) doesn't hide the book meanwhile."""
     op.create_table(

@@ -1,6 +1,6 @@
 # 00 — Overview
 
-A personal e-book reader for a private library: PDF, EPUB and Markdown books ("mdbooks"), readable offline
+A personal e-book reader for a private library: PDF, EPUB and reflowable text books (Quarto HTML or Markdown chapters in a zip, see `tools/README.md`), readable offline
 on Android and in the browser, with offline dictionaries and AI translation of selected text.
 
 ## Parts
@@ -45,7 +45,7 @@ web app / PWA  ·  Android app (Capacitor, same build)
 
 | Key | Content |
 |---|---|
-| `books/<book id>/<kind>-<hash>.<ext>` | a book's files: `pdf`, `epub`, `mdbook` (zip), `cover` (image) |
+| `books/<book id>/<kind>-<hash>.<ext>` | a book's files: `pdf`, `epub`, `reflow` (zip), `cover` (image) |
 | `dictionaries/<dict id>/<kind>-<hash>.<ext>` | `sqlite` (Android), `jsonl.gz` (web), `res` zip (images) |
 | `backups/reader-YYYYMMDD.sql.gz` | daily database dumps, 30 days |
 

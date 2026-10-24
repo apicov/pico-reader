@@ -15,14 +15,13 @@ function Routed() {
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}><CircularProgress /></Box>;
   if (!reader) return <LoginPage />;
   return (
-    <AppShell>
-      <Routes>
-        <Route path="/" element={<LibraryPage />} />
-        <Route path="/read/:bookId" element={<ReaderPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AppShell>
+    <Routes>
+      {/* The reader is full screen; everything else has the library's top bar */}
+      <Route path="/read/:bookId" element={<ReaderPage />} />
+      <Route path="/" element={<AppShell><LibraryPage /></AppShell>} />
+      <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
