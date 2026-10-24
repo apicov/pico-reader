@@ -1,25 +1,23 @@
 import { Drawer, List, ListItemButton, ListItemText, ListSubheader, Typography } from '@mui/material';
-import type { ReflowChapter } from './reflow/bundle';
+import type { TocItem } from './types';
 
-export function TocDrawer({ open, onClose, title, chapters, current, onPick }: {
-  open: boolean; onClose: () => void; title: string; chapters: ReflowChapter[]; current: number;
-  onPick: (index: number) => void;
+export function TocDrawer({ open, onClose, title, items, current, onPick }: {
+  open: boolean; onClose: () => void; title: string; items: TocItem[]; current: string | null;
+  onPick: (id: string) => void;
 }) {
-  let lastPart = '';
   return (
     <Drawer open={open} onClose={onClose} slotProps={{ paper: { sx: { width: 320, maxWidth: '85vw' } } }}>
       <Typography variant="h6" sx={{ px: 2, pt: 'calc(env(safe-area-inset-top) + 16px)', pb: 1 }}>{title}</Typography>
       <List dense>
-        {chapters.map((c, i) => {
-          const header = c.part && c.part !== lastPart ? c.part : null;
-          lastPart = c.part;
-          return [
-            header && <ListSubheader key={`p${i}`} disableSticky sx={{ bgcolor: 'transparent' }}>{header}</ListSubheader>,
-            <ListItemButton key={c.file} selected={i === current} onClick={() => { onPick(i); onClose(); }}>
-              <ListItemText primary={c.title} />
-            </ListItemButton>,
-          ];
-        })}
+        {items.length === 0 && <ListSubheader disableSticky>This book has no table of contents.</ListSubheader>}
+        {items.map((item) => item.header ? (
+          <ListSubheader key={item.id} disableSticky sx={{ bgcolor: 'transparent' }}>{item.label}</ListSubheader>
+        ) : (
+          <ListItemButton key={item.id} selected={item.id === current} sx={{ pl: 2 + item.depth * 2 }}
+            onClick={() => { onPick(item.id); onClose(); }}>
+            <ListItemText primary={item.label} />
+          </ListItemButton>
+        ))}
       </List>
     </Drawer>
   );
