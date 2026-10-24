@@ -2,6 +2,18 @@ import { Box, Popover, Slider, Stack, Switch, ToggleButton, ToggleButtonGroup, T
 import { useSettings, type Settings } from '@/contexts/SettingsContext';
 import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
 
+/** Night theme brightness: goes below the phone's lowest setting */
+export function NightDim() {
+  const { settings, update } = useSettings();
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary">Night brightness</Typography>
+      <Slider size="small" min={0.25} max={1} step={0.05} value={settings.nightDim}
+        onChange={(_, v) => update({ nightDim: v as number })} />
+    </Box>
+  );
+}
+
 /** The "Aa" panel: theme, text size, spacing, margins. */
 export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | null; onClose: () => void }) {
   const { settings, update } = useSettings();
@@ -15,13 +27,14 @@ export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | nul
             return (
               <Box key={name} component="button" aria-label={t.label} aria-pressed={settings.theme === name}
                 onClick={() => update({ theme: name })}
-                sx={{ flex: 1, height: 44, borderRadius: 1.5, cursor: 'pointer', bgcolor: t.background, color: t.text,
+                sx={{ flex: 1, height: 44, borderRadius: 1.5, cursor: 'pointer', bgcolor: t.swatch?.background ?? t.background, color: t.swatch?.text ?? t.text,
                   border: 2, borderColor: settings.theme === name ? 'primary.main' : t.divider, fontFamily: 'Literata, serif' }}>
                 Aa
               </Box>
             );
           })}
         </Stack>
+        {settings.theme === 'night' && <NightDim />}
         <Box>
           <Typography variant="caption" color="text.secondary">Text size</Typography>
           <Slider size="small" min={0.8} max={1.6} step={0.05} value={settings.fontScale}

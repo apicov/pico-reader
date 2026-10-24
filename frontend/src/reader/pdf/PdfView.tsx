@@ -286,7 +286,7 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
     })(),
   }), [doc, scrollTo, sizes.length]);
 
-  const themeClass = settings.theme === 'dark' || settings.theme === 'black' ? 'pdf-dark' : settings.theme === 'sepia' ? 'pdf-sepia' : '';
+  const themeClass = ['dark', 'black', 'night'].includes(settings.theme) ? 'pdf-dark' : settings.theme === 'sepia' ? 'pdf-sepia' : '';
   if (error) return <Typography color="error" sx={{ p: 3 }}>This PDF can't be opened: {error}</Typography>;
   return (
     <Box sx={{ position: 'relative', height: '100%' }}>

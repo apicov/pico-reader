@@ -15,7 +15,8 @@ import TranslationsPage from '@/pages/TranslationsPage';
 import AskPage from '@/pages/AskPage';
 import StatsPage from '@/pages/StatsPage';
 import ReviewPage from '@/pages/ReviewPage';
-import { createAppTheme } from '@/theme/readingThemes';
+import { createAppTheme, READING_THEMES } from '@/theme/readingThemes';
+import { NightFilter } from '@/theme/NightFilter';
 
 // The readers (pdf.js, foliate, KaTeX) load only when a book is opened
 const ReaderPage = lazy(() => import('@/pages/ReaderPage'));
@@ -85,9 +86,14 @@ function Routed() {
 function Themed() {
   const { settings } = useSettings();
   const theme = useMemo(() => createAppTheme(settings.theme), [settings.theme]);
+  // the browser bar / Android status bar takes the page colour (black at night, not a bright strip)
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', READING_THEMES[settings.theme].background);
+  }, [settings.theme]);
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <NightFilter on={settings.theme === 'night'} dim={settings.nightDim} />
       <AuthProvider>
         {/* Hash routes: work from the Android app's file origin and need no server rewrites */}
         <HashRouter>

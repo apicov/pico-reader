@@ -11,6 +11,7 @@ import { OfflineSearchSettings } from '@/components/OfflineSearchSettings';
 import { useSettings } from '@/contexts/SettingsContext';
 import { LANGUAGES } from '@/services/languages';
 import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
+import { NightDim } from '@/reader/ReadingSettings';
 
 export default function SettingsPage() {
   const { settings, update } = useSettings();
@@ -37,13 +38,21 @@ export default function SettingsPage() {
             const selected = settings.theme === name;
             return (
               <Box key={name} component="button" onClick={() => update({ theme: name })} aria-pressed={selected}
-                sx={{ width: 72, height: 72, borderRadius: 2, cursor: 'pointer', bgcolor: t.background, color: t.text,
+                sx={{ width: 72, height: 72, borderRadius: 2, cursor: 'pointer', bgcolor: t.swatch?.background ?? t.background, color: t.swatch?.text ?? t.text,
                   border: 2, borderColor: selected ? 'primary.main' : t.divider, fontFamily: 'inherit', fontSize: 13 }}>
                 <Box sx={{ fontSize: 22, fontFamily: 'Literata, serif' }}>Aa</Box>{t.label}
               </Box>
             );
           })}
         </Stack>
+        {settings.theme === 'night' && (
+          <Box sx={{ mt: 2, maxWidth: 320 }}>
+            <NightDim />
+            <Typography variant="caption" color="text.secondary">
+              No blue light at all, for reading before sleep. Keep the phone's own brightness low too.
+            </Typography>
+          </Box>
+        )}
       </Box>
       <FormControl size="small">
         <InputLabel id="target-lang">Translate into</InputLabel>

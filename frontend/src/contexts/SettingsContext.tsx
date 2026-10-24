@@ -11,11 +11,12 @@ export interface Settings {
   targetLanguage: string; // translations go into this language (ISO 639-1)
   autoReview: boolean; // looked-up words become review cards
   markLookedUp: boolean; // dotted underline under words looked up before
+  nightDim: number; // night theme brightness, 0.25–1
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'paper', fontScale: 1, lineHeight: 1.6, margin: 'normal', justify: false, targetLanguage: 'es',
-  autoReview: true, markLookedUp: true,
+  autoReview: true, markLookedUp: true, nightDim: 1,
 };
 
 const KEY = 'settings';

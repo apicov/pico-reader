@@ -1,7 +1,7 @@
 import type React from 'react';
 import { createTheme, type Theme } from '@mui/material';
 
-export type ReadingThemeName = 'paper' | 'sepia' | 'dark' | 'black';
+export type ReadingThemeName = 'paper' | 'sepia' | 'dark' | 'black' | 'night';
 
 interface ReadingColors {
   label: string;
@@ -13,9 +13,13 @@ interface ReadingColors {
   accent: string; // links, selection handles, primary buttons
   divider: string;
   code: { bg: string; kw: string; str: string; num: string; fn: string; type: string };
+  /** how the theme picker shows it, when the colours above aren't what the eye sees (night: greys under a filter) */
+  swatch?: { background: string; text: string };
 }
 
-/** Quiet, low-contrast-glare palettes for long reading. The accent is a muted ink blue in every theme. */
+/** Quiet, low-contrast-glare palettes for long reading. The accent is a muted ink blue in every theme but night:
+ *  that one is in greys, and NightFilter turns the whole screen amber by brightness (no blue at all), so its
+ *  colours differ only in how light they are. */
 export const READING_THEMES: Record<ReadingThemeName, ReadingColors> = {
   paper: { label: 'Paper', mode: 'light', background: '#faf8f3', surface: '#ffffff', text: '#2b2b2b',
     muted: '#6f6a61', accent: '#3d5a80', divider: '#e6e1d6',
@@ -29,6 +33,10 @@ export const READING_THEMES: Record<ReadingThemeName, ReadingColors> = {
   black: { label: 'Black', mode: 'dark', background: '#000000', surface: '#111111', text: '#c9c6c0',
     muted: '#8a877f', accent: '#8fb3d9', divider: '#262626',
     code: { bg: '#161616', kw: '#c59bd9', str: '#9ccc8a', num: '#e0a372', fn: '#8fb3d9', type: '#d9c27a' } },
+  night: { label: 'Night', mode: 'dark', background: '#000000', surface: '#0e0e0e', text: '#c8c8c8',
+    muted: '#7a7a7a', accent: '#9a9a9a', divider: '#222222',
+    code: { bg: '#141414', kw: '#f0f0f0', str: '#a8a8a8', num: '#dcdcdc', fn: '#ffffff', type: '#b8b8b8' },
+    swatch: { background: '#000000', text: '#c84c00' } },
 };
 
 export const READING_FONT = '"Literata", "Noto Serif", Georgia, serif';
