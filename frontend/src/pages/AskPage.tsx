@@ -25,8 +25,8 @@ function withCitations(answer: string, onCite: (n: number) => void): ReactNode[]
     const m = /^\[(\d+)\]$/.exec(part);
     return m ? (
       <Box key={i} component="button" onClick={() => onCite(Number(m[1]))}
-        sx={{ border: 0, bgcolor: 'transparent', color: 'primary.main', cursor: 'pointer', p: 0, fontSize: '0.75em',
-          verticalAlign: 'super', fontWeight: 600 }}>{m[1]}</Box>
+        sx={{ border: 0, bgcolor: 'transparent', color: 'primary.main', cursor: 'pointer', px: '0.15em', py: 0,
+          fontSize: '0.75em', verticalAlign: 'super', fontWeight: 600 }}>[{m[1]}]</Box>
     ) : <span key={i}>{part}</span>;
   });
 }

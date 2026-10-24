@@ -40,7 +40,7 @@
 .reflow th { font-weight: 600; }
 .reflow .math.display { display: block; overflow-x: auto; overflow-y: hidden; padding: 0.3em 0; }
 .reflow .katex { font-size: 1.05em; }
-.reflow .visually-hidden, .reflow .d-none { display: none !important; }
+.reflow .visually-hidden, .reflow .d-none, .reflow .screen-reader-only { display: none !important; }
 
 /* code */
 .reflow code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.86em; }
