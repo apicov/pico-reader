@@ -79,7 +79,7 @@ export function DictionaryUpload({ open, onClose, onQueued }: { open: boolean; o
           {picked && (
             <>
               <Typography variant="body2">
-                {picked.info.wordcount.toLocaleString()} entries · {(picked.zip.size / 1e6).toFixed(1)} MB to send
+                {picked.info.wordcount.toLocaleString()} entries · {picked.zip.size < 1e6 ? `${Math.max(1, Math.round(picked.zip.size / 1e3))} KB` : `${(picked.zip.size / 1e6).toFixed(1)} MB`} to send
               </Typography>
               <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} inputProps={{ maxLength: 200 }} />
               <Stack direction="row" spacing={1}>

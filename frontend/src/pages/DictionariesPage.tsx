@@ -17,7 +17,8 @@ import { api } from '@/services/api';
 import { LANGUAGES, languageName } from '@/services/languages';
 import type { Dictionary } from '@/services/types';
 
-const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`;
+const mb = (bytes: number) => (bytes < 1e6 ? `${Math.max(1, Math.round(bytes / 1e3))} KB`
+  : `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`);
 const packageSize = (d: Dictionary) => (d.files[PACKAGE]?.size ?? 0) + (d.files.res?.size ?? 0);
 
 interface DictJob { id: number; dict_id: string; name: string; status: 'queued' | 'running' | 'failed'; error: string }
