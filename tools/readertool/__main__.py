@@ -56,10 +56,12 @@ def main() -> None:
     s.add_argument("--from", dest="from_lang", required=True, help="language of the headwords, e.g. de")
     s.add_argument("--to", dest="to_lang", required=True, help="language of the definitions")
     s.add_argument("--name", help="name shown in the app (default: the dictionary's own)")
+    _visibility(s)
     s = sub.add_parser("dict-add-all", help="convert and upload every dictionary listed in the map file")
     s.add_argument("folder", type=Path)
     s.add_argument("--map", type=Path, default=Path(__file__).resolve().parent.parent / "dictionaries.json")
     s.add_argument("--only", help="comma-separated folder names")
+    _visibility(s)
     sub.add_parser("dict-list", help="list the dictionaries")
     sub.add_parser("dict-delete", help="delete a dictionary").add_argument("id")
     s = sub.add_parser("index", help="build the search index of books (on this computer)")
@@ -229,10 +231,17 @@ def index_books(args) -> None:
         print("  indexed")
 
 
+def _visibility(parser) -> None:
+    g = parser.add_mutually_exclusive_group()
+    g.add_argument("--private", dest="visibility", action="store_const", const="private",
+                   help="only you (and admins) see it; default for a new one: everyone; an update keeps its setting")
+    g.add_argument("--public", dest="visibility", action="store_const", const="everyone", help="every reader sees it")
+
+
 _DICT_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}
 
 
-def _upload_dictionary(folder: Path, from_lang: str, to_lang: str, name: str | None) -> None:
+def _upload_dictionary(folder: Path, from_lang: str, to_lang: str, name: str | None, visibility: str | None = None) -> None:
     print(f"{folder.name} [{from_lang} → {to_lang}]")
     d = stardict.read(folder)
     dict_id = stardict.dict_id_for(folder)
@@ -242,13 +251,14 @@ def _upload_dictionary(folder: Path, from_lang: str, to_lang: str, name: str | N
         sizes = ", ".join(f"{k} {p.stat().st_size / 1e6:.1f} MB" for k, p in files.items())
         print(f"  packages: {sizes}")
         Api().upload("dictionaries", {"id": dict_id, "name": name or d.name, "from_lang": from_lang,
-                                      "to_lang": to_lang, "entry_count": len(d.entries)},
+                                      "to_lang": to_lang, "entry_count": len(d.entries),
+                                      **({"visibility": visibility} if visibility else {})},
                      {kind: (path, _DICT_TYPES[kind]) for kind, path in files.items()})
     print(f"  added as {dict_id}")
 
 
 def dict_add(args) -> None:
-    _upload_dictionary(args.folder, args.from_lang, args.to_lang, args.name)
+    _upload_dictionary(args.folder, args.from_lang, args.to_lang, args.name, args.visibility)
 
 
 def dict_add_all(args) -> None:
@@ -261,7 +271,7 @@ def dict_add_all(args) -> None:
             print(f"skipping {folder.name}: not in {args.map.name}")
             continue
         try:
-            _upload_dictionary(folder, *mapping[folder.name], None)
+            _upload_dictionary(folder, *mapping[folder.name], None, args.visibility)
         except Exception as e:  # one broken dictionary mustn't stop the rest
             print(f"  failed: {e}")
 

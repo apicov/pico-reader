@@ -247,7 +247,7 @@ def set_reading_goal(ctx: Context, enabled: bool, minutes: int | None = None, da
         goal.minutes = max(1, min(600, int(minutes)))
     if days:
         goal.days = sorted({d for d in days if 0 <= d <= 6})
-    stats_routes.put_settings(settings, reader=ctx.reader, db=ctx.db)
+    stats_routes.put_settings(stats_routes.ReaderSettings(reading_goal=goal), reader=ctx.reader, db=ctx.db)
     return {"reading_goal": goal.model_dump()}
 
 

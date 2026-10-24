@@ -37,6 +37,7 @@ DICT_KINDS = {
     "sqlite": Kind(("application/zip",), "zip"),
     "jsonl": Kind(("application/gzip",), "jsonl.gz"),  # imported into IndexedDB on the web
     "res": Kind(("application/zip",), "zip"),  # images the definitions point at
+    "source": Kind(("application/zip",), "zip"),  # a StarDict uploaded from the app, until the server converts it
 }
 _IMAGE_EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 

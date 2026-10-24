@@ -3,11 +3,11 @@
 import hashlib
 import json
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, r2
+from app import assets, dictionary_service as dicts, r2
 from app.auth import Reader, get_current_reader
 from app.db import get_db
 
@@ -39,9 +39,13 @@ def library(request: Request, response: Response, reader: Reader = Depends(get_c
     ]
     dictionaries = [
         {"id": r.id, "name": r.name, "from_lang": r.from_lang, "to_lang": r.to_lang,
-         "entry_count": r.entry_count, "updated_at": r.updated_at.isoformat(), "files": assets.public_files(r.files)}
-        for r in db.execute(text("""SELECT id, name, from_lang, to_lang, entry_count, files, updated_at
-                                     FROM dictionaries WHERE status = 'ready' ORDER BY from_lang, to_lang, name"""))
+         "entry_count": r.entry_count, "updated_at": r.updated_at.isoformat(), "visibility": r.visibility,
+         "can_change": reader.is_admin,
+         "files": assets.public_files({k: f for k, f in r.files.items() if k != "source"})}
+        for r in db.execute(text(f"""SELECT d.id, d.name, d.from_lang, d.to_lang, d.entry_count, d.files, d.updated_at,
+                                            d.visibility
+                                     FROM dictionaries d WHERE d.status = 'ready' AND {dicts.visible()}
+                                     ORDER BY d.from_lang, d.to_lang, d.name"""), {"e": reader.email, "admin": reader.is_admin})
     ]
     body = {"books": books, "dictionaries": dictionaries}
     etag = '"' + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:32] + '"'
@@ -68,6 +72,9 @@ def book_download(book_id: str, kind: str, response: Response, _: Reader = Depen
 
 
 @router.get("/dictionaries/{dict_id}/download")
-def dictionary_download(dict_id: str, kind: str, response: Response, _: Reader = Depends(get_current_reader),
+def dictionary_download(dict_id: str, kind: str, response: Response, reader: Reader = Depends(get_current_reader),
                         db: Session = Depends(get_db)):
+    dicts.check_visible(db, reader, dict_id)
+    if kind == "source":
+        raise HTTPException(404, "Not found")
     return _signed(response, assets.download(db, "dictionaries", dict_id, kind))

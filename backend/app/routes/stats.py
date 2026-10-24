@@ -3,6 +3,7 @@
 Days are the reader's own days: the app sends its time zone, and every day boundary is computed in it."""
 
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -27,8 +28,15 @@ class ReadingGoal(BaseModel):
     days: list[int] = Field(default=[0, 1, 2, 3, 4, 5, 6])  # 0 = Monday
 
 
+class DictionaryPrefs(BaseModel):
+    """Which dictionaries the reader switched off, and their order per language (first = shown first)."""
+    disabled: list[str] = Field(default=[], max_length=500)
+    order: dict[str, list[str]] = {}
+
+
 class ReaderSettings(BaseModel):
     reading_goal: ReadingGoal = ReadingGoal()
+    dictionaries: DictionaryPrefs = DictionaryPrefs()
 
 
 def load_settings(db: Session, email: str) -> ReaderSettings:
@@ -43,12 +51,15 @@ def get_settings_(reader: Reader = Depends(get_current_reader), db: Session = De
 
 @router.put("/settings", response_model=ReaderSettings)
 def put_settings(body: ReaderSettings, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
+    """Saves the parts sent (e.g. only the reading goal); the others stay as they are."""
     body.reading_goal.days = sorted({d for d in body.reading_goal.days if 0 <= d <= 6})
+    sent = {k: v for k, v in json.loads(body.model_dump_json()).items() if k in body.model_fields_set}
     db.execute(text("""INSERT INTO reader_settings (reader_email, settings) VALUES (:e, CAST(:s AS jsonb))
-                       ON CONFLICT (reader_email) DO UPDATE SET settings = EXCLUDED.settings, updated_at = now()"""),
-               {"e": reader.email, "s": body.model_dump_json()})
+                       ON CONFLICT (reader_email) DO UPDATE SET settings = reader_settings.settings || EXCLUDED.settings,
+                           updated_at = now()"""),
+               {"e": reader.email, "s": json.dumps(sent)})
     db.commit()
-    return body
+    return load_settings(db, reader.email)
 
 
 # --- statistics ---

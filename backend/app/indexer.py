@@ -1,5 +1,6 @@
-"""The indexing worker: takes queued books one at a time, cuts their text into passages, embeds them and writes
-the search index and the offline search file. Runs as its own service (deploy/pico-reader-indexer.service):
+"""The background worker: takes queued books one at a time, cuts their text into passages, embeds them and writes
+the search index and the offline search file; and converts StarDict dictionaries uploaded from the app
+(dictionary_service.convert). Runs as its own service (deploy/pico-reader-indexer.service):
 
     python -m app.indexer            # forever
     python -m app.indexer --once     # the jobs waiting now, then stop
@@ -16,7 +17,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import embed, library_service as books, passages, r2
+from app import dictionary_service as dicts, embed, library_service as books, passages, r2
 from app.db import get_engine
 
 logger = logging.getLogger("indexer")
@@ -28,7 +29,8 @@ UNLOAD_AFTER = 300  # seconds without jobs before the model leaves memory (the s
 
 def requeue_interrupted(db: Session) -> int:
     """Jobs left running by a restart go back to the queue."""
-    n = db.execute(text("UPDATE index_jobs SET status = 'queued', started_at = NULL WHERE status = 'running'")).rowcount
+    n = sum(db.execute(text(f"UPDATE {t} SET status = 'queued', started_at = NULL WHERE status = 'running'")).rowcount
+            for t in ("index_jobs", "dict_jobs"))
     db.commit()
     return n
 
@@ -90,6 +92,45 @@ def run_job(db: Session, job) -> None:
         db.commit()
 
 
+def claim_dict(db: Session):
+    row = db.execute(text("""
+        UPDATE dict_jobs SET status = 'running', started_at = now(), attempts = attempts + 1
+        WHERE id = (SELECT id FROM dict_jobs WHERE status = 'queued' ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1)
+        RETURNING id, dict_id, attempts"""))
+    job = row.fetchone()
+    db.commit()
+    return job
+
+
+def run_dict_job(db: Session, job) -> None:
+    started = time.time()
+    try:
+        n = dicts.convert(db, job.dict_id)
+        db.execute(text("UPDATE dict_jobs SET status = 'done', finished_at = now(), error = '' WHERE id = :id"), {"id": job.id})
+        db.commit()
+        logger.info("Converted dictionary %s: %d entries in %.0f s", job.dict_id, n, time.time() - started)
+    except Exception as e:
+        db.rollback()
+        logger.exception("Converting dictionary %s failed", job.dict_id)
+        # a file that isn't a dictionary won't become one on a second try
+        final = job.attempts >= MAX_ATTEMPTS or isinstance(e, ValueError)
+        db.execute(text("""UPDATE dict_jobs SET status = :s, error = :err, finished_at = CASE WHEN :final THEN now() END
+                           WHERE id = :id"""), {"s": "failed" if final else "queued", "err": str(e)[:500], "final": final,
+                                                "id": job.id})
+        db.commit()
+    gc.collect()  # a converted dictionary was in memory
+
+
+def next_job(db: Session, dicts_first: bool):
+    """Book and dictionary jobs take turns."""
+    order = [(claim_dict, run_dict_job), (claim, run_job)]
+    for claimer, runner in (order if dicts_first else order[::-1]):
+        job = claimer(db)
+        if job is not None:
+            return job, runner
+    return None, None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.indexer")
     parser.add_argument("--once", action="store_true", help="process the waiting jobs, then stop")
@@ -100,8 +141,10 @@ def main() -> None:
     if (n := requeue_interrupted(db)):
         logger.info("Requeued %d interrupted jobs", n)
     idle_since = time.time()
+    dicts_first = False
     while True:
-        job = claim(db)
+        job, runner = next_job(db, dicts_first)
+        dicts_first = not dicts_first
         if job is None:
             if args.once:
                 return
@@ -111,7 +154,7 @@ def main() -> None:
                 logger.info("Idle: embedding model unloaded")
             time.sleep(IDLE_SECONDS)
             continue
-        run_job(db, job)
+        runner(db, job)
         idle_since = time.time()
 
 
