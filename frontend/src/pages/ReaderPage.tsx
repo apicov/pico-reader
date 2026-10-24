@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppBar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, ListItemText, Menu, MenuItem, TextField, Toolbar, Typography } from '@mui/material';
+import { Alert, AppBar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, ListItemText, Menu, MenuItem, Snackbar, TextField, Toolbar, Typography } from '@mui/material';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import { annotationsFor, deleteAnnotation, saveAnnotation, subscribeAnnotations, syncAnnotations, updateAnnotation, type Annotation } from '@/services/annotations';
@@ -13,6 +13,7 @@ import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { ensureFile, ensureSearchFile, fileBlob, isCached } from '@/services/bookCache';
 import { getPref, setPref } from '@/services/prefs';
+import { isOnline } from '@/services/connectivity';
 import type { Book, BookFormat } from '@/services/types';
 import { READING_THEMES, readingVars } from '@/theme/readingThemes';
 import { flushPositions, loadPosition, savePosition, type Position } from '@/reader/position';
@@ -173,6 +174,13 @@ export default function ReaderPage() {
     window.getSelection()?.removeAllRanges();
   };
 
+  /** Opens the post editor with this passage as a quote (it jumps back here from the post). */
+  const quoteInPost = (q: { format: string; location: string; progress: number; text: string }) => {
+    if (!book) return;
+    navigate('/community/new', { state: { quote: { book_id: book.id, text: q.text, format: q.format,
+      location: q.location, progress: q.progress } } });
+  };
+
   const openAnnotation = (a: Annotation) => {
     if (a.format === format) viewRef.current?.goTo(a.location, a.progress);
     else if (book?.formats[a.format as BookFormat]) {
@@ -203,8 +211,19 @@ export default function ReaderPage() {
 
   // Remember the place: on the device at once, on the server every so often and when leaving
   const lastSync = useRef(0);
+  // Reaching the end of a book that wasn't finished when opened: offer to rate it (once per book)
+  const startProgress = useRef<number | null>(null);
+  const [ratePrompt, setRatePrompt] = useState(false);
   const onLocation = useCallback((location: string, progress: number) => {
     if (!book || !format) return;
+    if (startProgress.current === null) startProgress.current = progress;
+    else if (progress >= 0.98 && startProgress.current < 0.98) {
+      startProgress.current = 1;
+      const key = `rate_prompted_${book.id}`;
+      void getPref<boolean>(key).then((asked) => {
+        if (!asked && isOnline()) { setRatePrompt(true); void setPref(key, true); }
+      });
+    }
     const pos = { book_id: book.id, format, location, progress };
     setPosition({ location, progress });
     readingActivity(progress);
@@ -287,14 +306,19 @@ export default function ReaderPage() {
           <SelectionPanel selection={selection} language={book.language} dark={colors.mode === 'dark'}
             bookId={book.id} location={lastPosition.current?.location ?? ''}
             onHighlight={selection.anchor ? highlightSelection : undefined}
+            onQuote={selection.anchor && format ? () => quoteInPost({ format, location: selection.anchor!.location,
+              progress: selection.anchor!.progress, text: selection.text }) : undefined}
             onClose={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }} />
         )}
       </Box>
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}
         current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)}
-        annotations={annotations} onAnnotation={openAnnotation}
+        annotations={annotations} onAnnotation={openAnnotation} onShare={quoteInPost}
         words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
         onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
+      <Snackbar open={ratePrompt} autoHideDuration={12_000} onClose={() => setRatePrompt(false)}
+        message="Finished! Tell the others what you thought?"
+        action={<Button color="primary" size="small" onClick={() => book && navigate(`/book/${encodeURIComponent(book.id)}`)}>Rate it</Button>} />
       <Dialog open={!!noteFor} onClose={() => setNoteFor(null)} fullWidth maxWidth="sm">
         <DialogTitle>Note</DialogTitle>
         <DialogContent>

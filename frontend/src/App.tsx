@@ -19,6 +19,14 @@ import { createAppTheme } from '@/theme/readingThemes';
 // The readers (pdf.js, foliate, KaTeX) load only when a book is opened
 const ReaderPage = lazy(() => import('@/pages/ReaderPage'));
 const UploadPage = lazy(() => import('@/pages/UploadPage'));
+const CommunityPage = lazy(() => import('@/pages/CommunityPage'));
+const PostPage = lazy(() => import('@/pages/PostPage'));
+const PostEditorPage = lazy(() => import('@/pages/PostEditorPage'));
+const BookCommunityPage = lazy(() => import('@/pages/BookCommunityPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const MyProfilePage = lazy(() => import('@/pages/MyProfilePage'));
+const ListPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListPage })));
+const ListEditorPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListEditorPage })));
 
 function Routed() {
   const { reader, loading } = useAuth();
@@ -45,6 +53,21 @@ function Routed() {
       <Route path="/stats" element={<AppShell><StatsPage /></AppShell>} />
       <Route path="/review" element={<AppShell><ReviewPage /></AppShell>} />
       <Route path="/upload" element={<AppShell><Suspense fallback={spinner}><UploadPage /></Suspense></AppShell>} />
+      {/* the community: online pages, loaded on first use */}
+      {([
+        ['/community', <CommunityPage />],
+        ['/community/new', <PostEditorPage />],
+        ['/community/post/:postId', <PostPage />],
+        ['/community/post/:postId/edit', <PostEditorPage />],
+        ['/book/:bookId', <BookCommunityPage />],
+        ['/u/:handle', <ProfilePage />],
+        ['/profile', <MyProfilePage />],
+        ['/lists/new', <ListEditorPage />],
+        ['/lists/:listId', <ListPage />],
+        ['/lists/:listId/edit', <ListEditorPage />],
+      ] as const).map(([path, page]) => (
+        <Route key={path} path={path} element={<AppShell><Suspense fallback={spinner}>{page}</Suspense></AppShell>} />
+      ))}
       {/* the chat has its own full-screen layout */}
       <Route path="/ask" element={<AskPage />} />
       <Route path="/ask/:conversationId" element={<AskPage />} />

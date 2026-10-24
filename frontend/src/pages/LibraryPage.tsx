@@ -6,6 +6,7 @@ import { cachedShelf, loadShelf, setShelfStatus, subscribeShelf, type ShelfEntry
 import { getPref, setPref } from '@/services/prefs';
 import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
 
 interface IndexJob { book_id: string; status: 'queued' | 'running' | 'failed'; position?: number; error: string }
 import { Link as RouterLink } from 'react-router-dom';
@@ -26,9 +27,9 @@ import type { Book } from '@/services/types';
 
 const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', epub: 'EPUB', reflow: 'Text' };
 
-function BookCard({ book, files, online, shelf, job, canDelete, onDeleted }: {
+function BookCard({ book, files, online, shelf, job, rating, canDelete, onDeleted }: {
   book: Book; files: Record<string, CachedFile>; online: boolean; shelf?: ShelfEntry;
-  job?: IndexJob; canDelete: boolean; onDeleted: () => void;
+  job?: IndexJob; rating?: RatingSummary; canDelete: boolean; onDeleted: () => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const choose = (status: ShelfStatus) => { setMenu(null); void setShelfStatus(book.id, status); };
@@ -59,6 +60,12 @@ function BookCard({ book, files, online, shelf, job, canDelete, onDeleted }: {
         </Box>
         <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, lineHeight: 1.3 }} noWrap title={book.title}>{book.title}</Typography>
         <Typography variant="caption" color="text.secondary" noWrap component="div">{book.author || '\u00a0'}</Typography>
+        {rating && rating.review_count > 0 && (
+          <Typography variant="caption" color="text.secondary" component="div"
+            title={`${rating.review_count} review${rating.review_count === 1 ? '' : 's'}`}>
+            ★ {rating.avg_score}/10 · {rating.review_count}
+          </Typography>
+        )}
         {job && (
           <Typography variant="caption" color={job.status === 'failed' ? 'error' : 'text.secondary'} component="div"
             title={job.error || undefined}>
@@ -79,6 +86,9 @@ function BookCard({ book, files, online, shelf, job, canDelete, onDeleted }: {
         <MoreVertIcon fontSize="small" />
       </IconButton>
       <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
+        <MenuItem disabled={!online} onClick={() => { setMenu(null); navigate(`/book/${encodeURIComponent(book.id)}`); }}>
+          Reviews & discussion
+        </MenuItem>
         {shelf?.status !== 'reading' && <MenuItem onClick={() => choose('reading')}>{shelf?.status === 'finished' ? 'Read again' : 'Add to Currently reading'}</MenuItem>}
         {shelf?.status !== 'finished' && <MenuItem onClick={() => choose('finished')}>Mark as finished</MenuItem>}
         {shelf && shelf.status !== 'removed' && <MenuItem onClick={() => choose('removed')}>Remove from my lists</MenuItem>}
@@ -130,6 +140,9 @@ export default function LibraryPage() {
   const files = useBookCache();
   const online = useOnlineStatus();
   const { reader } = useAuth();
+  // Readers' average scores, from the community
+  const [ratings, setRatings] = useState<Record<string, RatingSummary>>({});
+  useEffect(() => { if (online) void fetchRatings().then(setRatings).catch(() => undefined); }, [online]);
   // Books waiting for (or failing) their search index; polled while anything is waiting
   const [jobs, setJobs] = useState<Map<string, IndexJob>>(new Map());
   useEffect(() => {
@@ -200,7 +213,7 @@ export default function LibraryPage() {
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
         {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)}
-            job={jobs.get(book.id)} canDelete={!!reader && (reader.is_admin || book.uploaded_by === reader.email)}
+            job={jobs.get(book.id)} rating={ratings[book.id]} canDelete={!!reader && (reader.is_admin || book.uploaded_by === reader.email)}
             onDeleted={() => void refresh()} />)}
       </Box>
     </>

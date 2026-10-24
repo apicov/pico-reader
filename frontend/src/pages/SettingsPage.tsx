@@ -52,6 +52,14 @@ export default function SettingsPage() {
           {Object.entries(LANGUAGES).map(([code, name]) => <MenuItem key={code} value={code}>{name}</MenuItem>)}
         </Select>
       </FormControl>
+      <Box>
+        <Typography variant="h6">Community</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Your name, picture and what other readers see.
+        </Typography>
+        <Button component={RouterLink} to="/profile" variant="outlined">Your profile</Button>
+      </Box>
+      <Divider />
       <ReadingGoalSettings />
       <Divider />
       <OfflineSearchSettings />

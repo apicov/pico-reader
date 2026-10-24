@@ -7,6 +7,9 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 
 const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
+/** A backend URL for things the browser loads itself (images) */
+export const apiUrl = (path: string) => API_URL + path;
 const TOKEN_KEY = 'reader_token';
 const TIMEOUT_MS = 30_000;
 

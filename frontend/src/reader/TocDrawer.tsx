@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import { Box, Chip, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Tab, Tabs, Typography } from '@mui/material';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import BorderColorIcon from '@mui/icons-material/BorderColor';
@@ -11,13 +12,15 @@ const FORMAT_LABEL: Record<string, string> = { reflow: 'Text', epub: 'EPUB', pdf
 
 /** Contents and notes (highlights + bookmarks) of the open book. */
 export function TocDrawer({ open, onClose, title, items, current, onPick, annotations, onAnnotation, onEditNote, onDelete,
-  words, onWord }: {
+  onShare, words, onWord }: {
   open: boolean; onClose: () => void; title: string; items: TocItem[]; current: string | null;
   onPick: (id: string) => void;
   annotations: Annotation[];
   onAnnotation: (a: Annotation) => void;
   onEditNote: (a: Annotation) => void;
   onDelete: (a: Annotation) => void;
+  /** Quote a highlight in a community post */
+  onShare: (a: Annotation) => void;
   /** Words looked up before that appear in the open chapter */
   words: { word: string; count: number }[];
   onWord: (word: string) => void;
@@ -79,6 +82,11 @@ export function TocDrawer({ open, onClose, title, items, current, onPick, annota
               />
               <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5 }} onClick={(e) => e.stopPropagation()}>
                 <IconButton size="small" aria-label="Note" onClick={() => onEditNote(a)}><EditNoteIcon fontSize="small" /></IconButton>
+                {a.kind === 'highlight' && (
+                  <IconButton size="small" aria-label="Share to a post" onClick={() => { onShare(a); onClose(); }}>
+                    <ForumOutlinedIcon fontSize="small" />
+                  </IconButton>
+                )}
                 <IconButton size="small" aria-label="Delete" onClick={() => onDelete(a)}><DeleteOutlineIcon fontSize="small" /></IconButton>
               </Box>
             </ListItemButton>
