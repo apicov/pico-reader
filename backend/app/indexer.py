@@ -17,7 +17,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import dictionary_service as dicts, embed, library_service as books, passages, r2
+from app import categories, dictionary_service as dicts, embed, library_service as books, passages, r2
 from app.db import get_engine
 
 logger = logging.getLogger("indexer")
@@ -69,6 +69,7 @@ def process(db: Session, job) -> int:
     books.write_search_file(db, job.book_id)
     books.record(db, job.book_id, book.title, "indexed", "indexer", {"job": job.id, "passages": len(found), "words": words})
     db.commit()
+    categories.classify_quietly(db, job.book_id)  # a new book gets its category from its first pages
     return len(found)
 
 

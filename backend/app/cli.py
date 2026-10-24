@@ -27,7 +27,14 @@ def main() -> None:
     sub.add_parser("list")
     sub.add_parser("usage").add_argument("--days", type=int, default=30)
     sub.add_parser("history").add_argument("--days", type=int, default=30)
+    c = sub.add_parser("categorize", help="let the AI choose categories for books that have none")
+    c.add_argument("--all", action="store_true", help="also books the AI categorized before (never a reader's choice)")
+    c.add_argument("--book", help="only this book id")
     args = parser.parse_args()
+
+    if args.cmd == "categorize":
+        categorize(args)
+        return
 
     with get_engine().begin() as conn:
         if args.cmd == "add":
@@ -58,6 +65,24 @@ def main() -> None:
         else:
             for row in conn.execute(text("SELECT email, name, is_admin, active FROM readers ORDER BY email")):
                 print(f"{row.email:40} {row.name:20} {'admin' if row.is_admin else '':6} {'' if row.active else 'removed'}")
+
+
+def categorize(args) -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from app import categories
+
+    db = sessionmaker(bind=get_engine())()
+    ids = [args.book] if args.book else [r.id for r in db.execute(text(
+        "SELECT id FROM books WHERE status = 'ready' AND EXISTS (SELECT 1 FROM book_chunks c WHERE c.book_id = books.id) ORDER BY title"))]
+    for book_id in ids:
+        try:
+            result = categories.classify(db, book_id, force=args.all)
+        except Exception as e:
+            db.rollback()
+            print(f"{book_id}: failed: {e}")
+            continue
+        print(f"{book_id}: {result['category'] + (' + ' + result['second'] if result['second'] else '') + '  — ' + result['reason'] if result else 'unchanged'}")
 
 
 if __name__ == "__main__":

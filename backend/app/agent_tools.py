@@ -13,7 +13,7 @@ from typing import Any, Callable
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import community
+from app import categories, community
 from app.auth import Reader
 from app.routes import stats as stats_routes
 from app.routes.search import retrieve
@@ -71,19 +71,26 @@ def _stats(ctx: Context, period: str, book_id: str | None = None) -> dict:
 
 # --- read-only tools ---
 
-def list_books(ctx: Context) -> dict:
+def list_books(ctx: Context, category: str | None = None) -> dict:
+    paths = {n["id"]: n["path"] for n in categories.tree(ctx.db)}
     rows = ctx.db.execute(text("""
         SELECT b.id, b.title, b.author, b.language, b.files, b.word_count, i.chunks, rs.progress, rs.updated_at,
-               sh.status AS shelf
+               sh.status AS shelf, b.category_id, b.category2_id
         FROM books b LEFT JOIN book_index i ON i.book_id = b.id
         LEFT JOIN reading_state rs ON rs.book_id = b.id AND rs.reader_email = :e
         LEFT JOIN shelf sh ON sh.book_id = b.id AND sh.reader_email = :e
         WHERE b.status = 'ready' ORDER BY lower(b.title)"""), {"e": ctx.reader.email}).fetchall()
+    wanted = _plain(category) if category else None
+
+    def in_category(r) -> bool:
+        return not wanted or any(wanted in _plain(paths.get(c) or "") for c in (r.category_id, r.category2_id))
+
     return {"books": [{"id": r.id, "title": r.title, "author": r.author, "language": r.language,
-                       "formats": sorted(k for k in r.files if k != "cover"), "words": r.word_count,
+                       "category": paths.get(r.category_id), "second_category": paths.get(r.category2_id),
+                       "formats": sorted(k for k in r.files if k not in ("cover", "search")), "words": r.word_count,
                        "searchable": bool(r.chunks), "progress_percent": round((r.progress or 0) * 100),
                        "last_opened": r.updated_at.isoformat() if r.updated_at else None,
-                       "shelf": r.shelf or "not started"} for r in rows]}
+                       "shelf": r.shelf or "not started"} for r in rows if in_category(r)]}
 
 
 def book_details(ctx: Context, book: str) -> dict:
@@ -298,9 +305,11 @@ def _obj(props: dict, required: list[str] | None = None) -> dict:
 
 
 TOOLS = {t.name: t for t in [
-    Tool("list_books", "All books in the (shared) library with the reader's own shelf status (reading, finished, "
-         "removed, not started), language, formats, size, whether searchable, reading progress.",
-         _obj({}), list_books),
+    Tool("list_books", "Books in the (shared) library with their category (e.g. 'Literature > Science fiction > "
+         "Space opera'), the reader's own shelf status (reading, finished, removed, not started), language, formats, "
+         "size, whether searchable, reading progress. `category`: only books in categories whose path contains it "
+         "(e.g. 'Academic', 'Science fiction').",
+         _obj({"category": {"type": "string"}}), list_books),
     Tool("book_details", "One book: progress, time spent, reading speed, time left, lookups, highlights.",
          _obj({"book": BOOK}, ["book"]), book_details),
     Tool("search_passages", "Find passages in the books (meaning and words). Use for any question about a book's "

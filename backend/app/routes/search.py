@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import embed, groq_client, library_service as books
+from app import categories, embed, groq_client, library_service as books
 from app.auth import Reader, get_current_admin, get_current_reader
 from app.db import get_db
 
@@ -74,6 +74,7 @@ def index_finish(book_id: str, admin: Reader = Depends(get_current_admin), db: S
     title = db.execute(text("SELECT title FROM books WHERE id = :id"), {"id": book_id}).scalar() or ""
     books.record(db, book_id, title, "indexed", admin.email, {"by": "desktop tool"})
     db.commit()
+    categories.classify_quietly(db, book_id)
     return {"search_file": bool(entry)}
 
 

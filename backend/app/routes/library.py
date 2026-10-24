@@ -20,6 +20,7 @@ def library(request: Request, response: Response, reader: Reader = Depends(get_c
     """Books and dictionaries. The ETag covers the data, not the cover links (they're re-signed on every
     call), so a 304 means the app's cached manifest and covers are still right."""
     rows = db.execute(text("""SELECT b.id, b.title, b.author, b.language, b.files, b.updated_at, b.uploaded_by,
+                                      b.category_id, b.category2_id, b.category_reason,
                                       i.sha256 AS index_sha, i.chunks AS index_chunks
                                FROM books b LEFT JOIN book_index i ON i.book_id = b.id
                                WHERE b.status = 'ready' ORDER BY lower(b.title)""")).fetchall()
@@ -29,6 +30,7 @@ def library(request: Request, response: Response, reader: Reader = Depends(get_c
          "updated_at": r.updated_at.isoformat(),
          # who added a book stays private (the library is shared): only whether this reader may change it
          "can_change": reader.is_admin or r.uploaded_by == reader.email,
+         "category_id": r.category_id, "category2_id": r.category2_id, "category_reason": r.category_reason,
          "formats": assets.public_files({k: f for k, f in r.files.items() if k not in ("cover", "search")}),
          # passages + vectors for searching offline (written by the indexer)
          "search": assets.public_files({"s": r.files["search"]})["s"] if "search" in r.files else None,

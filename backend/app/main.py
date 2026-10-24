@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import admin, annotations, auth, books, chat, community, events, learning, library, progress, search, shelf, stats, translate, vocabulary
+from app.routes import admin, annotations, auth, books, categories, chat, community, events, learning, library, progress, search, shelf, stats, translate, vocabulary
 
 logging.basicConfig(level=logging.INFO)
 
@@ -31,6 +31,7 @@ app.include_router(stats.router)
 app.include_router(learning.router)
 app.include_router(shelf.router)
 app.include_router(community.router)
+app.include_router(categories.router)
 
 
 @app.get("/health")

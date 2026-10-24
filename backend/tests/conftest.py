@@ -38,9 +38,20 @@ def schema():
     command.upgrade(Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini")), "head")
 
 
+def _category_seed():
+    import importlib.util
+    path = os.path.join(os.path.dirname(__file__), "..", "alembic", "versions", "0014_categories.py")
+    spec = importlib.util.spec_from_file_location("categories_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.seed
+
+
 @pytest.fixture(autouse=True)
 def clean_tables(schema):
     with get_engine().begin() as conn:
+        conn.execute(text("TRUNCATE categories RESTART IDENTITY CASCADE"))
+        _category_seed()(conn)
         conn.execute(text("TRUNCATE readers, login_codes, books, dictionaries, translations, reading_state, book_index, book_chunks, annotations, conversations, messages, reading_sessions, lookups, reader_settings, known_words, review_cards, chat_actions, shelf, llm_usage, book_events, index_jobs, dict_jobs, profiles, reviews, posts, comments, likes, lists CASCADE"))
 
 
