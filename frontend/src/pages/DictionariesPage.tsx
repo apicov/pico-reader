@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Box, Button, LinearProgress, List, ListItem, ListItemText, ListSubheader, Typography } from '@mui/material';
-import { installDict, PACKAGE, removeDict } from '@/dict/store';
+import { installDict, isCurrent, PACKAGE, removeDict } from '@/dict/store';
 import { useInstalledDicts } from '@/hooks/useInstalledDicts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -46,7 +46,7 @@ export default function DictionariesPage() {
           {dicts.map((d) => {
             const inst = installed[d.id];
             const file = d.files[PACKAGE];
-            const outdated = inst && file && inst.sha256 !== file.sha256;
+            const outdated = inst && file && (inst.sha256 !== file.sha256 || !isCurrent(inst));
             const progress = busy[d.id];
             return (
               <ListItem key={d.id} disableGutters secondaryAction={progress === undefined && (

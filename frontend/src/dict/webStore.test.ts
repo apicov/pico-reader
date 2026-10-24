@@ -48,3 +48,24 @@ describe('webDictStore', () => {
     expect(await webDictStore.lookup('test-de', ['haus'], false)).toEqual([]);
   });
 });
+
+describe('webDictStore with many entries', () => {
+  it('finds words in every block, also when equal keys span two blocks', async () => {
+    const words = Array.from({ length: 1000 }, (_, i) => `wort${String(i).padStart(4, '0')}`);
+    // 6 entries with the same key around the first block boundary (200 per block)
+    const lines: unknown[] = [{ name: 'Big', format: 1 }, ...words.map((w, i) => [i, w, `def ${w}`])];
+    for (let i = 0; i < 6; i++) lines.push([1000 + i, 'wort0199', `extra ${i}`]);
+    lines.push(['Synonym', 500]);
+    const gz = gzipSync(strToU8(lines.map((l) => JSON.stringify(l)).join('\n')));
+    globalThis.fetch = vi.fn(async () => new Response(new Uint8Array(gz))) as typeof fetch;
+    const big: Dictionary = { id: 'big', name: 'Big', from_lang: 'de', to_lang: 'de', entry_count: 1006, updated_at: '',
+      files: { jsonl: { size: gz.length, sha256: 'x' } } };
+    await webDictStore.install(big, 'https://r2/big', () => undefined);
+    for (const w of ['wort0000', 'wort0400', 'wort0999']) {
+      expect((await webDictStore.lookup('big', [w], false)).map((e) => e.headword)).toEqual([w]);
+    }
+    expect(await webDictStore.lookup('big', ['wort0199'], false)).toHaveLength(7);
+    expect((await webDictStore.lookup('big', ['synonym'], false))[0].def).toBe('def wort0500');
+    expect(await webDictStore.prefix('big', 'wort05', 3)).toEqual(['wort0500', 'wort0501', 'wort0502']);
+  });
+});

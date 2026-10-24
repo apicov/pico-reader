@@ -3,7 +3,7 @@ import { store as fileStore } from '@/services/bookCache';
 import { getPref, setPref } from '@/services/prefs';
 import { candidateForms } from './forms';
 import { cleanWord, fold, keyOf } from './normalize';
-import { backend, installedDicts, type DictEntry, type InstalledDict } from './store';
+import { backend, installedDicts, isCurrent, type DictEntry, type InstalledDict } from './store';
 
 export interface DictResult {
   dict: InstalledDict;
@@ -34,7 +34,7 @@ export async function setPreferredDict(language: string, dictId: string): Promis
 export async function dictsFor(language: string): Promise<InstalledDict[]> {
   const preferred = await preferredDict(language);
   return Object.values(await installedDicts())
-    .filter((d) => d.from_lang === language)
+    .filter((d) => d.from_lang === language && isCurrent(d))
     .sort((a, b) => Number(b.id === preferred) - Number(a.id === preferred)
       || Number(a.to_lang === a.from_lang) - Number(b.to_lang === b.from_lang) || a.name.localeCompare(b.name));
 }

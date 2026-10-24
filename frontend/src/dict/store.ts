@@ -8,7 +8,7 @@ import { store as fileStore } from '@/services/bookCache';
 import { getPref, setPref } from '@/services/prefs';
 import type { Dictionary } from '@/services/types';
 import { nativeDictStore } from './sqliteStore';
-import { webDictStore } from './webStore';
+import { WEB_STORE_VERSION, webDictStore } from './webStore';
 
 export interface DictEntry {
   headword: string;
@@ -33,6 +33,8 @@ export interface InstalledDict {
   entry_count: number;
   sha256: string; // of the package installed, to notice a newer one
   res?: string; // sha256 of the images zip, when it has one
+  /** Web only: the IndexedDB layout it was installed with (webStore WEB_STORE_VERSION) */
+  storeVersion?: number;
 }
 
 const KEY = 'dicts_installed';
@@ -48,6 +50,11 @@ export function subscribeDicts(l: () => void): () => void {
 
 export async function installedDicts(): Promise<Record<string, InstalledDict>> {
   return (await getPref<Record<string, InstalledDict>>(KEY)) ?? {};
+}
+
+/** Installed and usable: on the web, installed with the current IndexedDB layout */
+export function isCurrent(d: InstalledDict): boolean {
+  return PACKAGE !== 'jsonl' || d.storeVersion === WEB_STORE_VERSION;
 }
 
 async function saveInstalled(all: Record<string, InstalledDict>): Promise<void> {
@@ -66,7 +73,8 @@ export async function installDict(dict: Dictionary, onProgress: (fraction: numbe
   }
   const all = await installedDicts();
   all[dict.id] = { id: dict.id, name: dict.name, from_lang: dict.from_lang, to_lang: dict.to_lang,
-    entry_count: dict.entry_count, sha256: file.sha256, res: dict.files.res?.sha256 };
+    entry_count: dict.entry_count, sha256: file.sha256, res: dict.files.res?.sha256,
+    storeVersion: PACKAGE === 'jsonl' ? WEB_STORE_VERSION : undefined };
   await saveInstalled(all);
 }
 
