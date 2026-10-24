@@ -6,11 +6,32 @@ import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
 import type { Settings } from '@/contexts/SettingsContext';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
 
+/** The app's @font-face rules with absolute URLs: the book's sections are separate documents (blob URLs),
+ *  so they neither inherit the app's fonts nor resolve its relative font paths. */
+let fontFaces: string | null = null;
+function appFontFaces(): string {
+  if (fontFaces !== null) return fontFaces;
+  const rules: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let list: CSSRuleList;
+    try { list = sheet.cssRules; } catch { continue; }
+    for (const rule of Array.from(list)) {
+      if (rule instanceof CSSFontFaceRule && /Literata/.test(rule.style.getPropertyValue('font-family'))) {
+        rules.push(rule.cssText.replace(/url\("?([^")]+)"?\)/g,
+          (_, u: string) => `url("${new URL(u, sheet.href ?? location.href).href}")`));
+      }
+    }
+  }
+  fontFaces = rules.join('\n');
+  return fontFaces;
+}
+
 /** The book's text styled by the reading settings (foliate injects this into each section). */
 function bookCss(s: Settings): string {
   const c = READING_THEMES[s.theme];
   return `
     @namespace epub "http://www.idpf.org/2007/ops";
+    ${appFontFaces()}
     html { color-scheme: ${c.mode}; }
     html, body { background: ${c.background} !important; color: ${c.text} !important; }
     body { font-family: ${READING_FONT} !important; font-size: ${18 * s.fontScale}px !important; }
@@ -24,7 +45,7 @@ function bookCss(s: Settings): string {
   `;
 }
 
-const MARGIN_PX = { narrow: '16px', normal: '32px', wide: '56px' } as const;
+const MARGIN_PX = { narrow: '0px', normal: '8px', wide: '32px' } as const;
 
 function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] = []): TocItem[] {
   for (const item of items ?? []) {
@@ -79,6 +100,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       view.renderer.setAttribute('gap', '6%');
       view.renderer.style.setProperty('padding-inline', MARGIN_PX[s.margin]);
       view.renderer.setStyles?.(bookCss(s));
+      view.renderer.style.background = READING_THEMES[s.theme].background;
       callbacks.current.onToc(flatten(view.book.toc));
       if (initial.location?.startsWith('epubcfi(')) await view.init({ lastLocation: initial.location });
       else if (initial.progress) await view.goToFraction(initial.progress);
@@ -98,6 +120,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     const view = viewRef.current;
     if (!view?.renderer?.setStyles) return;
     view.renderer.setStyles(bookCss(settings));
+    view.renderer.style.background = READING_THEMES[settings.theme].background;
     view.renderer.style.setProperty('padding-inline', MARGIN_PX[settings.margin]);
   }, [settings]);
 
@@ -114,7 +137,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
 
   const zone = { position: 'absolute', top: 0, bottom: 0, width: '12%', zIndex: 1, cursor: 'pointer' } as const;
   return (
-    <Box sx={{ position: 'relative', height: '100%' }}>
+    <Box sx={{ position: 'relative', height: '100%', bgcolor: READING_THEMES[settings.theme].background }}>
       <div ref={hostRef} style={{ height: '100%' }} />
       {/* tap the page edges to turn pages (the middle stays free for selecting text) */}
       <Box sx={{ ...zone, left: 0 }} onClick={() => void viewRef.current?.goLeft()} aria-label="Previous page" />
