@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import admin, annotations, auth, chat, events, library, progress, search, translate, vocabulary
+from app.routes import admin, annotations, auth, chat, events, library, progress, search, stats, translate, vocabulary
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,6 +26,7 @@ app.include_router(vocabulary.router)
 app.include_router(annotations.router)
 app.include_router(chat.router)
 app.include_router(events.router)
+app.include_router(stats.router)
 
 
 @app.get("/health")

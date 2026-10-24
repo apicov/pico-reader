@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardActionArea, Chip, InputAdornment, LinearProgress, Stack, TextField, Typography } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
+import { localPosition } from '@/reader/position';
+import { cachedStats, formatMinutes, getReadingGoal, getStats, type ReadingGoal } from '@/services/stats';
 import SearchIcon from '@mui/icons-material/Search';
 import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import DownloadDoneIcon from '@mui/icons-material/DownloadDone';
@@ -18,6 +21,8 @@ const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', epub: 'EPUB', reflow:
 function BookCard({ book, files, online }: { book: Book; files: Record<string, CachedFile>; online: boolean }) {
   const navigate = useNavigate();
   const cover = useCoverUrl(book, files[`${book.id}/cover`], online);
+  const [progress, setProgress] = useState(0);
+  useEffect(() => { void localPosition(book.id).then((p) => setProgress(p?.progress ?? 0)); }, [book.id]);
   const downloaded = Object.keys(book.formats).some((k) => files[`${book.id}/${k}`]);
   // Offline, only downloaded books open
   const available = online || downloaded;
@@ -26,6 +31,11 @@ function BookCard({ book, files, online }: { book: Book; files: Record<string, C
       <CardActionArea disabled={!available} onClick={() => navigate(`/read/${book.id}`)} sx={{ p: 0.5, borderRadius: 1 }}>
         <Box sx={{ position: 'relative' }}>
           <BookCover book={book} src={cover} />
+          {progress > 0 && (
+            <Box sx={{ position: 'absolute', left: 4, right: 4, bottom: 2, height: 3, borderRadius: 2, bgcolor: 'action.hover' }}>
+              <Box sx={{ width: `${Math.round(progress * 100)}%`, height: '100%', borderRadius: 2, bgcolor: 'primary.main' }} />
+            </Box>
+          )}
           {(downloaded || !available) && (
             <Box sx={{ position: 'absolute', right: 6, bottom: 6, bgcolor: 'background.paper', borderRadius: '50%',
               width: 26, height: 26, display: 'grid', placeItems: 'center', border: 1, borderColor: 'divider' }}
@@ -42,6 +52,29 @@ function BookCard({ book, files, online }: { book: Book; files: Record<string, C
         </Stack>
       </CardActionArea>
     </Card>
+  );
+}
+
+/** Today's reading against the goal, when the goal is on */
+function GoalBar() {
+  const online = useOnlineStatus();
+  const [goal, setGoal] = useState<ReadingGoal | null>(null);
+  const [today, setToday] = useState(0);
+  useEffect(() => {
+    void getReadingGoal().then(setGoal);
+    void cachedStats('week').then((s) => s && setToday(s.today_seconds));
+    if (online) void getStats('week').then((s) => setToday(s.today_seconds)).catch(() => undefined);
+  }, [online]);
+  if (!goal?.enabled) return null;
+  const done = today >= goal.minutes * 60;
+  return (
+    <Box component={RouterLink} to="/stats" sx={{ display: 'block', mb: 2, color: 'inherit', textDecoration: 'none' }}>
+      <Stack direction="row" justifyContent="space-between">
+        <Typography variant="body2">Today {formatMinutes(today)} of {goal.minutes} min{done ? ' ✓' : ''}</Typography>
+        <Typography variant="body2" color="primary">Statistics</Typography>
+      </Stack>
+      <LinearProgress variant="determinate" value={Math.min(100, (today / (goal.minutes * 60)) * 100)} sx={{ mt: 0.5, height: 6, borderRadius: 3 }} />
+    </Box>
   );
 }
 
@@ -64,6 +97,7 @@ export default function LibraryPage() {
   return (
     <>
       {loading && <LinearProgress sx={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000 }} />}
+      <GoalBar />
       <TextField fullWidth size="small" placeholder="Search title or author" value={query}
         onChange={(e) => setQuery(e.target.value)} sx={{ mb: 3 }}
         slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
