@@ -15,19 +15,20 @@ It talks to `https://books.apicov.xyz` (`frontend/.env.production`). Differences
 - Android SDK (Android Studio, or the command-line tools) with platform 35; `ANDROID_HOME` set
   (e.g. `~/Android/Sdk`).
 
-## Build a debug APK
+## Build and install
+
+With the phone connected (USB debugging on, the computer allowed on the phone):
 
 ```bash
 cd frontend
-npm ci
-npm run build                        # web build + npx cap sync
-cd android
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew assembleDebug
-# → app/build/outputs/apk/debug/app-debug.apk
+npm ci                         # once, and after dependency changes
+./rebuild-prod.sh              # debug APK against the production API, installed on the phone
+./rebuild-prod.sh --no-install # build only → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Install on a phone with USB debugging on:
-`~/Android/Sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+`rebuild-prod.sh` reads the API address from `.env.production`, builds the web app, syncs it into the
+Android project (`npx cap sync`), builds the APK with JDK 21 and installs it with `adb install -r`, which
+keeps the app's data (downloaded books, dictionaries, sign-in).
 
 ## Icons and launch screen
 
@@ -37,16 +38,24 @@ foregrounds and launch screens) from one drawing. Run it from `frontend/` with P
 
 ## Release build
 
-A signed release needs a keystore (keep it outside the repo, with a copy in `~/tsp-configs/pico-reader/`):
+A release APK is signed with a keystore that lives outside the repo, in `~/tsp-configs/pico-reader/`. Create
+it once:
 
 ```bash
-keytool -genkey -v -keystore pico-reader.jks -alias pico-reader -keyalg RSA -keysize 2048 -validity 10000
 cd frontend/android
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew assembleRelease \
-  -Pandroid.injected.signing.store.file=$HOME/tsp-configs/pico-reader/pico-reader.jks \
-  -Pandroid.injected.signing.store.password=… -Pandroid.injected.signing.key.alias=pico-reader \
-  -Pandroid.injected.signing.key.password=…
+./create-keystore.sh           # asks for a password; writes the keystore and android/key.properties
 ```
+
+`key.properties` (git-ignored, with a copy next to the keystore) tells Gradle where the keystore is. Then:
+
+```bash
+cd frontend
+./rebuild-prod.sh --release    # → android/app/build/outputs/apk/release/app-release.apk, installed
+```
+
+Keep the keystore and its password: every later version must be signed with the same key, or the phone
+refuses the update. Debug and release builds are signed differently, so switching a phone from one to the
+other needs `adb uninstall xyz.apicov.reader` first, which deletes the app's downloads.
 
 ## Debugging
 
