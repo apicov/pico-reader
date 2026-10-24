@@ -3,6 +3,8 @@
   reader login you@example.com [--server URL]      (emails a code)
   reader login you@example.com --code 123456
   reader add book.pdf|book.epub [--title T] [--author A] [--lang de] [--id ID] [--cover image]
+  reader add book.pdf --reflow | --reflow-from marker-output.md     (also a text version)
+  reader add-markdown book.md --title T [--author A] --lang de
   reader add-quarto path/to/book [--lang en] [--pdf book.pdf] [--id ID] [--cover image]
   reader list
   reader delete ID
@@ -13,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from readertool import client, metadata, quarto
+from readertool import client, markdown, metadata, quarto
 from readertool.client import Api, ToolError
 
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
@@ -31,6 +33,13 @@ def main() -> None:
     _common(s)
     s.add_argument("--title")
     s.add_argument("--author")
+    s.add_argument("--reflow", action="store_true", help="PDF: also a text version, made with marker")
+    s.add_argument("--reflow-from", type=Path, help="PDF: also a text version, from this Markdown (e.g. marker output)")
+    s = sub.add_parser("add-markdown", help="add a Markdown file (with its images) as a reflowable book")
+    s.add_argument("file", type=Path)
+    _common(s)
+    s.add_argument("--title", required=True)
+    s.add_argument("--author", default="")
     s = sub.add_parser("add-quarto", help="render a Quarto book and add it as a reflowable book")
     s.add_argument("folder", type=Path)
     _common(s)
@@ -40,7 +49,7 @@ def main() -> None:
     args = p.parse_args()
 
     try:
-        {"login": login, "add": add, "add-quarto": add_quarto, "list": list_books, "delete": delete}[args.cmd](args)
+        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete}[args.cmd](args)
     except ToolError as e:
         sys.exit(f"error: {e}")
 
@@ -90,8 +99,26 @@ def add(args) -> None:
         language = args.lang or meta.get("language") or ""
         if not language:
             raise ToolError("the file doesn't say its language: pass --lang")
+        if suffix == ".pdf" and (args.reflow or args.reflow_from):
+            md = args.reflow_from or markdown.marker_to_markdown(path, tmp / "marker")
+            info = markdown.build_bundle(md, tmp / "reflow.zip", title, args.author or meta.get("author", ""), language)
+            print(f"  text version: {info['chapters']} chapters, {info['images']} images")
+            files["reflow"] = (tmp / "reflow.zip", "application/zip")
         book_id = _upload(args, title, args.author or meta.get("author", ""), language, files)
     print(f"added {title!r} as {book_id}")
+
+
+def add_markdown(args) -> None:
+    if not args.lang:
+        raise ToolError("pass the book's language with --lang")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        info = markdown.build_bundle(args.file, tmp / "reflow.zip", args.title, args.author, args.lang)
+        print(f"  {info['chapters']} chapters, {info['images']} images")
+        files = {"reflow": (tmp / "reflow.zip", "application/zip")}
+        _cover(args, files, None, tmp)
+        book_id = _upload(args, args.title, args.author, args.lang, files)
+    print(f"added {args.title!r} as {book_id}")
 
 
 def add_quarto(args) -> None:
