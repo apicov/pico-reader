@@ -6,6 +6,7 @@ the search index and the offline search file. Runs as its own service (deploy/pi
 """
 
 import argparse
+import gc
 import logging
 import os
 import tempfile
@@ -22,6 +23,7 @@ logger = logging.getLogger("indexer")
 MAX_ATTEMPTS = 3
 IDLE_SECONDS = 5
 BATCH = 64
+UNLOAD_AFTER = 300  # seconds without jobs before the model leaves memory (the server has 2 GB)
 
 
 def requeue_interrupted(db: Session) -> int:
@@ -97,14 +99,20 @@ def main() -> None:
     db = sessionmaker(bind=get_engine())()
     if (n := requeue_interrupted(db)):
         logger.info("Requeued %d interrupted jobs", n)
+    idle_since = time.time()
     while True:
         job = claim(db)
         if job is None:
             if args.once:
                 return
+            if embed._model.cache_info().currsize and time.time() - idle_since > UNLOAD_AFTER:
+                embed._model.cache_clear()
+                gc.collect()
+                logger.info("Idle: embedding model unloaded")
             time.sleep(IDLE_SECONDS)
             continue
         run_job(db, job)
+        idle_since = time.time()
 
 
 if __name__ == "__main__":
