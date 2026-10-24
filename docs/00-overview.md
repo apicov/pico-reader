@@ -24,6 +24,11 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Frontend** (`frontend/`): React + MUI + Vite, wrapped by Capacitor for Android. The same build is the web
   app (installable PWA). Downloaded books stay on the device for offline reading.
 - **Email**: sign-in codes go out through Cloudflare Email Sending.
+- **Groq**: translates selected passages (stored per reader in `translations`) and answers questions about
+  the library from its passages (`/api/ask`).
+- **Search**: book passages with embeddings (pgvector) and full-text vectors in `book_chunks`, built on the
+  desktop (`reader index`); the backend embeds questions with the same small model (~120 MB, loaded on the
+  first search).
 
 ## Names and addresses
 

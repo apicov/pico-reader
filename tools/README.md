@@ -54,6 +54,24 @@ Tests: `.venv/bin/pip install -r requirements-dev.txt && PYTHONPATH=. .venv/bin/
   computations are reused) and packages it as a **reflow** book. `--pdf` adds a PDF of the same book as a
   second format, and its first page as the cover.
 
+## Search index
+
+"Ask your library" (the app's 💬 page) searches passages of the books. The passages and their embeddings are
+made on this computer:
+
+```bash
+./reader index --all          # every book whose index is missing or older than its file
+./reader index <book id>      # one book (--force to rebuild)
+```
+
+- The text comes from the best format a book has (text version, then EPUB, then PDF), cut into passages of
+  about 1000 characters, each with the place the reader opens for it. A scanned PDF has no text: add a text
+  version first (`--reflow` / `--reflow-from`).
+- Embeddings: multilingual-e5-small (int8 ONNX, downloaded once to `~/.cache/pico-reader/models`). The server
+  embeds questions with the same model (`backend/app/embed.py`, the same code as `readertool/embed.py`),
+  so changing the model means changing both and indexing everything again.
+- Run `index --all` after adding books; it skips books that are up to date.
+
 ## Dictionaries
 
 StarDict dictionaries (`.ifo`, `.idx`, `.dict` or `.dict.dz`, optional `.syn` and `res/`) are converted on

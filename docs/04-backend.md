@@ -93,6 +93,13 @@ cd ~/code/pico-reader/backend
 
 Migrations are in `backend/alembic/versions/`; run the same command after every update that adds one.
 
+Search needs the embedding model on the server (~135 MB, kept in `~/.cache/pico-reader/models` of `tsp`).
+Fetch it once, so the first search doesn't wait for the download:
+
+```bash
+.venv/bin/python -c "from app import embed; embed.embed(['test'], 'query')"
+```
+
 ## 6. Service
 
 ```bash
