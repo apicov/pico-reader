@@ -26,9 +26,14 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Email**: sign-in codes go out through Cloudflare Email Sending.
 - **Groq**: translates selected passages (stored per reader in `translations`) and answers questions about
   the library from its passages (`/api/ask`).
+- **Highlights and bookmarks** (`annotations`): made offline on each device with its own ids, pushed and
+  pulled when online; the newest edit wins and deletions are kept as tombstones so every device learns of them.
+- **Vocabulary export**: `/api/vocabulary.apkg` (an Anki deck, genanki) and `/api/vocabulary.tsv`, from the
+  vocabulary of saved translations.
 - **Search**: book passages with embeddings (pgvector) and full-text vectors in `book_chunks`, built on the
   desktop (`reader index`); the backend embeds questions with the same small model (~120 MB, loaded on the
-  first search).
+  first search). A question is first translated (Groq) into the languages of the indexed books, and every
+  version is searched, because the small model matches best within one language.
 
 ## Names and addresses
 
