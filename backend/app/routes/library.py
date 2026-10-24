@@ -27,7 +27,9 @@ def library(request: Request, response: Response, _: Reader = Depends(get_curren
     books = [
         {"id": r.id, "title": r.title, "author": r.author, "language": r.language,
          "updated_at": r.updated_at.isoformat(),
-         "formats": assets.public_files({k: f for k, f in r.files.items() if k != "cover"}),
+         "formats": assets.public_files({k: f for k, f in r.files.items() if k not in ("cover", "search")}),
+         # passages + vectors for searching offline (written by the indexer)
+         "search": assets.public_files({"s": r.files["search"]})["s"] if "search" in r.files else None,
          "cover": assets.public_files(r.files)["cover"] if r.id in cover_keys else None,
          # the file the search index was built from (the desktop tool re-indexes when it changes)
          "index": {"sha256": r.index_sha, "chunks": r.index_chunks} if r.index_sha else None}

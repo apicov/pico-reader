@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import embed, groq_client
+from app import embed, groq_client, library_service as books
 from app.auth import Reader, get_current_admin, get_current_reader
 from app.db import get_db
 
@@ -49,19 +49,12 @@ def _vector(values: list[float]) -> str:
 
 @router.post("/admin/books/{book_id}/index/start")
 def index_start(book_id: str, body: IndexStart, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
-    """Drop the book's old passages; chunks follow in batches."""
+    """Drop the book's old passages; chunks follow in batches, then /finish."""
     if body.model != embed.MODEL:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"The server searches with {embed.MODEL}")
     if db.execute(text("SELECT 1 FROM books WHERE id = :id"), {"id": book_id}).fetchone() is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such book")
-    db.execute(text("DELETE FROM book_chunks WHERE book_id = :id"), {"id": book_id})
-    db.execute(text("""
-        INSERT INTO book_index (book_id, format, sha256, model, chunks) VALUES (:id, :f, :s, :m, 0)
-        ON CONFLICT (book_id) DO UPDATE SET format = EXCLUDED.format, sha256 = EXCLUDED.sha256,
-            model = EXCLUDED.model, chunks = 0, indexed_at = now()
-    """), {"id": book_id, "f": body.format, "s": body.sha256, "m": body.model})
-    if body.word_count:
-        db.execute(text("UPDATE books SET word_count = :n WHERE id = :id"), {"n": body.word_count, "id": book_id})
+    books.start_index(db, book_id, body.format, body.sha256, body.model, body.word_count)
     db.commit()
     return {"ok": True}
 
@@ -69,17 +62,19 @@ def index_start(book_id: str, body: IndexStart, _: Reader = Depends(get_current_
 @router.post("/admin/books/{book_id}/index/chunks")
 def index_chunks(book_id: str, chunks: list[Chunk], _: Reader = Depends(get_current_admin),
                  db: Session = Depends(get_db)):
-    fmt = db.execute(text("SELECT format FROM book_index WHERE book_id = :id"), {"id": book_id}).scalar()
-    if fmt is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Start the index first")
-    db.execute(text("""
-        INSERT INTO book_chunks (book_id, seq, format, location, progress, heading, text, embedding)
-        VALUES (:b, :seq, :f, :loc, :p, :h, :t, CAST(:e AS vector))
-    """), [{"b": book_id, "seq": c.seq, "f": fmt, "loc": c.location, "p": c.progress, "h": c.heading,
-            "t": c.text, "e": _vector(c.embedding)} for c in chunks])
-    db.execute(text("UPDATE book_index SET chunks = chunks + :n WHERE book_id = :id"), {"n": len(chunks), "id": book_id})
+    books.add_chunks(db, book_id, [c.model_dump() for c in chunks])
     db.commit()
     return {"added": len(chunks)}
+
+
+@router.post("/admin/books/{book_id}/index/finish")
+def index_finish(book_id: str, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """After the last chunks: write the offline search file and note it in the history."""
+    entry = books.write_search_file(db, book_id)
+    title = db.execute(text("SELECT title FROM books WHERE id = :id"), {"id": book_id}).scalar() or ""
+    books.record(db, book_id, title, "indexed", admin.email, {"by": "desktop tool"})
+    db.commit()
+    return {"search_file": bool(entry)}
 
 
 # --- searching ---

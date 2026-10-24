@@ -14,3 +14,6 @@ onnxruntime==1.22.1
 tokenizers==0.21.2
 numpy==2.2.6
 genanki==0.13.1
+# reading books for the indexer (app/passages.py)
+pymupdf==1.26.7
+beautifulsoup4==4.13.4

@@ -1,0 +1,17 @@
+[Unit]
+Description=Pico Reader indexer (search index of uploaded books)
+After=network-online.target docker.service pico-reader.service
+Wants=network-online.target
+
+[Service]
+User=tsp
+WorkingDirectory=/home/tsp/code/pico-reader/backend
+EnvironmentFile=/etc/pico-reader/reader.env
+Environment=EMBED_THREADS=1
+ExecStart=/home/tsp/code/pico-reader/backend/.venv/bin/python -m app.indexer
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

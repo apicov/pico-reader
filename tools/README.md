@@ -62,7 +62,11 @@ made on this computer:
 ```bash
 ./reader index --all          # every book whose index is missing or older than its file
 ./reader index <book id>      # one book (--force to rebuild)
+./reader index --all --server # queue them on the server's indexer instead (slower, but this computer is free)
 ```
+
+Books uploaded from the app are indexed by the server's queue on their own; `reader index` is for the books
+added here (faster on a desktop) and for rebuilding.
 
 - The text comes from the best format a book has (text version, then EPUB, then PDF), cut into passages of
   about 1000 characters, each with the place the reader opens for it. A scanned PDF has no text: add a text

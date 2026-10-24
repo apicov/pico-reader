@@ -11,7 +11,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-from app.config import get_settings
+from app.config import get_settings  # noqa: F401 (re-exported for callers)
 
 
 @lru_cache

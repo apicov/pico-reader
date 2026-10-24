@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets
+from app import assets, library_service as books
 from app.auth import Reader, get_current_admin
 from app.db import get_db
 
@@ -35,27 +35,22 @@ class DictionaryUpload(BaseModel):
     files: dict[str, assets.FileInfo]
 
 
+# Books: the same service as the app's uploads (history, indexing queue); an admin may change any book.
+# The desktop tool indexes on its own (`reader index`), or queues the server (`reader index --server`).
+
 @router.post("/books")
-def add_book(body: BookUpload, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
-    book_id = assets.check_id(body.id) if body.id else assets.new_id(body.title)
-    pending, links = assets.plan_uploads("books", book_id, assets.BOOK_KINDS, body.files)
-    db.execute(text("""
-        INSERT INTO books (id, title, author, language, pending) VALUES (:id, :t, :a, :l, CAST(:p AS jsonb))
-        ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, author = EXCLUDED.author,
-            language = EXCLUDED.language, pending = EXCLUDED.pending, updated_at = now()
-    """), {"id": book_id, "t": body.title, "a": body.author, "l": body.language, "p": json.dumps(pending)})
-    db.commit()
-    return {"id": book_id, "uploads": links}
+def add_book(body: BookUpload, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return books.start_upload(db, admin, body.id, body.title, body.author, body.language, body.files)
 
 
 @router.post("/books/{book_id}/commit")
-def commit_book(book_id: str, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
-    return {"id": book_id, "files": assets.public_files(assets.commit(db, "books", book_id))}
+def commit_book(book_id: str, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return {"id": book_id, "files": assets.public_files(books.commit_upload(db, admin, book_id))}
 
 
 @router.delete("/books/{book_id}", status_code=204)
-def delete_book(book_id: str, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
-    assets.delete(db, "books", book_id)
+def delete_book(book_id: str, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
+    books.delete_book(db, admin, book_id)
 
 
 @router.post("/dictionaries")

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import admin, annotations, auth, chat, events, learning, library, progress, search, shelf, stats, translate, vocabulary
+from app.routes import admin, annotations, auth, books, chat, events, learning, library, progress, search, shelf, stats, translate, vocabulary
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,6 +19,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(library.router)
 app.include_router(admin.router)
+app.include_router(books.router)
 app.include_router(progress.router)
 app.include_router(translate.router)
 app.include_router(search.router)

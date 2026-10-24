@@ -8,7 +8,7 @@
   reader add-quarto path/to/book [--lang en] [--pdf book.pdf] [--id ID] [--cover image]
   reader list
   reader delete ID
-  reader index [BOOK_ID ...] [--all] [--force]           (search index: passages + embeddings)
+  reader index [BOOK_ID ...] [--all] [--force] [--server]  (search index: here, or queued on the server)
   reader dict-add path/to/stardict-folder --from de --to es [--name N]
   reader dict-add-all ~/Documents/dic/converted [--map dictionaries.json] [--only duden,ldaf]
   reader dict-list
@@ -66,6 +66,7 @@ def main() -> None:
     s.add_argument("ids", nargs="*", help="book ids (default with --all: every book)")
     s.add_argument("--all", action="store_true", help="every book whose index is missing or out of date")
     s.add_argument("--force", action="store_true", help="index again even when up to date")
+    s.add_argument("--server", action="store_true", help="queue the books on the server instead of indexing here")
     sub.add_parser("list", help="list the library")
     sub.add_parser("delete", help="delete a book and its files").add_argument("id")
     args = p.parse_args()
@@ -197,6 +198,10 @@ def index_books(args) -> None:
         if book.get("index") and book["index"]["sha256"] == sha and not args.force:
             print(f"{book['title']}: up to date")
             continue
+        if args.server:
+            job = api.post(f"/api/books/{book['id']}/reindex")["job"]
+            print(f"{book['title']}: queued on the server (job {job})")
+            continue
         print(f"{book['title']} ({fmt})")
         with tempfile.TemporaryDirectory() as tmp:
             link = api.get(f"/api/books/{book['id']}/download", params={"kind": fmt})
@@ -220,7 +225,8 @@ def index_books(args) -> None:
                       "text": p.text, "embedding": [round(float(x), 6) for x in vectors[start + i]]}
                      for i, p in enumerate(found[start:start + 100])]
             api.post_list(f"/api/admin/books/{book['id']}/index/chunks", batch)
-        print(f"  indexed")
+        api.post(f"/api/admin/books/{book['id']}/index/finish")  # the offline search file + history
+        print("  indexed")
 
 
 _DICT_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}

@@ -30,6 +30,7 @@ BOOK_KINDS = {
     "epub": Kind(("application/epub+zip",), "epub"),
     "reflow": Kind(("application/zip",), "zip"),  # see tools/ for the bundle layout
     "cover": Kind(("image/jpeg", "image/png", "image/webp"), ""),
+    "search": Kind(("application/gzip",), "json.gz"),  # written by the server: passages + vectors, for offline search
 }
 DICT_KINDS = {
     # a zip holding <id>SQLite.db: the Android SQLite plugin downloads and unzips it into its database folder
