@@ -3,6 +3,7 @@ import { AppBar, Box, IconButton, Toolbar, Tooltip, Typography } from '@mui/mate
 import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import TranslateIcon from '@mui/icons-material/Translate';
+import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
 import { Link as RouterLink } from 'react-router-dom';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { READING_FONT } from '@/theme/readingThemes';
@@ -22,6 +23,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <CloudOffOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />
             </Tooltip>
           )}
+          <IconButton component={RouterLink} to="/ask" aria-label="Ask your library">
+            <QuestionAnswerOutlinedIcon />
+          </IconButton>
           <IconButton component={RouterLink} to="/translations" aria-label="Translations">
             <TranslateIcon />
           </IconButton>

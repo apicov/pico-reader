@@ -4,7 +4,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FormatSizeIcon from '@mui/icons-material/FormatSize';
 import TocIcon from '@mui/icons-material/Toc';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -44,6 +44,12 @@ async function openFormat(book: Book, format: BookFormat, online: boolean,
 
 export default function ReaderPage() {
   const { bookId = '' } = useParams();
+  // ?format=&location=&progress= opens the book at a place (a search result); used once, then dropped
+  const [params, setParams] = useSearchParams();
+  const jump = useRef(params.get('format') ? {
+    format: params.get('format') as BookFormat, location: params.get('location') ?? '',
+    progress: Number(params.get('progress') ?? 0),
+  } : null);
   const navigate = useNavigate();
   const { library } = useLibrary();
   const online = useOnlineStatus();
@@ -65,6 +71,10 @@ export default function ReaderPage() {
   // The format: the last one used for this book, else the best available
   useEffect(() => {
     if (!book || format) return;
+    if (jump.current && book.formats[jump.current.format]) {
+      setFormat(jump.current.format);
+      return;
+    }
     void getPref<BookFormat>(formatKey(book.id)).then((saved) =>
       setFormat(saved && book.formats[saved] ? saved : formats[0] ?? null));
   }, [book, format, formats]);
@@ -82,8 +92,13 @@ export default function ReaderPage() {
           (fraction) => !cancelled && setPhase({ kind: 'downloading', fraction }));
         opened = loaded;
         const pos = lastPosition.current ?? (await loadPosition(book.id));
-        // The same format resumes exactly; another one starts at the same share of the book
-        const initial = pos?.format === format ? { location: pos.location } : { progress: pos?.progress ?? 0 };
+        const target = jump.current?.format === format ? jump.current : null;
+        jump.current = null;
+        if (target) setParams({}, { replace: true });
+        // A search result opens at its passage; the same format resumes exactly; another one starts at the
+        // same share of the book
+        const initial = target ? { location: target.location, progress: target.progress }
+          : pos?.format === format ? { location: pos.location } : { progress: pos?.progress ?? 0 };
         if (!cancelled) setPhase({ kind: 'ready', loaded, initial });
       } catch (e) {
         if (!cancelled) setPhase({ kind: 'error', message: (e as Error).message });

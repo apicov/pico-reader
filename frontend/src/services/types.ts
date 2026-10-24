@@ -19,6 +19,8 @@ export interface Book {
   updated_at: string;
   formats: Partial<Record<BookFormat, FileRef>>;
   cover: (FileRef & { url?: string }) | null;
+  /** The search index, when the book has one */
+  index?: { sha256: string; chunks: number } | null;
 }
 
 export interface Dictionary {

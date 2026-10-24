@@ -9,6 +9,7 @@ import LoginPage from '@/pages/LoginPage';
 import SettingsPage from '@/pages/SettingsPage';
 import DictionariesPage from '@/pages/DictionariesPage';
 import TranslationsPage from '@/pages/TranslationsPage';
+import AskPage from '@/pages/AskPage';
 import { createAppTheme } from '@/theme/readingThemes';
 
 // The readers (pdf.js, foliate, KaTeX) load only when a book is opened
@@ -27,6 +28,7 @@ function Routed() {
       <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
       <Route path="/dictionaries" element={<AppShell><DictionariesPage /></AppShell>} />
       <Route path="/translations" element={<AppShell><TranslationsPage /></AppShell>} />
+      <Route path="/ask" element={<AppShell><AskPage /></AppShell>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
