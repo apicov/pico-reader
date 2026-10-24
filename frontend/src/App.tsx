@@ -28,7 +28,9 @@ function Routed() {
       <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
       <Route path="/dictionaries" element={<AppShell><DictionariesPage /></AppShell>} />
       <Route path="/translations" element={<AppShell><TranslationsPage /></AppShell>} />
-      <Route path="/ask" element={<AppShell><AskPage /></AppShell>} />
+      {/* the chat has its own full-screen layout */}
+      <Route path="/ask" element={<AskPage />} />
+      <Route path="/ask/:conversationId" element={<AskPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

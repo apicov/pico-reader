@@ -126,8 +126,39 @@ def query_variants(db: Session, query: str, book_ids: list[str] | None) -> list[
     return list(dict.fromkeys(variants))  # unique, in order
 
 
-def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int) -> list[Passage]:
-    variants = query_variants(db, query, book_ids)
+def _plain(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s.lower()) if not unicodedata.combining(c))
+
+
+def books_named(db: Session, question: str) -> list[str]:
+    """Ids of the indexed books whose title the question names ("…in Die Wolke?"): searching only them keeps
+    another book's passages from crowding out the one asked about."""
+    asked = _plain(question)
+    rows = db.execute(text("SELECT b.id, b.title FROM books b JOIN book_index i ON i.book_id = b.id")).fetchall()
+    return [r.id for r in rows if len(r.title) >= 4 and _plain(r.title) in asked]
+
+
+def library_overview(db: Session) -> str:
+    """Every book in the library, for questions about the library itself ("how many books do I have?")."""
+    rows = db.execute(text("""SELECT b.title, b.author, b.language, b.files, i.chunks FROM books b
+                              LEFT JOIN book_index i ON i.book_id = b.id WHERE b.status = 'ready'
+                              ORDER BY lower(b.title)""")).fetchall()
+    from app.routes.translate import LANGUAGES
+
+    lines = [f"The reader's library has {len(rows)} book{'s' if len(rows) != 1 else ''}:"]
+    for r in rows:
+        formats = ", ".join(sorted(k for k in r.files if k != "cover"))
+        searchable = "searchable" if r.chunks else "not indexed for search yet"
+        author = f" by {r.author}" if r.author else ""
+        lines.append(f"- {r.title}{author} ({LANGUAGES.get(r.language, r.language)}; {formats}; {searchable})")
+    return "\n".join(lines)
+
+
+def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int,
+             variants: list[str] | None = None) -> list[Passage]:
+    """The best passages for `query` (and its `variants`, the same question worded for the books' languages)."""
+    variants = variants or query_variants(db, query, book_ids)
     vectors = embed.embed(variants, "query")
     scope = "AND c.book_id = ANY(:books)" if book_ids else ""
     rankings = []
@@ -172,24 +203,30 @@ class Answer(BaseModel):
     sources: list[Passage]  # numbered from 1, as cited in the answer
 
 
-ASK_PROMPT = """You answer questions about the reader's own books, using only the numbered SOURCES (passages
-from those books). Answer in the language of the question, clearly and concisely: a few sentences, or a short
-list when that is clearer. Never invent facts; if the sources don't answer the question, say so briefly and
-mention what they do cover.
-CITATIONS ARE REQUIRED: end every sentence of the answer with the number(s) of the source(s) it comes from in
-square brackets, like "…evacuated [2]." or "…in 8 bits [1][3]."
-Reply with one JSON object and nothing else: {"answer": string with the citations, "used": [numbers cited]}"""
+CITATION_RULES = """Answer in the language of the question, clearly and concisely: a few sentences, or a short list
+when that is clearer. Use only the SOURCES (passages from the reader's books) and the LIBRARY list; never invent
+facts. If they don't answer the question, say so briefly and mention what they do cover.
+CITATIONS ARE REQUIRED for anything taken from the sources: end each such sentence with the number(s) of the
+source(s) in square brackets, like "…evacuated [2]." or "…in 8 bits [1][3]". Facts from the LIBRARY list
+(titles, number of books, languages) need no citation."""
+
+ASK_PROMPT = f"""You answer questions about the reader's own books.
+{CITATION_RULES}
+Reply with one JSON object and nothing else: {{"answer": string with the citations, "used": [numbers cited]}}"""
+
+
+def numbered_sources(passages: list[Passage]) -> str:
+    return "\n\n".join(f"[{i}] {p.title} — {p.heading}\n{p.text}" for i, p in enumerate(passages, 1)) or "(none found)"
 
 
 @router.post("/ask", response_model=Answer)
 def ask(body: AskRequest, _: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
-    passages = retrieve(db, body.question, body.book_ids, 8)
-    if not passages:
-        return Answer(answer="", sources=[])
-    sources = "\n\n".join(f"[{i}] {p.title} — {p.heading}\n{p.text}" for i, p in enumerate(passages, 1))
+    scope = body.book_ids or books_named(db, body.question) or None
+    passages = retrieve(db, body.question, scope, 8)
+    user = (f"LIBRARY:\n{library_overview(db)}\n\nSOURCES:\n{numbered_sources(passages)}"
+            f"\n\nQUESTION: {body.question}")
     try:
-        data, _model = groq_client.chat_json(ASK_PROMPT, f"SOURCES:\n{sources}\n\nQUESTION: {body.question}",
-                                             max_tokens=1200)
+        data, _model = groq_client.chat_json(ASK_PROMPT, user, max_tokens=1200)
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))
     answer = str(data.get("answer") or "").strip()

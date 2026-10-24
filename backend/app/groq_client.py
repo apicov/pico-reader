@@ -4,6 +4,7 @@ spelled out in the prompt, and an unusable reply is asked for once more."""
 import json
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -37,21 +38,51 @@ def chat_json(system: str, user: str, max_tokens: int = 1500) -> tuple[dict[str,
     raise AssertionError("unreachable")
 
 
-def _call(system: str, user: str, max_tokens: int) -> dict[str, Any]:
+def _payload(messages: list[dict[str, str]], max_tokens: int) -> dict[str, Any]:
     settings = get_settings()
     if not settings.groq_api_key:
         raise GroqError("GROQ_API_KEY is not set on the server", 503)
-    payload: dict[str, Any] = {
-        "model": settings.groq_model,
-        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        "max_tokens": max_tokens,
-        "temperature": 0.2,
-        "response_format": {"type": "json_object"},
-    }
+    payload: dict[str, Any] = {"model": settings.groq_model, "messages": messages, "max_tokens": max_tokens,
+                               "temperature": 0.2}
     if settings.groq_reasoning_format and "qwen" in settings.groq_model:
         payload["reasoning_format"] = settings.groq_reasoning_format
     if "gpt-oss" in settings.groq_model:
         payload["reasoning_effort"] = "low"
+    return payload
+
+
+def chat_stream(messages: list[dict[str, str]], max_tokens: int = 1500) -> Iterator[str]:
+    """The reply's text as it is written (Groq's server-sent events), for chat answers."""
+    settings = get_settings()
+    payload = {**_payload(messages, max_tokens), "stream": True}
+    try:
+        with httpx.stream("POST", f"{settings.groq_base_url}/chat/completions", json=payload, timeout=120,
+                          headers={"Authorization": f"Bearer {settings.groq_api_key}"}) as res:
+            if res.status_code != 200:
+                res.read()
+                logger.error("Groq error %s: %s", res.status_code, res.text[:500])
+                raise GroqError(f"Groq answered {res.status_code}: {_error_message(res)}",
+                                429 if res.status_code == 429 else 502)
+            for line in res.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    return
+                try:
+                    piece = json.loads(data)["choices"][0]["delta"].get("content")
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+                if piece:
+                    yield piece
+    except httpx.HTTPError as e:
+        raise GroqError(f"Could not reach Groq: {e}") from e
+
+
+def _call(system: str, user: str, max_tokens: int) -> dict[str, Any]:
+    settings = get_settings()
+    payload = {**_payload([{"role": "system", "content": system}, {"role": "user", "content": user}], max_tokens),
+               "response_format": {"type": "json_object"}}
     try:
         res = httpx.post(f"{settings.groq_base_url}/chat/completions", json=payload, timeout=60,
                          headers={"Authorization": f"Bearer {settings.groq_api_key}"})
