@@ -1,6 +1,7 @@
-/** The reader's own shelf in the shared library: reading / finished / removed. Kept on the device for offline
- *  use; changes made offline are sent when the connection is back. */
-import { api } from '@/services/api';
+/** The reader's own shelf in the shared library: reading / finished / removed, and apart from that "My shelf",
+ *  the books they picked to keep in sight. Kept on the device for offline use; changes made offline are sent when
+ *  the connection is back. */
+import { api, ApiError } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import { getPref, setPref } from '@/services/prefs';
 
@@ -13,8 +14,15 @@ export interface ShelfEntry {
   last_read: string | null;
 }
 
+export interface MyShelfEntry {
+  book_id: string;
+  added_at: string;
+}
+
 const KEY = 'shelf';
 const PENDING = 'shelf_pending';
+const MINE = 'my_shelf';
+const MINE_PENDING = 'my_shelf_pending';
 const listeners = new Set<() => void>();
 
 export function subscribeShelf(l: () => void): () => void {
@@ -32,6 +40,14 @@ async function flush(): Promise<void> {
     await api(`/api/shelf/${encodeURIComponent(bookId)}`, { method: 'PUT', body });
     delete pending[bookId];
     await setPref(PENDING, pending);
+  }
+  const mine = (await getPref<Record<string, boolean>>(MINE_PENDING)) ?? {};
+  for (const [bookId, on] of Object.entries(mine)) {
+    await api(`/api/shelf/mine/${encodeURIComponent(bookId)}`, { method: on ? 'PUT' : 'DELETE' }).catch((e) => {
+      if (!(e instanceof ApiError && e.status === 404)) throw e; // the book was deleted meanwhile
+    });
+    delete mine[bookId];
+    await setPref(MINE_PENDING, mine);
   }
 }
 
@@ -60,5 +76,32 @@ export async function setShelfStatus(bookId: string, status: ShelfStatus, onlyIf
   const pending = (await getPref<Record<string, { status: ShelfStatus; only_if_new: boolean }>>(PENDING)) ?? {};
   pending[bookId] = { status, only_if_new: onlyIfNew };
   await setPref(PENDING, pending);
+  if (isOnline()) void flush().catch(() => undefined);
+}
+
+export async function cachedMyShelf(): Promise<MyShelfEntry[]> {
+  return (await getPref<MyShelfEntry[]>(MINE)) ?? [];
+}
+
+export async function loadMyShelf(): Promise<MyShelfEntry[]> {
+  if (!isOnline()) return cachedMyShelf();
+  try {
+    await flush();
+    const mine = await api<MyShelfEntry[]>('/api/shelf/mine');
+    await setPref(MINE, mine);
+    return mine;
+  } catch {
+    return cachedMyShelf();
+  }
+}
+
+export async function setOnMyShelf(bookId: string, on: boolean): Promise<void> {
+  const mine = (await cachedMyShelf()).filter((e) => e.book_id !== bookId);
+  if (on) mine.unshift({ book_id: bookId, added_at: new Date().toISOString() });
+  await setPref(MINE, mine);
+  listeners.forEach((l) => l());
+  const pending = (await getPref<Record<string, boolean>>(MINE_PENDING)) ?? {};
+  pending[bookId] = on;
+  await setPref(MINE_PENDING, pending);
   if (isOnline()) void flush().catch(() => undefined);
 }

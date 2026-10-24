@@ -75,10 +75,11 @@ def list_books(ctx: Context, category: str | None = None) -> dict:
     paths = {n["id"]: n["path"] for n in categories.tree(ctx.db)}
     rows = ctx.db.execute(text("""
         SELECT b.id, b.title, b.author, b.language, b.files, b.word_count, i.chunks, rs.progress, rs.updated_at,
-               sh.status AS shelf, b.category_id, b.category2_id
+               sh.status AS shelf, ms.book_id IS NOT NULL AS on_my_shelf, b.category_id, b.category2_id
         FROM books b LEFT JOIN book_index i ON i.book_id = b.id
         LEFT JOIN reading_state rs ON rs.book_id = b.id AND rs.reader_email = :e
         LEFT JOIN shelf sh ON sh.book_id = b.id AND sh.reader_email = :e
+        LEFT JOIN my_shelf ms ON ms.book_id = b.id AND ms.reader_email = :e
         WHERE b.status = 'ready' ORDER BY lower(b.title)"""), {"e": ctx.reader.email}).fetchall()
     wanted = _plain(category) if category else None
 
@@ -90,7 +91,8 @@ def list_books(ctx: Context, category: str | None = None) -> dict:
                        "formats": sorted(k for k in r.files if k not in ("cover", "search")), "words": r.word_count,
                        "searchable": bool(r.chunks), "progress_percent": round((r.progress or 0) * 100),
                        "last_opened": r.updated_at.isoformat() if r.updated_at else None,
-                       "shelf": r.shelf or "not started"} for r in rows if in_category(r)]}
+                       "shelf": r.shelf or "not started",
+                       "on_my_shelf": r.on_my_shelf} for r in rows if in_category(r)]}
 
 
 def book_details(ctx: Context, book: str) -> dict:
@@ -306,7 +308,8 @@ def _obj(props: dict, required: list[str] | None = None) -> dict:
 
 TOOLS = {t.name: t for t in [
     Tool("list_books", "Books in the (shared) library with their category (e.g. 'Literature > Science fiction > "
-         "Space opera'), the reader's own shelf status (reading, finished, removed, not started), language, formats, "
+         "Space opera'), the reader's own shelf status (reading, finished, removed, not started), whether it's on "
+         "\"My shelf\" (books the reader picked to keep in sight, read or not), language, formats, "
          "size, whether searchable, reading progress. `category`: only books in categories whose path contains it "
          "(e.g. 'Academic', 'Science fiction').",
          _obj({"category": {"type": "string"}}), list_books),

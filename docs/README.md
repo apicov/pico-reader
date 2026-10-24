@@ -19,6 +19,7 @@ repository. Follow the guides in order for a fresh install.
 | [11 Community](11-community.md) | Profiles, reviews, posts, comments, lists; inviting friends; moderation |
 | [12 Dictionaries](12-dictionaries.md) | Installing, switching on/off and ordering; who sees which; uploading from the app |
 | [13 Categories](13-categories.md) | The category tree, how the AI files books, browsing, managing the tree |
+| [14 My shelf](14-my-shelf.md) | The library tabs; My shelf, a hand-picked list apart from reading status |
 | [tools/README](../tools/README.md) | Adding books and dictionaries from your computer; the reflow book format |
 
 Secrets are never in this repository. The server keeps them in `/etc/pico-reader/reader.env`; a local copy of
