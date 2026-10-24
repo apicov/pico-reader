@@ -1,0 +1,32 @@
+import type { ReactNode } from 'react';
+import { AppBar, Box, IconButton, Toolbar, Tooltip, Typography } from '@mui/material';
+import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { Link as RouterLink } from 'react-router-dom';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { READING_FONT } from '@/theme/readingThemes';
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const online = useOnlineStatus();
+  return (
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', color: 'text.primary' }}>
+      <AppBar position="sticky" sx={{ pt: 'env(safe-area-inset-top)' }}>
+        <Toolbar>
+          <Typography component={RouterLink} to="/" variant="h6"
+            sx={{ flexGrow: 1, fontFamily: READING_FONT, color: 'inherit', textDecoration: 'none' }}>
+            Library
+          </Typography>
+          {!online && (
+            <Tooltip title="Offline: downloaded books still open">
+              <CloudOffOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />
+            </Tooltip>
+          )}
+          <IconButton component={RouterLink} to="/settings" aria-label="Settings" edge="end">
+            <SettingsOutlinedIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
+      <Box component="main" sx={{ px: { xs: 2, sm: 3 }, py: 3, maxWidth: 1200, mx: 'auto' }}>{children}</Box>
+    </Box>
+  );
+}
