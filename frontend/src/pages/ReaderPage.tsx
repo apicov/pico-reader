@@ -169,6 +169,7 @@ export default function ReaderPage() {
         )}
         {selection && book && (
           <SelectionPanel selection={selection} language={book.language} dark={colors.mode === 'dark'}
+            bookId={book.id} location={lastPosition.current?.location ?? ''}
             onClose={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }} />
         )}
       </Box>

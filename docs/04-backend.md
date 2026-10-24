@@ -73,7 +73,8 @@ make them part of the value):
 | `EMAIL_PROVIDER` | `cloudflare` |
 | `EMAIL_FROM` | `noreply@thestitchpatterns.store` (an onboarded sending domain) |
 | `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | the Email Sending token and its account ([01](01-cloudflare.md) §4) |
-| `GROQ_API_KEY`, `GROQ_MODEL` | Groq key and model, for translations |
+| `GROQ_API_KEY` | Groq API key (console.groq.com → API Keys), for translations |
+| `GROQ_MODEL` | `qwen/qwen3.8-27b` (follows the JSON reply format reliably and translates well; `openai/gpt-oss-120b` also works) |
 
 Optional: `TOKEN_DAYS` (sign-in lifetime, default 365: the app reads offline and shouldn't log you out),
 `DOWNLOAD_URL_SECONDS` / `UPLOAD_URL_SECONDS` (signed link lifetime, default 3600),

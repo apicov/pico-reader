@@ -1,35 +1,56 @@
+import { useEffect, useState } from 'react';
 import { Box, Button, IconButton, Paper, Stack, Typography } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import TranslateIcon from '@mui/icons-material/Translate';
 import { DictResults } from '@/dict/DictResults';
 import type { TextSelection } from './selection';
+import { TranslationCard } from './TranslationCard';
 
 const isWord = (text: string) => !/\s/.test(text) && text.length <= 48;
 
-/** Under the text while something is selected: one word → its dictionary entries; more → actions. */
-export function SelectionPanel({ selection, language, dark, onClose }: {
-  selection: TextSelection; language: string; dark: boolean; onClose: () => void;
+/** Under the text while something is selected: one word → its dictionary entries (and its sentence's
+ *  translation on request); more → the passage's translation. */
+export function SelectionPanel({ selection, language, dark, bookId, location, onClose }: {
+  selection: TextSelection; language: string; dark: boolean; bookId: string; location: string; onClose: () => void;
 }) {
   const word = isWord(selection.text);
+  // a word picked from a translation's vocabulary, looked up in place
+  const [term, setTerm] = useState<string | null>(null);
+  const [sentence, setSentence] = useState(false);
+  useEffect(() => { setTerm(null); setSentence(false); }, [selection]);
+
+  const showDict = term ?? (word && !sentence ? selection.text : null);
+  const passage = sentence ? selection.context : selection.text;
   return (
     <Paper elevation={8} square sx={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
-      maxHeight: word ? '48%' : 'auto', display: 'flex', flexDirection: 'column',
+      maxHeight: '55%', display: 'flex', flexDirection: 'column',
       borderTop: 1, borderColor: 'divider', pb: 'env(safe-area-inset-bottom)' }}>
       <Stack direction="row" alignItems="center" sx={{ px: 2, pt: 1 }}>
-        <Typography sx={{ flex: 1, fontFamily: 'Literata, serif', fontWeight: word ? 600 : 400 }} noWrap>
-          {word ? selection.text : `“${selection.text}”`}
+        {(term || sentence) && (
+          <IconButton size="small" edge="start" aria-label="Back" onClick={() => { setTerm(null); setSentence(false); }}>
+            <ArrowBackIcon fontSize="small" />
+          </IconButton>
+        )}
+        <Typography sx={{ flex: 1, fontFamily: 'Literata, serif', fontWeight: showDict ? 600 : 400 }} noWrap>
+          {showDict ?? `“${passage}”`}
         </Typography>
-        <IconButton size="small" aria-label="Copy" onClick={() => void navigator.clipboard?.writeText(selection.text)}>
+        <IconButton size="small" aria-label="Copy" onClick={() => void navigator.clipboard?.writeText(showDict ?? passage)}>
           <ContentCopyIcon fontSize="small" />
         </IconButton>
         <IconButton size="small" aria-label="Close" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Stack>
       <Box sx={{ overflowY: 'auto', px: 2, pb: 2, pt: 1 }}>
-        {word ? (
-          <DictResults word={selection.text} language={language} dark={dark} />
+        {showDict ? (
+          <>
+            <DictResults word={showDict} language={language} dark={dark} />
+            {word && !term && selection.context && selection.context !== selection.text && (
+              <Button size="small" sx={{ mt: 1 }} onClick={() => setSentence(true)}>Translate the sentence</Button>
+            )}
+          </>
         ) : (
-          <Button variant="outlined" startIcon={<TranslateIcon />} disabled>Translate (coming next)</Button>
+          <TranslationCard text={passage} context={selection.context} language={language} bookId={bookId}
+            location={location} onTerm={setTerm} />
         )}
       </Box>
     </Paper>

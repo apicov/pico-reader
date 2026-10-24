@@ -25,8 +25,10 @@ class Settings(BaseSettings):
     download_url_seconds: int = 3600
     upload_url_seconds: int = 3600
 
+    # Translations (Groq's OpenAI-compatible API, JSON mode)
     groq_api_key: str = ""
-    groq_model: str = ""
+    groq_model: str = "qwen/qwen3.8-27b"
+    groq_reasoning_format: str = "hidden"  # for reasoning models; empty = don't send it
     groq_base_url: str = "https://api.groq.com/openai/v1"
 
     @property
