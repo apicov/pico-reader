@@ -68,15 +68,38 @@ def test_index_refuses_another_model(client, admin_headers, indexed_book):
     assert r.status_code == 422
 
 
+@pytest.fixture(autouse=True)
+def fresh_query_cache():
+    from app.routes import search
+    search._translated.cache_clear()
+
+
 def test_ask_answers_from_sources(client, admin_headers, indexed_book, groq):
     calls, replies = groq
+    replies.append({"detected_language": "en", "translations": {"en": "What does pruning remove?"}})
     replies.append({"answer": "Pruning drops the smallest weights [1].", "used": [1]})
     r = client.post("/api/ask", headers=admin_headers, json={"question": "What does pruning remove?"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["answer"].endswith("[1].")
     assert body["sources"][0]["heading"] == "1 Pruning"
-    assert "[1] Efficient ML — 1 Pruning" in calls[0]["messages"][1]["content"]
+    assert "[1] Efficient ML — 1 Pruning" in calls[1]["messages"][1]["content"]
+
+
+def test_a_question_in_another_language_is_searched_in_the_books_language(client, admin_headers, indexed_book, groq):
+    calls, replies = groq
+    replies.append({"detected_language": "es", "translations": {"en": "weight as an 8-bit integer"}})
+    hits = client.get("/api/search", headers=admin_headers, params={"q": "pesos enteros de ocho bits"}).json()
+    assert hits[0]["heading"] == "2 Quantization"
+    assert "English (en)" in calls[0]["messages"][0]["content"]
+
+
+def test_search_still_works_when_groq_fails(client, admin_headers, indexed_book, groq):
+    import httpx
+    _, replies = groq
+    replies.append(httpx.Response(500, json={"error": {"message": "down"}}))
+    hits = client.get("/api/search", headers=admin_headers, params={"q": "8-bit integer weights"}).json()
+    assert hits[0]["heading"] == "2 Quantization"
 
 
 def test_deleting_a_book_drops_its_index(client, admin_headers, indexed_book):

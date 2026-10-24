@@ -7,6 +7,7 @@ those passages only, citing them.
 """
 
 import logging
+from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -91,17 +92,55 @@ class Passage(BaseModel):
     score: float
 
 
+QUERY_PROMPT = """Translate the search QUERY into each of these languages: {languages}. Keep each one a short search
+query with the same meaning (don't answer it, don't add words). Reply with one JSON object and nothing else:
+{{"detected_language": ISO 639-1 code of the query, "translations": {{{shape}}}}}"""
+
+
+@lru_cache(maxsize=256)
+def _translated(query: str, languages: tuple[str, ...]) -> tuple[str, ...]:
+    """The query in the books' languages. The small embedding model matches best within one language, and
+    word search only finds the book's own words, so a Spanish question about a German book needs German too."""
+    from app.routes.translate import LANGUAGES
+
+    names = ", ".join(f"{LANGUAGES.get(code, code)} ({code})" for code in languages)
+    shape = ", ".join(f'"{code}": string' for code in languages)
+    data, _model = groq_client.chat_json(QUERY_PROMPT.format(languages=names, shape=shape), f"QUERY: {query}",
+                                         max_tokens=400)
+    translations = data.get("translations") or {}
+    return tuple(str(translations[c]).strip() for c in languages
+                 if isinstance(translations, dict) and str(translations.get(c) or "").strip())
+
+
+def query_variants(db: Session, query: str, book_ids: list[str] | None) -> list[str]:
+    scope = "AND b.id = ANY(:books)" if book_ids else ""
+    languages = tuple(sorted(db.execute(text(f"""SELECT DISTINCT b.language FROM books b
+                                                JOIN book_index i ON i.book_id = b.id WHERE TRUE {scope}"""),
+                                        {"books": book_ids or []}).scalars()))
+    variants = [query]
+    if languages:
+        try:
+            variants += [v for v in _translated(query, languages) if v.lower() != query.lower()]
+        except groq_client.GroqError as e:
+            logger.warning("Query not translated, searching as asked: %s", e)
+    return list(dict.fromkeys(variants))  # unique, in order
+
+
 def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int) -> list[Passage]:
-    vector = _vector(embed.embed([query], "query")[0].tolist())
+    variants = query_variants(db, query, book_ids)
+    vectors = embed.embed(variants, "query")
     scope = "AND c.book_id = ANY(:books)" if book_ids else ""
-    params = {"v": vector, "q": query, "n": CANDIDATES, "books": book_ids or []}
-    near = db.execute(text(f"""SELECT c.id FROM book_chunks c WHERE TRUE {scope}
-                               ORDER BY c.embedding <=> CAST(:v AS vector) LIMIT :n"""), params).scalars().all()
-    words = db.execute(text(f"""SELECT c.id FROM book_chunks c, websearch_to_tsquery('simple', :q) q
-                                WHERE c.tsv @@ q {scope} ORDER BY ts_rank_cd(c.tsv, q) DESC LIMIT :n"""),
-                       params).scalars().all()
+    rankings = []
+    for variant, vector in zip(variants, vectors):
+        params = {"v": _vector(vector.tolist()), "q": variant, "n": CANDIDATES, "books": book_ids or []}
+        rankings.append(db.execute(text(f"""SELECT c.id FROM book_chunks c WHERE TRUE {scope}
+                                            ORDER BY c.embedding <=> CAST(:v AS vector) LIMIT :n"""),
+                                   params).scalars().all())
+        rankings.append(db.execute(text(f"""SELECT c.id FROM book_chunks c, websearch_to_tsquery('simple', :q) q
+                                            WHERE c.tsv @@ q {scope} ORDER BY ts_rank_cd(c.tsv, q) DESC LIMIT :n"""),
+                                   params).scalars().all())
     scores: dict[int, float] = {}
-    for ranking in (near, words):
+    for ranking in rankings:
         for rank, chunk_id in enumerate(ranking):
             scores[chunk_id] = scores.get(chunk_id, 0) + 1 / (RRF_K + rank + 1)
     best = sorted(scores, key=scores.get, reverse=True)[:limit]
