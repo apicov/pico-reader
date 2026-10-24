@@ -182,3 +182,19 @@ def test_ask_knows_the_library(client, admin_headers, indexed_book, monkeypatch)
     r = client.post("/api/ask", headers=admin_headers, json={"question": "How many books do I have?"})
     assert r.json()["answer"] == "You have one book."
     assert "The reader's library has 1 book" in seen["user"]
+
+
+def test_citations_without_passages_are_removed(client, admin_headers, indexed_book, groq):
+    groq.steps += [call("reading_stats", {"period": "week"}), say("You read 15 minutes [1]. Keep going [2].")]
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "How much did I read?")
+    assert "".join(d for n, d in evs if n == "delta") == "You read 15 minutes. Keep going."
+
+
+def test_the_model_learns_a_proposal_was_not_applied(client, admin_headers, indexed_book, groq):
+    groq.steps += [call("set_reading_goal", {"enabled": True, "minutes": 15}), say("I proposed a 15-minute goal.")]
+    cid = new(client, admin_headers)
+    ask(client, admin_headers, cid, "Set my goal to 15 minutes")
+    ask(client, admin_headers, cid, "What is my goal?")
+    history = groq.agent_calls[-1]["messages"]
+    assert "NOT applied yet" in history[2]["content"]

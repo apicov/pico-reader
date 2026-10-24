@@ -8,6 +8,7 @@ done. Tools that change something are only proposed (action); /actions/{id} runs
 
 import json
 import logging
+import re
 import uuid
 from collections.abc import Iterator
 from datetime import datetime
@@ -194,6 +195,22 @@ def _event(name: str, data) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
 
+STATUS_WORDS = {"pending": "NOT applied yet, waiting for the reader's confirmation", "done": "applied",
+                "cancelled": "cancelled by the reader, not applied", "failed": "failed, not applied"}
+
+
+def _action_notes(m: Message) -> str:
+    """What became of the changes an earlier answer proposed, so the model doesn't take a proposal for a fact."""
+    return "".join(f"\n[Proposed change: {a['label']}: {STATUS_WORDS.get(a.get('status'), a.get('status'))}]"
+                   for a in m.extras.get("actions", []))
+
+
+def _keep_real_citations(answer: str, sources: int) -> str:
+    """[n] only where n is a passage found in this answer (models also 'cite' statistics)."""
+    cleaned = re.sub(r"\s?\[(\d+)\]", lambda m: m.group(0) if 1 <= int(m.group(1)) <= sources else "", answer)
+    return re.sub(r" +([.,;:!?])", r"\1", cleaned)
+
+
 def _scope_note(db: Session, book_ids: list[str] | None) -> str:
     if not book_ids:
         return "The reader asks about the whole library."
@@ -227,7 +244,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
             messages: list[dict] = [{"role": "system", "content": AGENT_PROMPT.format(
                 today=today, scope=_scope_note(session, book_ids), library=library_overview(session))}]
             for m in _history(earlier):
-                messages.append({"role": m.role, "content": m.content})
+                messages.append({"role": m.role, "content": m.content + _action_notes(m)})
             messages.append({"role": "user", "content": content})
             schemas = [t.schema() for t in agent_tools.TOOLS.values()]
             extras: dict = {"tools": [], "links": [], "actions": []}
@@ -272,6 +289,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                                      "content": json.dumps(result, ensure_ascii=False, default=str)[:12000]})
             else:
                 answer = "I needed too many steps for that; could you ask more specifically?"
+            answer = _keep_real_citations(answer, len(ctx.sources))
             sources = [p.model_dump() for p in ctx.sources]
             yield _event("sources", sources)
             for i in range(0, len(answer), 24):  # the answer comes in one piece from the agent: hand it on in steps
