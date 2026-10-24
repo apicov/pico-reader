@@ -7,6 +7,8 @@ import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { api } from '@/services/api';
 import { LANGUAGES } from '@/services/languages';
+import { loadCategories, type Category } from '@/services/categories';
+import { CategoryPicker } from '@/components/categories';
 import { buildReflowBundle } from '@/upload/markdown';
 import { epubMeta, pdfMeta } from '@/upload/metadata';
 import { uploadBook, type Kind } from '@/upload/upload';
@@ -36,6 +38,9 @@ export default function UploadPage() {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [language, setLanguage] = useState('');
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [tree, setTree] = useState<Category[]>([]);
+  useEffect(() => { void loadCategories().then(setTree); }, []);
   const [target, setTarget] = useState('new');
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -115,7 +120,8 @@ export default function UploadPage() {
       }
       const files: Partial<Record<Kind, { blob: Blob; type: string }>> = { [prepared.kind]: { blob, type: prepared.type } };
       if (prepared.cover) files.cover = { blob: prepared.cover, type: prepared.cover.type || 'image/jpeg' };
-      const id = await uploadBook({ id: target === 'new' ? undefined : target, title: title.trim(), author: author.trim(), language },
+      const id = await uploadBook({ id: target === 'new' ? undefined : target, title: title.trim(), author: author.trim(), language,
+                                    ...(target === 'new' && categoryId !== null ? { category_id: categoryId } : {}) },
         files, setProgress);
       setDone(id);
       setPrepared(null);
@@ -176,6 +182,10 @@ export default function UploadPage() {
                   <MenuItem value="new">A new book</MenuItem>
                   {mine.map((b) => <MenuItem key={b.id} value={b.id}>Another format of “{b.title}”</MenuItem>)}
                 </TextField>
+                {target === 'new' && (
+                  <CategoryPicker tree={tree} value={categoryId} onChange={setCategoryId}
+                    label="Category (empty: the AI suggests one after indexing)" />
+                )}
                 <Button variant="contained" disableElevation disabled={!title.trim() || !language || !online} onClick={() => void send()}>
                   Upload
                 </Button>

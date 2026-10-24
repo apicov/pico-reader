@@ -21,7 +21,7 @@ export function put(url: string, blob: Blob, contentType: string, onProgress: (s
   });
 }
 
-export async function uploadBook(meta: { id?: string; title: string; author: string; language: string },
+export async function uploadBook(meta: { id?: string; title: string; author: string; language: string; category_id?: number },
                                  files: Partial<Record<Kind, { blob: Blob; type: string }>>,
                                  onProgress: (fraction: number) => void): Promise<string> {
   const entries = Object.entries(files) as [Kind, { blob: Blob; type: string }][];

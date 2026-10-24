@@ -26,6 +26,7 @@ const PostEditorPage = lazy(() => import('@/pages/PostEditorPage'));
 const BookCommunityPage = lazy(() => import('@/pages/BookCommunityPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const MyProfilePage = lazy(() => import('@/pages/MyProfilePage'));
+const CategoriesPage = lazy(() => import('@/pages/CategoriesPage'));
 const ListPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListPage })));
 const ListEditorPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListEditorPage })));
 
@@ -66,6 +67,7 @@ function Routed() {
         ['/book/:bookId', <BookCommunityPage />],
         ['/u/:handle', <ProfilePage />],
         ['/profile', <MyProfilePage />],
+        ['/categories', <CategoriesPage />],
         ['/lists/new', <ListEditorPage />],
         ['/lists/:listId', <ListPage />],
         ['/lists/:listId/edit', <ListEditorPage />],

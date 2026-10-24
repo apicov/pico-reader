@@ -19,6 +19,11 @@ export interface Book {
   updated_at: string;
   formats: Partial<Record<BookFormat, FileRef>>;
   cover: (FileRef & { url?: string }) | null;
+  /** the shared category tree (services/categories.ts): main and optional second */
+  category_id?: number | null;
+  category2_id?: number | null;
+  /** why the AI chose it (empty when a reader did) */
+  category_reason?: string;
   /** this reader added it, or is an admin: may delete it or replace its files */
   can_change?: boolean;
   /** The offline search file (passages + vectors), once the server indexed the book */

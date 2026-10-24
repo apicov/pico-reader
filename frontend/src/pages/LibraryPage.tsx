@@ -6,6 +6,8 @@ import { cachedShelf, loadShelf, setShelfStatus, subscribeShelf, type ShelfEntry
 import { getPref, setPref } from '@/services/prefs';
 import { api } from '@/services/api';
 import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
+import { cachedCategories, inCategory, loadCategories, type Category, type CategoryFilter } from '@/services/categories';
+import { BookCategoryDialog, CategoryBrowser } from '@/components/categories';
 
 interface IndexJob { book_id: string; status: 'queued' | 'running' | 'failed'; position?: number; error: string }
 import { Link as RouterLink } from 'react-router-dom';
@@ -26,11 +28,12 @@ import type { Book } from '@/services/types';
 
 const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', epub: 'EPUB', reflow: 'Text' };
 
-function BookCard({ book, files, online, shelf, job, rating, canDelete, onDeleted }: {
+function BookCard({ book, files, online, shelf, job, rating, category, canDelete, onDeleted, onChanged }: {
   book: Book; files: Record<string, CachedFile>; online: boolean; shelf?: ShelfEntry;
-  job?: IndexJob; rating?: RatingSummary; canDelete: boolean; onDeleted: () => void;
+  job?: IndexJob; rating?: RatingSummary; category?: string; canDelete: boolean; onDeleted: () => void; onChanged: () => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const choose = (status: ShelfStatus) => { setMenu(null); void setShelfStatus(book.id, status); };
   const navigate = useNavigate();
   const cover = useCoverUrl(book, files[`${book.id}/cover`], online);
@@ -59,6 +62,7 @@ function BookCard({ book, files, online, shelf, job, rating, canDelete, onDelete
         </Box>
         <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, lineHeight: 1.3 }} noWrap title={book.title}>{book.title}</Typography>
         <Typography variant="caption" color="text.secondary" noWrap component="div">{book.author || '\u00a0'}</Typography>
+        {category && <Typography variant="caption" color="text.secondary" noWrap component="div" sx={{ fontStyle: 'italic' }}>{category}</Typography>}
         {rating && rating.review_count > 0 && (
           <Typography variant="caption" color="text.secondary" component="div"
             title={`${rating.review_count} review${rating.review_count === 1 ? '' : 's'}`}>
@@ -88,6 +92,7 @@ function BookCard({ book, files, online, shelf, job, rating, canDelete, onDelete
         <MenuItem disabled={!online} onClick={() => { setMenu(null); navigate(`/book/${encodeURIComponent(book.id)}`); }}>
           Reviews & discussion
         </MenuItem>
+        {canDelete && <MenuItem disabled={!online} onClick={() => { setMenu(null); setCategoryOpen(true); }}>Category…</MenuItem>}
         {shelf?.status !== 'reading' && <MenuItem onClick={() => choose('reading')}>{shelf?.status === 'finished' ? 'Read again' : 'Add to Currently reading'}</MenuItem>}
         {shelf?.status !== 'finished' && <MenuItem onClick={() => choose('finished')}>Mark as finished</MenuItem>}
         {shelf && shelf.status !== 'removed' && <MenuItem onClick={() => choose('removed')}>Remove from my lists</MenuItem>}
@@ -101,6 +106,7 @@ function BookCard({ book, files, online, shelf, job, rating, canDelete, onDelete
           }}>Delete book…</MenuItem>
         )}
       </Menu>
+      {canDelete && <BookCategoryDialog book={book} open={categoryOpen} onClose={() => setCategoryOpen(false)} onSaved={onChanged} />}
     </Card>
   );
 }
@@ -172,6 +178,17 @@ export default function LibraryPage() {
   useEffect(() => {
     void getPref<'reading' | 'all' | 'finished'>('library_tab').then((saved) => setTab((t) => t ?? saved ?? null));
   }, []);
+  // Categories: browse All books by them (the last choice is remembered)
+  const [tree, setTree] = useState<Category[]>([]);
+  const [category, setCategory] = useState<CategoryFilter>(null);
+  const reloadTree = () => void loadCategories().then(setTree);
+  useEffect(() => {
+    void cachedCategories().then((t) => setTree((cur) => (cur.length ? cur : t)));
+    reloadTree();
+    void getPref<CategoryFilter>('library_category').then((c) => c !== undefined && setCategory(c ?? null));
+  }, [online, library]);  // eslint-disable-line react-hooks/exhaustive-deps
+  const pickCategory = (c: CategoryFilter) => { setCategory(c); void setPref('library_category', c); };
+  const leafName = useMemo(() => new Map(tree.map((c) => [c.id, c.name])), [tree]);
   const byId = useMemo(() => new Map(shelf.map((e) => [e.book_id, e])), [shelf]);
   const reading = shelf.filter((e) => e.status === 'reading');
   const finished = shelf.filter((e) => e.status === 'finished');
@@ -181,10 +198,10 @@ export default function LibraryPage() {
   const books = useMemo(() => {
     const q = query.trim().normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
     const all = (library?.books ?? []).filter((b) => !q || matches(b, q));
-    if (current === 'all') return all;
+    if (current === 'all') return all.filter(inCategory(tree, typeof category === 'number' && !tree.some((c) => c.id === category) ? null : category));
     const order = new Map(shelf.filter((e) => e.status === current).map((e, i) => [e.book_id, i]));
     return all.filter((b) => order.has(b.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }, [library, query, shelf, current]);
+  }, [library, query, shelf, current, tree, category]);
 
   return (
     <>
@@ -198,6 +215,10 @@ export default function LibraryPage() {
       <TextField fullWidth size="small" placeholder="Search title or author" value={query}
         onChange={(e) => setQuery(e.target.value)} sx={{ mb: 3 }}
         slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+      {current === 'all' && tree.length > 0 && (
+        <CategoryBrowser tree={tree} value={category} onChange={pickCategory}
+          uncategorised={(library?.books ?? []).filter((b) => !b.category_id).length} />
+      )}
       {error && !library && (
         <Alert severity="warning" action={<Button onClick={() => void refresh()}>Retry</Button>}>{error}</Alert>
       )}
@@ -212,7 +233,8 @@ export default function LibraryPage() {
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
         {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)}
             job={jobs.get(book.id)} rating={ratings[book.id]} canDelete={!!book.can_change}
-            onDeleted={() => void refresh()} />)}
+            category={book.category_id ? leafName.get(book.category_id) : undefined}
+            onDeleted={() => void refresh()} onChanged={() => { void refresh(); reloadTree(); }} />)}
       </Box>
     </>
   );

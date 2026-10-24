@@ -14,6 +14,7 @@ import { useLoad } from '@/hooks/useLoad';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { bookCommunity, deleteReview, saveReview, setHidden, type Review } from '@/services/community';
 import type { Book } from '@/services/types';
+import { loadCategories, pretty, type Category } from '@/services/categories';
 
 function Cover({ book }: { book: Book }) {
   const online = useOnlineStatus();
@@ -116,6 +117,9 @@ function BookView({ bookId }: { bookId: string }) {
   const { library } = useLibrary();
   const book = library?.books.find((b) => b.id === bookId);
   const { data, error, reload } = useLoad(() => bookCommunity(bookId), [bookId]);
+  const [tree, setTree] = useState<Category[]>([]);
+  useEffect(() => { void loadCategories().then(setTree); }, []);
+  const categoryPaths = [book?.category_id, book?.category2_id].map((id) => tree.find((c) => c.id === id)?.path).filter(Boolean) as string[];
   if (!data) return <Loading error={error} retry={() => void reload()} />;
   const { summary } = data;
   const others = data.reviews.filter((r) => !r.mine);
@@ -127,6 +131,7 @@ function BookView({ bookId }: { bookId: string }) {
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="h5" sx={{ lineHeight: 1.25 }}>{data.book.title || 'No longer in the library'}</Typography>
           {data.book.author && <Typography color="text.secondary">{data.book.author}</Typography>}
+          {categoryPaths.map((p) => <Typography key={p} variant="caption" color="text.secondary" component="div">{pretty(p)}</Typography>)}
           <Typography variant="body2" sx={{ mt: 1 }}>
             {summary.review_count
               ? <><b>{summary.avg_score}</b>/10 from {summary.review_count} review{summary.review_count === 1 ? '' : 's'}

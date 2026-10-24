@@ -77,6 +77,7 @@ export default function SettingsPage() {
           {Object.keys(dicts).length ? `${Object.keys(dicts).length} installed` : 'None installed yet.'}
         </Typography>
         <Button component={RouterLink} to="/dictionaries" variant="outlined">Manage dictionaries</Button>
+        {reader?.is_admin && <Button component={RouterLink} to="/categories" variant="outlined" sx={{ ml: 1 }}>Book categories</Button>}
       </Box>
       <Divider />
       <Box>
