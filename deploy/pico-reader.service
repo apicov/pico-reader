@@ -1,0 +1,15 @@
+[Unit]
+Description=Pico Reader backend
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=tsp
+WorkingDirectory=/home/tsp/code/pico-reader/backend
+EnvironmentFile=/etc/pico-reader/reader.env
+ExecStart=/home/tsp/code/pico-reader/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8030 --workers 1 --proxy-headers
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
