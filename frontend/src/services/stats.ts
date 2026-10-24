@@ -59,3 +59,21 @@ export function formatMinutes(seconds: number): string {
   const m = Math.round(seconds / 60);
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
+
+export interface Usage {
+  period: string;
+  calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  tokens: number;
+  by_purpose: { purpose: string; calls: number; prompt_tokens: number; completion_tokens: number }[];
+  by_day: { day: string; tokens: number; calls: number }[];
+}
+
+export async function getUsage(period: string): Promise<Usage> {
+  const usage = await api<Usage>(`/api/usage?period=${period}&tz=${encodeURIComponent(TZ)}`);
+  await setPref(`usage:${period}`, usage);
+  return usage;
+}
+
+export const cachedUsage = (period: string) => getPref<Usage>(`usage:${period}`);

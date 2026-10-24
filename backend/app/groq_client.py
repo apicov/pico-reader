@@ -4,10 +4,10 @@ spelled out in the prompt, and an unusable reply is asked for once more."""
 import json
 import logging
 import re
-from collections.abc import Iterator
 from typing import Any
 
 import httpx
+from sqlalchemy import text
 
 from app.config import get_settings
 
@@ -26,11 +26,34 @@ class UnusableReply(Exception):
     pass
 
 
-def chat_json(system: str, user: str, max_tokens: int = 1500) -> tuple[dict[str, Any], str]:
+# Who a call is for and why: (reader email, purpose). Every call with one is recorded in llm_usage.
+Who = tuple[str, str] | None
+
+
+def _record(who: Who, reply: dict[str, Any]) -> None:
+    """Save the tokens a reply used; never lets a bookkeeping problem fail the call."""
+    usage = reply.get("usage") or (reply.get("x_groq") or {}).get("usage")
+    if not who or not usage:
+        return
+    try:
+        from app.db import get_engine
+
+        with get_engine().begin() as conn:
+            conn.execute(text("""INSERT INTO llm_usage (reader_email, purpose, model, prompt_tokens, completion_tokens)
+                                 VALUES (:e, :p, :m, :i, :o)"""),
+                         {"e": who[0], "p": who[1], "m": reply.get("model", ""),
+                          "i": int(usage.get("prompt_tokens") or 0), "o": int(usage.get("completion_tokens") or 0)})
+    except Exception:
+        logger.exception("Token usage not recorded")
+
+
+def chat_json(system: str, user: str, max_tokens: int = 1500, who: Who = None) -> tuple[dict[str, Any], str]:
     """(the reply's JSON object, the model that wrote it); one retry when the JSON is unusable."""
     for attempt in (1, 2):
         try:
-            return _parse(_call(system, user, max_tokens)), get_settings().groq_model
+            reply = _call(system, user, max_tokens)
+            _record(who, reply)
+            return _parse(reply), get_settings().groq_model
         except UnusableReply as e:
             if attempt == 2:
                 raise GroqError(f"The model's answer wasn't usable: {e}") from e
@@ -51,35 +74,8 @@ def _payload(messages: list[dict[str, str]], max_tokens: int) -> dict[str, Any]:
     return payload
 
 
-def chat_stream(messages: list[dict[str, str]], max_tokens: int = 1500) -> Iterator[str]:
-    """The reply's text as it is written (Groq's server-sent events), for chat answers."""
-    settings = get_settings()
-    payload = {**_payload(messages, max_tokens), "stream": True}
-    try:
-        with httpx.stream("POST", f"{settings.groq_base_url}/chat/completions", json=payload, timeout=120,
-                          headers={"Authorization": f"Bearer {settings.groq_api_key}"}) as res:
-            if res.status_code != 200:
-                res.read()
-                logger.error("Groq error %s: %s", res.status_code, res.text[:500])
-                raise GroqError(f"Groq answered {res.status_code}: {_error_message(res)}",
-                                429 if res.status_code == 429 else 502)
-            for line in res.iter_lines():
-                if not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
-                    return
-                try:
-                    piece = json.loads(data)["choices"][0]["delta"].get("content")
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
-                if piece:
-                    yield piece
-    except httpx.HTTPError as e:
-        raise GroqError(f"Could not reach Groq: {e}") from e
-
-
-def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1500) -> dict[str, Any]:
+def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1500,
+               who: Who = None) -> dict[str, Any]:
     """One step of the agent: the model's message, with `tool_calls` when it wants tools run."""
     settings = get_settings()
     payload = {**_payload(messages, max_tokens), "tools": tools, "tool_choice": "auto",
@@ -93,9 +89,12 @@ def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_
         logger.error("Groq error %s: %s", res.status_code, res.text[:500])
         raise GroqError(f"Groq answered {res.status_code}: {_error_message(res)}", 429 if res.status_code == 429 else 502)
     try:
-        return res.json()["choices"][0]["message"]
+        body = res.json()
+        message = body["choices"][0]["message"]
     except (KeyError, IndexError, ValueError) as e:
         raise GroqError("Groq sent no message") from e
+    _record(who, body)
+    return message
 
 
 def _call(system: str, user: str, max_tokens: int) -> dict[str, Any]:

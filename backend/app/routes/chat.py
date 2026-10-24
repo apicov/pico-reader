@@ -158,13 +158,13 @@ def _history(messages: list[Message]) -> list[Message]:
     return list(reversed(kept))
 
 
-def _title(content: str) -> str:
+def _title(content: str, who: groq_client.Who = None) -> str:
     """A short title for a new conversation, in the message's language."""
     try:
         data, _model = groq_client.chat_json(
             "Give a short title (at most 6 words) for a conversation that starts with the MESSAGE, written in the SAME "
             'language as the message. Reply with one JSON object and nothing else: {"title": string}',
-            f"MESSAGE: {content}", max_tokens=60)
+            f"MESSAGE: {content}", max_tokens=60, who=who)
         return str(data.get("title") or "").strip()[:120] or content[:60]
     except groq_client.GroqError:
         return content[:60]
@@ -191,7 +191,7 @@ LIBRARY:
 TOOL_LABELS = {"list_books": "library", "book_details": "book details", "search_passages": "searched the books",
                "reading_stats": "reading statistics", "lookup_stats": "lookup statistics", "translations": "translations",
                "highlights": "highlights", "vocabulary_due": "review cards", "reading_goal": "reading goal",
-               "open_book_at": "book link", "export_anki": "Anki export"}
+               "open_book_at": "book link", "export_anki": "Anki export", "ai_usage": "AI usage"}
 
 
 def _event(name: str, data) -> str:
@@ -253,7 +253,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
             extras: dict = {"tools": [], "links": [], "actions": []}
             answer = ""
             for _round in range(MAX_ROUNDS):
-                reply = groq_client.chat_tools(messages, schemas, max_tokens=1500)
+                reply = groq_client.chat_tools(messages, schemas, max_tokens=1500, who=(reader.email, "chat"))
                 calls = reply.get("tool_calls") or []
                 if not calls:
                     answer = (reply.get("content") or "").strip()
@@ -297,7 +297,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
             yield _event("sources", sources)
             for i in range(0, len(answer), 24):  # the answer comes in one piece from the agent: hand it on in steps
                 yield _event("delta", answer[i:i + 24])
-            title = _title(content) if first else ""
+            title = _title(content, (reader.email, "chat_title")) if first else ""
             with get_engine().begin() as conn:
                 assistant_id = conn.execute(text("""
                     INSERT INTO messages (conversation_id, role, content, sources, extras)

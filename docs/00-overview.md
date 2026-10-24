@@ -36,6 +36,9 @@ web app / PWA  ·  Android app (Capacitor, same build)
   the reading goal, book links, the Anki export) and answers with citations. Tools that change something
   (goal, known words, review cards) are only proposed; they run when the reader confirms (`chat_actions`).
   Turns stream as server-sent events (Apache passes them through with `flushpackets=on`).
+- **AI usage** (`llm_usage`): every Groq call records its reader, purpose (translate, define, chat, chat_title,
+  search, ask), model and tokens in and out (`groq_client._record`). Readers see their own on the statistics
+  page and through the agent; `python -m app.cli usage` lists everyone's.
 - **Statistics** (`reading_sessions`, `lookups`, recorded on the device and sent in batches; `reader_settings`
   for the optional reading goal): `/api/stats` gives minutes per day, streaks, goal days, reading speed, time
   left per book, a weekday × hour heatmap, lookups per 1,000 words read, repeated and missing words.

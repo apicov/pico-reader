@@ -106,7 +106,7 @@ def search_passages(ctx: Context, query: str, book: str | None = None) -> dict:
     found, error = _book_or_error(ctx, book)
     if error:
         return error
-    passages = retrieve(ctx.db, query, [found["id"]] if found else None, 6)
+    passages = retrieve(ctx.db, query, [found["id"]] if found else None, 6, who=(ctx.reader.email, "search"))
     out = []
     for p in passages:
         ctx.sources.append(p)
@@ -207,6 +207,10 @@ def export_anki(ctx: Context, book: str | None = None) -> dict:
                      "filename": "pico-reader-vocabulary.apkg"}}
 
 
+def ai_usage(ctx: Context, period: str = "month") -> dict:
+    return stats_routes.usage_summary(ctx.db, ctx.reader.email, period if period in ("week", "month", "year", "all") else "month", ctx.tz)
+
+
 # --- tools that change something (run after the reader confirms) ---
 
 def set_reading_goal(ctx: Context, enabled: bool, minutes: int | None = None, days: list[int] | None = None) -> dict:
@@ -286,6 +290,8 @@ TOOLS = {t.name: t for t in [
     Tool("highlights", "The reader's highlights, notes and bookmarks.", _obj({"book": BOOK}), highlights),
     Tool("vocabulary_due", "Review cards (spaced repetition): how many, which are due.", _obj({"language": LANGUAGE}),
          vocabulary_due),
+    Tool("ai_usage", "The reader's own AI use (Groq tokens): calls and tokens in/out per purpose (translate, define, "
+         "chat, chat_title, search, ask) and per day.", _obj({"period": PERIOD}), ai_usage),
     Tool("reading_goal", "The daily reading goal setting (on/off, minutes, days 0=Monday).", _obj({}), reading_goal),
     Tool("open_book_at", "Offer a button that opens a book: at a percentage, or at a found passage (source number).",
          _obj({"book": BOOK, "percent": {"type": "number"}, "source": {"type": "integer"}}, ["book"]), open_book_at),

@@ -23,7 +23,8 @@ def groq(monkeypatch):
         if isinstance(reply, httpx.Response):
             return reply
         content = reply if isinstance(reply, str) else __import__("json").dumps(reply)
-        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}], "model": json["model"],
+                                         "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
 
     monkeypatch.setattr(groq_client.httpx, "post", post)
     yield calls, replies

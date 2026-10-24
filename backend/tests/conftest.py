@@ -41,7 +41,7 @@ def schema():
 @pytest.fixture(autouse=True)
 def clean_tables(schema):
     with get_engine().begin() as conn:
-        conn.execute(text("TRUNCATE readers, login_codes, books, dictionaries, translations, reading_state, book_index, book_chunks, annotations, conversations, messages, reading_sessions, lookups, reader_settings, known_words, review_cards, chat_actions, shelf CASCADE"))
+        conn.execute(text("TRUNCATE readers, login_codes, books, dictionaries, translations, reading_state, book_index, book_chunks, annotations, conversations, messages, reading_sessions, lookups, reader_settings, known_words, review_cards, chat_actions, shelf, llm_usage CASCADE"))
 
 
 @pytest.fixture(scope="session")

@@ -114,7 +114,8 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
         return _row(stored, cached=True)
     user = f"CONTEXT:\n{body.context or body.text}\n\nPASSAGE:\n{body.text}"
     try:
-        data, model = groq_client.chat_json(prompt(body.source_lang, body.target_lang), user)
+        data, model = groq_client.chat_json(prompt(body.source_lang, body.target_lang), user,
+                                            who=(reader.email, "translate"))
         result = _clean(data)
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))
@@ -178,10 +179,11 @@ Reply with one JSON object and nothing else with exactly those four keys."""
 
 
 @router.post("/define", response_model=Definition)
-def define(body: DefineRequest, _: Reader = Depends(get_current_reader)):
+def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
     try:
         data, _model = groq_client.chat_json(define_prompt(body.language, body.target_lang),
-                                             f"WORD: {body.word}\nSENTENCE: {body.context or body.word}", max_tokens=300)
+                                             f"WORD: {body.word}\nSENTENCE: {body.context or body.word}", max_tokens=300,
+                                             who=(reader.email, "define"))
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))
     meaning = str(data.get("meaning") or "").strip()

@@ -5,10 +5,43 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart, DataTable, GoalRing, Heatmap, LineChart } from '@/components/charts';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { languageName } from '@/services/languages';
-import { cachedStats, formatMinutes, getStats, type Stats } from '@/services/stats';
+import { cachedStats, cachedUsage, formatMinutes, getStats, getUsage, type Stats, type Usage } from '@/services/stats';
 import { READING_FONT } from '@/theme/readingThemes';
 
 type Period = 'week' | 'month' | 'year' | 'all';
+
+const PURPOSES: Record<string, string> = {
+  translate: 'Translations', define: 'AI definitions', chat: 'Chat answers', chat_title: 'Chat titles',
+  search: 'Search (question translation)', ask: 'Ask (single question)',
+};
+
+/** Groq tokens used, per purpose, as bars against the largest */
+function UsageCard({ usage }: { usage: Usage }) {
+  const max = Math.max(1, ...usage.by_purpose.map((p) => p.prompt_tokens + p.completion_tokens));
+  return (
+    <Section title="AI use" hint="Tokens sent to and written by the model (Groq). Translations already saved cost nothing.">
+      <Typography variant="body2" sx={{ mb: 1.5 }}>
+        <b>{usage.tokens.toLocaleString()}</b> tokens in {plural(usage.calls, 'call')}
+        {' '}({usage.prompt_tokens.toLocaleString()} in · {usage.completion_tokens.toLocaleString()} out)
+      </Typography>
+      <Stack spacing={1}>
+        {usage.by_purpose.map((p) => {
+          const tokens = p.prompt_tokens + p.completion_tokens;
+          return (
+            <Box key={p.purpose}>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2">{PURPOSES[p.purpose] ?? p.purpose}</Typography>
+                <Typography variant="body2" color="text.secondary">{tokens.toLocaleString()} · {plural(p.calls, 'call')}</Typography>
+              </Stack>
+              <LinearProgress variant="determinate" value={(tokens / max) * 100} sx={{ height: 4, borderRadius: 2, mt: 0.5 }} />
+            </Box>
+          );
+        })}
+        {usage.calls === 0 && <Typography variant="body2" color="text.secondary">No AI use in this period.</Typography>}
+      </Stack>
+    </Section>
+  );
+}
 
 const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 
@@ -39,6 +72,13 @@ export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState('');
   const [language, setLanguage] = useState<string | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void cachedUsage(period).then((u) => { if (u && !cancelled) setUsage(u); });
+    if (online) void getUsage(period).then((u) => { if (!cancelled) setUsage(u); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [period, online]);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +231,8 @@ export default function StatsPage() {
       <Section title="When you read" hint="Lighter = less, by weekday and hour.">
         <Heatmap cells={stats.heatmap} format={formatMinutes} />
       </Section>
+
+      {usage && <UsageCard usage={usage} />}
     </Stack>
   );
 }

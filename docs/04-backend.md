@@ -120,6 +120,7 @@ Only emails on the allowlist get a sign-in code. As tsp, in `backend/`:
 .venv/bin/python -m app.cli add you@example.com "Your Name" --admin   # admins can add books
 .venv/bin/python -m app.cli list
 .venv/bin/python -m app.cli remove someone@example.com                # locked out at once
+.venv/bin/python -m app.cli usage --days 30                          # Groq tokens per reader and purpose
 ```
 
 ## 8. Backups

@@ -101,7 +101,7 @@ query with the same meaning (don't answer it, don't add words). Reply with one J
 
 
 @lru_cache(maxsize=256)
-def _translated(query: str, languages: tuple[str, ...]) -> tuple[str, ...]:
+def _translated(query: str, languages: tuple[str, ...], who: groq_client.Who = None) -> tuple[str, ...]:
     """The query in the books' languages. The small embedding model matches best within one language, and
     word search only finds the book's own words, so a Spanish question about a German book needs German too."""
     from app.routes.translate import LANGUAGES
@@ -109,13 +109,13 @@ def _translated(query: str, languages: tuple[str, ...]) -> tuple[str, ...]:
     names = ", ".join(f"{LANGUAGES.get(code, code)} ({code})" for code in languages)
     shape = ", ".join(f'"{code}": string' for code in languages)
     data, _model = groq_client.chat_json(QUERY_PROMPT.format(languages=names, shape=shape), f"QUERY: {query}",
-                                         max_tokens=400)
+                                         max_tokens=400, who=who)
     translations = data.get("translations") or {}
     return tuple(str(translations[c]).strip() for c in languages
                  if isinstance(translations, dict) and str(translations.get(c) or "").strip())
 
 
-def query_variants(db: Session, query: str, book_ids: list[str] | None) -> list[str]:
+def query_variants(db: Session, query: str, book_ids: list[str] | None, who: groq_client.Who = None) -> list[str]:
     scope = "AND b.id = ANY(:books)" if book_ids else ""
     languages = tuple(sorted(db.execute(text(f"""SELECT DISTINCT b.language FROM books b
                                                 JOIN book_index i ON i.book_id = b.id WHERE TRUE {scope}"""),
@@ -123,7 +123,7 @@ def query_variants(db: Session, query: str, book_ids: list[str] | None) -> list[
     variants = [query]
     if languages:
         try:
-            variants += [v for v in _translated(query, languages) if v.lower() != query.lower()]
+            variants += [v for v in _translated(query, languages, who) if v.lower() != query.lower()]
         except groq_client.GroqError as e:
             logger.warning("Query not translated, searching as asked: %s", e)
     return list(dict.fromkeys(variants))  # unique, in order
@@ -159,9 +159,9 @@ def library_overview(db: Session) -> str:
 
 
 def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int,
-             variants: list[str] | None = None) -> list[Passage]:
+             variants: list[str] | None = None, who: groq_client.Who = None) -> list[Passage]:
     """The best passages for `query` (and its `variants`, the same question worded for the books' languages)."""
-    variants = variants or query_variants(db, query, book_ids)
+    variants = variants or query_variants(db, query, book_ids, who)
     vectors = embed.embed(variants, "query")
     scope = "AND c.book_id = ANY(:books)" if book_ids else ""
     rankings = []
@@ -189,11 +189,11 @@ def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int,
 
 
 @router.get("/search", response_model=list[Passage])
-def search(q: str, book_id: list[str] | None = Query(default=None), limit: int = 10, _: Reader = Depends(get_current_reader),
-           db: Session = Depends(get_db)):
+def search(q: str, book_id: list[str] | None = Query(default=None), limit: int = 10,
+           reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     if not q.strip():
         return []
-    return retrieve(db, q.strip()[:500], book_id, min(limit, 30))
+    return retrieve(db, q.strip()[:500], book_id, min(limit, 30), who=(reader.email, "search"))
 
 
 class AskRequest(BaseModel):
@@ -223,13 +223,13 @@ def numbered_sources(passages: list[Passage]) -> str:
 
 
 @router.post("/ask", response_model=Answer)
-def ask(body: AskRequest, _: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
+def ask(body: AskRequest, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     scope = body.book_ids or books_named(db, body.question) or None
-    passages = retrieve(db, body.question, scope, 8)
+    passages = retrieve(db, body.question, scope, 8, who=(reader.email, "search"))
     user = (f"LIBRARY:\n{library_overview(db)}\n\nSOURCES:\n{numbered_sources(passages)}"
             f"\n\nQUESTION: {body.question}")
     try:
-        data, _model = groq_client.chat_json(ASK_PROMPT, user, max_tokens=1200)
+        data, _model = groq_client.chat_json(ASK_PROMPT, user, max_tokens=1200, who=(reader.email, "ask"))
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))
     answer = str(data.get("answer") or "").strip()

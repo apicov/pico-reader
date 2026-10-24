@@ -211,3 +211,31 @@ def stats(period: str = "week", tz: str = "UTC", book_id: str | None = None,
     }
 
 
+
+
+# --- AI usage (Groq tokens) ---
+
+def usage_summary(db: Session, email: str, period: str, tz: str) -> dict:
+    zone = _zone(tz)
+    today = datetime.now(timezone.utc).astimezone(zone).date()
+    days = PERIODS.get(period)
+    since = datetime.combine(today - timedelta(days=days - 1), datetime.min.time(), zone) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    p = {"e": email, "since": since, "tz": tz}
+    by_purpose = [dict(r._mapping) for r in db.execute(text("""
+        SELECT purpose, count(*) AS calls, sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens
+        FROM llm_usage WHERE reader_email = :e AND created_at >= :since GROUP BY 1 ORDER BY sum(prompt_tokens + completion_tokens) DESC"""), p)]
+    by_day = [dict(r._mapping) for r in db.execute(text("""
+        SELECT (created_at AT TIME ZONE :tz)::date AS day, sum(prompt_tokens + completion_tokens) AS tokens, count(*) AS calls
+        FROM llm_usage WHERE reader_email = :e AND created_at >= :since GROUP BY 1 ORDER BY 1"""), p)]
+    total_in = sum(r["prompt_tokens"] for r in by_purpose)
+    total_out = sum(r["completion_tokens"] for r in by_purpose)
+    return {"period": period, "calls": sum(r["calls"] for r in by_purpose), "prompt_tokens": total_in,
+            "completion_tokens": total_out, "tokens": total_in + total_out, "by_purpose": by_purpose, "by_day": by_day}
+
+
+@router.get("/usage")
+def usage(period: str = "month", tz: str = "UTC", reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
+    """The reader's own AI use: tokens per purpose and per day."""
+    if period not in (*PERIODS, "all"):
+        raise HTTPException(422, "period is week, month, year or all")
+    return usage_summary(db, reader.email, period, tz)

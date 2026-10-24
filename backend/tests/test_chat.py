@@ -30,10 +30,12 @@ class FakeGroq:
             step = self.steps.pop(0) if self.steps else say("Pruning removes **small** weights [1].")
             if isinstance(step, httpx.Response):
                 return step
-            return httpx.Response(200, json={"choices": [{"message": step}]})
+            return httpx.Response(200, json={"choices": [{"message": step}], "model": "agent-model",
+                                             "usage": {"prompt_tokens": 900, "completion_tokens": 50}})
         self.json_calls.append(json)
         reply = self.json_replies.pop(0) if self.json_replies else {"title": "Pruning chat", "translations": {}}
-        return httpx.Response(200, json={"choices": [{"message": {"content": __import__("json").dumps(reply)}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": __import__("json").dumps(reply)}}],
+                                         "usage": {"prompt_tokens": 40, "completion_tokens": 8}})
 
 
 @pytest.fixture
@@ -176,8 +178,8 @@ def test_conversations_are_private(client, admin_headers, auth_headers, indexed_
 def test_ask_knows_the_library(client, admin_headers, indexed_book, monkeypatch):
     from app.routes import search
     seen = {}
-    monkeypatch.setattr(search, "_translated", lambda q, langs: ())
-    monkeypatch.setattr(search.groq_client, "chat_json", lambda system, user, max_tokens: (
+    monkeypatch.setattr(search, "_translated", lambda q, langs, who=None: ())
+    monkeypatch.setattr(search.groq_client, "chat_json", lambda system, user, max_tokens, who=None: (
         seen.setdefault("user", user), {"answer": "You have one book."})[1:] + ("m",))
     r = client.post("/api/ask", headers=admin_headers, json={"question": "How many books do I have?"})
     assert r.json()["answer"] == "You have one book."
