@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import type { ReflowBundle } from './bundle';
 import { ReflowReader, type ReflowTarget } from './ReflowReader';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
@@ -13,7 +13,7 @@ function startTarget(bundle: ReflowBundle, initial: ViewProps['initial']): Reflo
 }
 
 export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBundle }>(function ReflowView(
-  { bundle, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars, dark }, ref) {
+  { bundle, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars, dark, highlights }, ref) {
   const [target, setTarget] = useState<ReflowTarget>(() => startTarget(bundle, initial));
   const n = bundle.meta.chapters.length;
 
@@ -41,8 +41,14 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
 
   useImperativeHandle(ref, () => ({
     goToToc: (id) => { const m = /^c(\d+)$/.exec(id); if (m) navigate({ chapter: Number(m[1]), fraction: 0 }); },
-  }), [navigate]);
+    goTo: (location, progress) => navigate(startTarget(bundle, { location, progress })),
+  }), [navigate, bundle]);
+
+  const chapterHighlights = useMemo(() => highlights.flatMap((h) => {
+    const m = /^c(\d+):([\d.]+)$/.exec(h.location);
+    return m && Number(m[1]) === target.chapter ? [{ id: h.id, text: h.text, fraction: Number(m[2]), color: h.color }] : [];
+  }), [highlights, target.chapter]);
 
   return <ReflowReader bundle={bundle} target={target} onNavigate={navigate} onScroll={onScroll}
-    onSelection={onSelection} style={vars} justify={settings.justify} dark={dark} />;
+    onSelection={onSelection} highlights={chapterHighlights} style={vars} justify={settings.justify} dark={dark} />;
 });

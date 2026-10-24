@@ -23,8 +23,19 @@ export interface ViewProps {
   settings: Settings;
   vars: React.CSSProperties; // reading CSS variables (readingVars)
   dark: boolean;
+  /** Highlights to show (of the open format) */
+  highlights: Highlight[];
+}
+
+export interface Highlight {
+  id: string;
+  location: string;
+  text: string;
+  color: string;
 }
 
 export interface ViewHandle {
   goToToc: (id: string) => void;
+  /** Go to a location this view wrote (or, failing that, a progress through the book) */
+  goTo: (location: string, progress: number) => void;
 }

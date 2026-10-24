@@ -5,6 +5,7 @@ import 'katex/dist/katex.min.css';
 import './reflow.css';
 import { resolvePath, type ReflowBundle } from './bundle';
 import { watchSelection, type TextSelection } from '../selection';
+import { markHighlights } from '../highlightText';
 
 export interface ReflowTarget {
   chapter: number;
@@ -19,6 +20,8 @@ interface Props {
   /** Called while reading: chapter, fraction down the chapter */
   onScroll: (chapter: number, fraction: number) => void;
   onSelection: (selection: TextSelection | null) => void;
+  /** Highlights of this chapter; fraction = where in the chapter it was made */
+  highlights: { id: string; text: string; fraction: number; color: string }[];
   style: React.CSSProperties; // CSS variables from the reading settings
   justify: boolean;
   dark: boolean;
@@ -50,7 +53,7 @@ function useBookStyles(bundle: ReflowBundle, dark: boolean) {
   }, [bundle, dark]);
 }
 
-export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection, style, justify, dark }: Props) {
+export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection, highlights, style, justify, dark }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const chapters = bundle.meta.chapters;
@@ -65,7 +68,8 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
     content.innerHTML = html;
     renderMath(content);
     content.querySelectorAll<HTMLAnchorElement>('a[href^="file:"]').forEach((a) => a.classList.add('disabled-link'));
-  }, [html]);
+    markHighlights(content, highlights);
+  }, [html, highlights]);
 
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
@@ -100,7 +104,18 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
     return () => { scroller.removeEventListener('scroll', onScrollEvt); clearTimeout(pending); };
   }, [target.chapter, onScroll]);
 
-  useEffect(() => watchSelection(document, onSelection, () => contentRef.current), [onSelection]);
+  // The selection, with where it is in the chapter (for highlights)
+  useEffect(() => watchSelection(document, (sel) => {
+    const content = contentRef.current;
+    const range = document.getSelection()?.rangeCount ? document.getSelection()!.getRangeAt(0) : null;
+    if (sel && content && range) {
+      const box = content.getBoundingClientRect();
+      const fraction = Math.max(0, Math.min(1, (range.getBoundingClientRect().top - box.top) / Math.max(1, box.height)));
+      const n = chapters.length;
+      sel.anchor = { location: `c${target.chapter}:${fraction.toFixed(4)}`, progress: Math.min(1, (target.chapter + fraction) / n) };
+    }
+    onSelection(sel);
+  }, () => contentRef.current), [onSelection, target.chapter, chapters.length]);
 
   // Links: same-chapter anchors, other chapters, the web
   const onClick = (e: React.MouseEvent) => {

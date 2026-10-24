@@ -10,7 +10,16 @@ declare module 'foliate-js/view.js' {
     goTo(target: string | number): Promise<unknown>;
     goToFraction(fraction: number): Promise<void>;
     goLeft(): Promise<void>;
+    getCFI(index: number, range: Range): string;
+    addAnnotation(annotation: { value: string; color?: string }): Promise<unknown>;
+    deleteAnnotation(annotation: { value: string }): Promise<unknown>;
     goRight(): Promise<void>;
     close(): void;
+  }
+}
+
+declare module 'foliate-js/overlayer.js' {
+  export class Overlayer {
+    static highlight(rects: DOMRectList, options?: { color?: string }): SVGElement;
   }
 }

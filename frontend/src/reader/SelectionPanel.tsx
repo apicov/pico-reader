@@ -3,6 +3,7 @@ import { Box, Button, IconButton, Paper, Stack, Typography } from '@mui/material
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import BorderColorIcon from '@mui/icons-material/BorderColor';
 import { DictResults } from '@/dict/DictResults';
 import type { TextSelection } from './selection';
 import { TranslationCard } from './TranslationCard';
@@ -11,8 +12,10 @@ const isWord = (text: string) => !/\s/.test(text) && text.length <= 48;
 
 /** Under the text while something is selected: one word → its dictionary entries (and its sentence's
  *  translation on request); more → the passage's translation. */
-export function SelectionPanel({ selection, language, dark, bookId, location, onClose }: {
+export function SelectionPanel({ selection, language, dark, bookId, location, onClose, onHighlight }: {
   selection: TextSelection; language: string; dark: boolean; bookId: string; location: string; onClose: () => void;
+  /** Absent when the selection's place isn't known (it can't be highlighted) */
+  onHighlight?: () => void;
 }) {
   const word = isWord(selection.text);
   // a word picked from a translation's vocabulary, looked up in place
@@ -35,6 +38,9 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
         <Typography sx={{ flex: 1, fontFamily: 'Literata, serif', fontWeight: showDict ? 600 : 400 }} noWrap>
           {showDict ?? `“${passage}”`}
         </Typography>
+        {onHighlight && !term && !sentence && (
+          <IconButton size="small" aria-label="Highlight" onClick={onHighlight}><BorderColorIcon fontSize="small" /></IconButton>
+        )}
         <IconButton size="small" aria-label="Copy" onClick={() => void navigator.clipboard?.writeText(showDict ?? passage)}>
           <ContentCopyIcon fontSize="small" />
         </IconButton>

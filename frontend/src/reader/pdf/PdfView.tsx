@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, IconButton, Paper, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -20,8 +20,32 @@ const MAX_CANVAS_PIXELS = 12_000_000; // mobile WebViews refuse bigger canvases
 
 interface Size { w: number; h: number }
 
-function Page({ doc, index, size, scale, visible }: {
+const NO_HIGHLIGHTS: { text: string; color: string }[] = [];
+
+/** Tint the text-layer spans that hold a highlight's text (pdf.js spans are runs of a line, so this
+ *  marks whole runs: close enough to see what was highlighted). */
+function markSpans(layer: HTMLElement, highlights: { text: string; color: string }[]) {
+  const spans = [...layer.querySelectorAll<HTMLElement>('span:not(.markedContent)')];
+  let text = '';
+  const bounds = spans.map((span) => {
+    const start = text.length;
+    text += `${(span.textContent ?? '').replace(/\s+/g, ' ')} `;
+    return [start, text.length] as const;
+  });
+  const flat = text.replace(/\s+/g, ' ');
+  for (const h of highlights) {
+    const needle = h.text.replace(/\s+/g, ' ').trim();
+    const at = flat.indexOf(needle);
+    if (at < 0 || !needle) continue;
+    spans.forEach((span, i) => {
+      if (bounds[i][0] < at + needle.length && bounds[i][1] > at) span.classList.add('hl', `hl-${h.color || 'yellow'}`);
+    });
+  }
+}
+
+function Page({ doc, index, size, scale, visible, highlights }: {
   doc: PDFDocumentProxy; index: number; size: Size; scale: number; visible: boolean;
+  highlights: { text: string; color: string }[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -46,9 +70,20 @@ function Page({ doc, index, size, scale, visible }: {
       const layer = new pdfjs.TextLayer({ textContentSource: page.streamTextContent(), container: textDiv, viewport });
       textLayer = layer;
       await Promise.all([task.promise, layer.render()]).catch(() => undefined);
+      if (!cancelled) markSpans(textDiv, highlightsRef.current);
     })();
     return () => { cancelled = true; task?.cancel(); textLayer?.cancel(); };
   }, [doc, index, scale, visible]);
+
+  const highlightsRef = useRef(highlights);
+  highlightsRef.current = highlights;
+  const highlightKey = highlights.map((h) => h.text).join('\u0000');
+  useEffect(() => {
+    const layer = textRef.current;
+    if (!layer || !visible) return;
+    layer.querySelectorAll('.hl').forEach((el) => el.classList.remove('hl', 'hl-yellow', 'hl-green', 'hl-blue'));
+    markSpans(layer, highlightsRef.current);
+  }, [highlightKey, visible]);
 
   return (
     <div className="pdf-page" data-index={index}
@@ -63,7 +98,7 @@ interface OutlineNode { title: string; dest: string | unknown[] | null; items: O
 
 /** PDF as a column of pages; location `p<page>:<fraction down the page>`. */
 export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(function PdfView(
-  { blob, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars }, ref) {
+  { blob, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars, highlights }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -184,7 +219,28 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
   }, [doc, sizes, scale, pageTop, onLocation]);
 
   useEffect(() => onCurrentToc(null), [onCurrentToc]);
-  useEffect(() => watchSelection(document, onSelection, () => pagesRef.current), [onSelection]);
+  // The selection, with the page and how far down it is (for highlights)
+  useEffect(() => watchSelection(document, (sel) => {
+    const range = document.getSelection()?.rangeCount ? document.getSelection()!.getRangeAt(0) : null;
+    const node = range?.startContainer;
+    const pageEl = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>('.pdf-page');
+    if (sel && range && pageEl) {
+      const index = Number(pageEl.dataset.index);
+      const box = pageEl.getBoundingClientRect();
+      const fraction = Math.max(0, Math.min(1, (range.getBoundingClientRect().top - box.top) / Math.max(1, box.height)));
+      sel.anchor = { location: `p${index + 1}:${fraction.toFixed(4)}`, progress: (index + fraction) / Math.max(1, sizes.length) };
+    }
+    onSelection(sel);
+  }, () => pagesRef.current), [onSelection, sizes.length]);
+
+  const pageHighlights = useMemo(() => {
+    const byPage = new Map<number, { text: string; color: string }[]>();
+    for (const h of highlights) {
+      const m = /^p(\d+):/.exec(h.location);
+      if (m) byPage.set(Number(m[1]) - 1, [...(byPage.get(Number(m[1]) - 1) ?? []), { text: h.text, color: h.color }]);
+    }
+    return byPage;
+  }, [highlights]);
 
   // Pinch to zoom: scale the page column while the fingers move, re-render once at the end
   useEffect(() => {
@@ -214,6 +270,11 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
   }, [zoom]);
 
   useImperativeHandle(ref, () => ({
+    goTo: (location, progress) => {
+      const m = /^p(\d+):([\d.]+)$/.exec(location);
+      if (m) scrollTo(Number(m[1]) - 1, Number(m[2]));
+      else if (sizes.length) scrollTo(Math.min(sizes.length - 1, Math.floor(progress * sizes.length)), (progress * sizes.length) % 1);
+    },
     goToToc: (id) => void (async () => {
       if (!doc) return;
       let dest = outlineDests.current.get(id);
@@ -222,7 +283,7 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
       const index = typeof dest[0] === 'number' ? dest[0] : await doc.getPageIndex(dest[0] as never);
       scrollTo(index, 0);
     })(),
-  }), [doc, scrollTo]);
+  }), [doc, scrollTo, sizes.length]);
 
   const themeClass = settings.theme === 'dark' || settings.theme === 'black' ? 'pdf-dark' : settings.theme === 'sepia' ? 'pdf-sepia' : '';
   if (error) return <Typography color="error" sx={{ p: 3 }}>This PDF can't be opened: {error}</Typography>;
@@ -231,7 +292,8 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
       <div ref={scrollRef} className={`pdf-scroll ${themeClass}`} style={vars}>
         <div ref={pagesRef} className="pdf-pages">
           {doc && sizes.map((size, i) => (
-            <Page key={i} doc={doc} index={i} size={size} scale={scale} visible={visible.has(i)} />
+            <Page key={i} doc={doc} index={i} size={size} scale={scale} visible={visible.has(i)}
+              highlights={pageHighlights.get(i) ?? NO_HIGHLIGHTS} />
           ))}
         </div>
       </div>

@@ -80,3 +80,8 @@
 .reflow .footnotes { font-size: 0.85em; color: var(--r-muted); }
 .reflow details { margin: 1em 0; }
 .reflow summary { cursor: pointer; font-weight: 500; }
+
+/* highlights */
+.reflow mark.hl { background: rgba(255, 210, 0, 0.38); color: inherit; border-radius: 2px; padding: 0 1px; }
+.reflow mark.hl-green { background: rgba(80, 200, 120, 0.32); }
+.reflow mark.hl-blue { background: rgba(80, 150, 255, 0.3); }

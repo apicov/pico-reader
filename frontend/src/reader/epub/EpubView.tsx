@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Box } from '@mui/material';
 import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
+import { Overlayer } from 'foliate-js/overlayer.js';
 import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
 import type { Settings } from '@/contexts/SettingsContext';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
@@ -50,6 +51,8 @@ function bookCss(s: Settings): string {
   `;
 }
 
+const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255, 210, 0, 0.45)', green: 'rgba(80, 200, 120, 0.4)', blue: 'rgba(80, 150, 255, 0.38)' };
+
 const MARGIN_PX = { narrow: '0px', normal: '8px', wide: '32px' } as const;
 
 function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] = []): TocItem[] {
@@ -62,13 +65,17 @@ function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] 
 
 /** EPUB in pages (foliate-js). Location: the EPUB CFI. */
 export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; language: string }>(function EpubView(
-  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, settings }, ref) {
+  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, settings, highlights }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
   const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection });
   callbacks.current = { onLocation, onToc, onCurrentToc, onSelection };
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const highlightsRef = useRef(highlights);
+  highlightsRef.current = highlights;
+  const fraction = useRef(0);
+  const drawn = useRef(new Map<string, string>()); // cfi → color
 
   useEffect(() => {
     const host = hostRef.current;
@@ -81,6 +88,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
 
     view.addEventListener('relocate', (e) => {
       const d = (e as CustomEvent<FoliateRelocate>).detail;
+      fraction.current = d.fraction;
       callbacks.current.onLocation(d.cfi, d.fraction);
       callbacks.current.onCurrentToc(d.tocItem?.href ?? null);
     });
@@ -89,10 +97,27 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       window.open((e as CustomEvent<{ href: string }>).detail.href, '_blank', 'noopener');
     });
     view.addEventListener('load', (e) => {
-      const doc = (e as CustomEvent<{ doc: Document }>).detail.doc;
+      const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
       if (!doc.documentElement.lang) doc.documentElement.lang = language;
       doc.addEventListener('keydown', onKey);
-      watchSelection(doc, (sel) => callbacks.current.onSelection(sel));
+      // the selection, with its CFI (for highlights)
+      watchSelection(doc, (sel) => {
+        const s = doc.getSelection();
+        if (sel && s?.rangeCount) {
+          try {
+            sel.anchor = { location: view.getCFI(index, s.getRangeAt(0)), progress: fraction.current };
+          } catch { /* no CFI: the selection can still be looked up and translated */ }
+        }
+        callbacks.current.onSelection(sel);
+      });
+    });
+    // highlights: drawn by foliate's overlayer, again whenever a section is laid out
+    view.addEventListener('create-overlay', () => {
+      for (const h of highlightsRef.current) void view.addAnnotation({ value: h.location, color: h.color });
+    });
+    view.addEventListener('draw-annotation', (e) => {
+      const { draw, annotation } = (e as CustomEvent<{ draw: (f: unknown, o: unknown) => void; annotation: { color?: string } }>).detail;
+      draw(Overlayer.highlight, { color: HIGHLIGHT_COLORS[annotation.color ?? 'yellow'] ?? HIGHLIGHT_COLORS.yellow });
     });
 
     void (async () => {
@@ -139,7 +164,23 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  useImperativeHandle(ref, () => ({ goToToc: (href) => void viewRef.current?.goTo(href) }), []);
+  // Add new highlights, remove deleted ones
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view?.book) return;
+    const now = new Map(highlights.filter((h) => h.location.startsWith('epubcfi(')).map((h) => [h.location, h.color]));
+    for (const [cfi] of drawn.current) if (!now.has(cfi)) void view.deleteAnnotation({ value: cfi });
+    for (const [cfi, color] of now) if (drawn.current.get(cfi) !== color) void view.addAnnotation({ value: cfi, color });
+    drawn.current = now;
+  }, [highlights]);
+
+  useImperativeHandle(ref, () => ({
+    goToToc: (href) => void viewRef.current?.goTo(href),
+    goTo: (location, progress) => {
+      if (location.startsWith('epubcfi(')) void viewRef.current?.goTo(location);
+      else void viewRef.current?.goToFraction(progress);
+    },
+  }), []);
 
   const zone = { position: 'absolute', top: 0, bottom: 0, width: '12%', zIndex: 1, cursor: 'pointer' } as const;
   return (

@@ -2,6 +2,8 @@ export interface TextSelection {
   text: string;
   /** The sentence (or so) around the selection, for translation */
   context: string;
+  /** Where it is, in the open format's terms (for highlights); set by the view */
+  anchor?: { location: string; progress: number };
 }
 
 const BLOCK = 'p, li, dd, dt, td, th, blockquote, h1, h2, h3, h4, h5, h6, figcaption, div';

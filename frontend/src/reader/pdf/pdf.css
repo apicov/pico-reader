@@ -15,3 +15,7 @@
 .textLayer br::selection { background: transparent; }
 .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
 .textLayer.selecting .endOfContent { top: 0; }
+/* highlights: the spans' text is transparent, so a background shows through over the page image */
+.textLayer span.hl { background: rgba(255, 210, 0, 0.4); }
+.textLayer span.hl-green { background: rgba(80, 200, 120, 0.35); }
+.textLayer span.hl-blue { background: rgba(80, 150, 255, 0.32); }

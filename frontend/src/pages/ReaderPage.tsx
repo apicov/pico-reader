@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppBar, Box, Button, IconButton, LinearProgress, ListItemText, Menu, MenuItem, Toolbar, Typography } from '@mui/material';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, AppBar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, ListItemText, Menu, MenuItem, TextField, Toolbar, Typography } from '@mui/material';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import { annotationsFor, deleteAnnotation, saveAnnotation, subscribeAnnotations, syncAnnotations, updateAnnotation, type Annotation } from '@/services/annotations';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FormatSizeIcon from '@mui/icons-material/FormatSize';
 import TocIcon from '@mui/icons-material/Toc';
@@ -65,6 +68,10 @@ export default function ReaderPage() {
   const [settingsAnchor, setSettingsAnchor] = useState<HTMLElement | null>(null);
   const [formatAnchor, setFormatAnchor] = useState<HTMLElement | null>(null);
   const [selection, setSelection] = useState<TextSelection | null>(null);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [noteFor, setNoteFor] = useState<Annotation | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const [position, setPosition] = useState<{ location: string; progress: number } | null>(null);
   const viewRef = useRef<ViewHandle>(null);
   const lastPosition = useRef<Position | null>(null);
 
@@ -112,11 +119,48 @@ export default function ReaderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book?.id, format]);
 
+  // Highlights and bookmarks of this book (synced with the other devices)
+  useEffect(() => {
+    if (!bookId) return;
+    const load = () => void annotationsFor(bookId).then(setAnnotations);
+    load();
+    void syncAnnotations().catch(() => undefined);
+    return subscribeAnnotations(load);
+  }, [bookId]);
+  const highlights = useMemo(() => annotations.filter((a) => a.kind === 'highlight' && a.format === format)
+    .map((a) => ({ id: a.id, location: a.location, text: a.text, color: a.color })), [annotations, format]);
+  const bookmarkHere = position && annotations.find((a) => a.kind === 'bookmark' && a.format === format
+    && Math.abs(a.progress - position.progress) < 0.004);
+
+  const toggleBookmark = () => {
+    if (!book || !format || !position) return;
+    if (bookmarkHere) void deleteAnnotation(bookmarkHere.id);
+    else void saveAnnotation({ book_id: book.id, kind: 'bookmark', format, location: position.location,
+      progress: position.progress, text: toc.find((t) => t.id === currentToc)?.label ?? '' });
+  };
+
+  const highlightSelection = () => {
+    if (!book || !format || !selection?.anchor) return;
+    void saveAnnotation({ book_id: book.id, kind: 'highlight', format, location: selection.anchor.location,
+      progress: selection.anchor.progress, text: selection.text });
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const openAnnotation = (a: Annotation) => {
+    if (a.format === format) viewRef.current?.goTo(a.location, a.progress);
+    else if (book?.formats[a.format as BookFormat]) {
+      jump.current = { format: a.format as BookFormat, location: a.location, progress: a.progress };
+      setFormat(a.format as BookFormat);
+    }
+  };
+
   // Remember the place: on the device at once, on the server every so often and when leaving
   const lastSync = useRef(0);
   const onLocation = useCallback((location: string, progress: number) => {
     if (!book || !format) return;
     const pos = { book_id: book.id, format, location, progress };
+    setPosition({ location, progress });
     lastPosition.current = { ...pos, updated_at: new Date().toISOString() };
     void savePosition(pos).then(() => {
       if (Date.now() - lastSync.current > 15_000) {
@@ -137,7 +181,7 @@ export default function ReaderPage() {
   const colors = READING_THEMES[settings.theme];
   const viewProps = {
     ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection: setSelection, settings,
-    vars: readingVars(settings), dark: colors.mode === 'dark',
+    vars: readingVars(settings), dark: colors.mode === 'dark', highlights,
   };
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
 
@@ -151,6 +195,12 @@ export default function ReaderPage() {
           {formats.length > 1 && (
             <Button size="small" color="inherit" startIcon={<SwapHorizIcon />} aria-label="Switch format"
               onClick={(e) => setFormatAnchor(e.currentTarget)}>{format && LABEL[format]}</Button>
+          )}
+          {phase.kind === 'ready' && (
+            <IconButton aria-label={bookmarkHere ? 'Remove bookmark' : 'Bookmark this place'} onClick={toggleBookmark}
+              disabled={!position}>
+              {bookmarkHere ? <BookmarkIcon /> : <BookmarkBorderIcon />}
+            </IconButton>
           )}
           {phase.kind === 'ready' && (
             <IconButton aria-label="Contents" onClick={() => setTocOpen(true)}><TocIcon /></IconButton>
@@ -185,11 +235,27 @@ export default function ReaderPage() {
         {selection && book && (
           <SelectionPanel selection={selection} language={book.language} dark={colors.mode === 'dark'}
             bookId={book.id} location={lastPosition.current?.location ?? ''}
+            onHighlight={selection.anchor ? highlightSelection : undefined}
             onClose={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }} />
         )}
       </Box>
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}
-        current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)} />
+        current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)}
+        annotations={annotations} onAnnotation={openAnnotation}
+        onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
+      <Dialog open={!!noteFor} onClose={() => setNoteFor(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Note</DialogTitle>
+        <DialogContent>
+          {noteFor?.kind === 'highlight' && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontStyle: 'italic' }}>“{noteFor.text}”</Typography>
+          )}
+          <TextField autoFocus fullWidth multiline minRows={3} value={noteText} onChange={(e) => setNoteText(e.target.value)} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNoteFor(null)}>Cancel</Button>
+          <Button onClick={() => { if (noteFor) void updateAnnotation(noteFor.id, { note: noteText.trim() }); setNoteFor(null); }}>Save</Button>
+        </DialogActions>
+      </Dialog>
       <Menu anchorEl={formatAnchor} open={!!formatAnchor} onClose={() => setFormatAnchor(null)}>
         {formats.map((f) => (
           <MenuItem key={f} selected={f === format} onClick={() => switchFormat(f)}>
