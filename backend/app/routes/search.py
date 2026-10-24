@@ -134,10 +134,12 @@ class Answer(BaseModel):
 
 
 ASK_PROMPT = """You answer questions about the reader's own books, using only the numbered SOURCES (passages
-from those books). Answer in the language of the question, clearly and concisely (a few sentences; a short
-list when that is clearer). After each statement, cite the sources it comes from like [1] or [2][3]. If the
-sources don't answer the question, say so briefly and mention what they do cover. Never invent facts.
-Reply with one JSON object and nothing else: {"answer": string, "used": [numbers of the sources you cited]}"""
+from those books). Answer in the language of the question, clearly and concisely: a few sentences, or a short
+list when that is clearer. Never invent facts; if the sources don't answer the question, say so briefly and
+mention what they do cover.
+CITATIONS ARE REQUIRED: end every sentence of the answer with the number(s) of the source(s) it comes from in
+square brackets, like "…evacuated [2]." or "…in 8 bits [1][3]."
+Reply with one JSON object and nothing else: {"answer": string with the citations, "used": [numbers cited]}"""
 
 
 @router.post("/ask", response_model=Answer)
