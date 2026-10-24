@@ -34,6 +34,10 @@ export interface Dictionary {
   to_lang: string;
   entry_count: number;
   updated_at: string;
+  /** everyone, or only the reader who uploaded it (admins see all) */
+  visibility?: 'everyone' | 'private';
+  /** admins: rename, change languages or visibility, delete */
+  can_change?: boolean;
   files: Partial<Record<'sqlite' | 'jsonl' | 'res', FileRef>>;
 }
 

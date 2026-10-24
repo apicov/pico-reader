@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { flushEvents } from '@/services/events';
+import { syncDictPrefs } from '@/dict/prefs';
 import { subscribeOnline } from '@/services/connectivity';
 import { Box, CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
@@ -33,7 +34,10 @@ function Routed() {
   // Send recorded reading and lookups: at start, every few minutes, and when the connection comes back
   useEffect(() => {
     if (!reader) return;
-    const flush = () => void flushEvents().catch(() => undefined);
+    const flush = () => {
+      void flushEvents().catch(() => undefined);
+      void syncDictPrefs();
+    };
     flush();
     const timer = setInterval(flush, 180_000);
     const unsubscribe = subscribeOnline((online) => { if (online) flush(); });

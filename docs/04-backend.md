@@ -114,14 +114,14 @@ The unit runs uvicorn as tsp on `127.0.0.1:8030` with one worker (enough for one
 
 ## 6b. Indexer
 
-Books added from the app are indexed by a second service with the same code and settings
-([10](10-uploads-and-offline-search.md)):
+Books added from the app are indexed, and StarDict dictionaries uploaded from the app converted, by a second
+service with the same code and settings ([10](10-uploads-and-offline-search.md), [12](12-dictionaries.md)):
 
 ```bash
 cp /home/tsp/code/pico-reader/deploy/pico-reader-indexer.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now pico-reader-indexer
-journalctl -u pico-reader-indexer -f          # "Indexed <book>: N passages in S s"
+journalctl -u pico-reader-indexer -f          # "Indexed <book>: N passages …", "Converted dictionary …"
 ```
 
 It runs with one embedding thread and a lower priority (`Nice=10`), so the API stays responsive. It also

@@ -17,6 +17,7 @@ repository. Follow the guides in order for a fresh install.
 | [09 Android](09-android.md) | Building and installing the Android app |
 | [10 Uploads and offline search](10-uploads-and-offline-search.md) | Adding books from the app, the indexing queue, searching offline |
 | [11 Community](11-community.md) | Profiles, reviews, posts, comments, lists; inviting friends; moderation |
+| [12 Dictionaries](12-dictionaries.md) | Installing, switching on/off and ordering; who sees which; uploading from the app |
 | [tools/README](../tools/README.md) | Adding books and dictionaries from your computer; the reflow book format |
 
 Secrets are never in this repository. The server keeps them in `/etc/pico-reader/reader.env`; a local copy of

@@ -9,7 +9,7 @@ export async function sha256(blob: Blob): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function put(url: string, blob: Blob, contentType: string, onProgress: (sent: number) => void): Promise<void> {
+export function put(url: string, blob: Blob, contentType: string, onProgress: (sent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);

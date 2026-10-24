@@ -83,7 +83,7 @@ this computer and uploaded; the app installs the ones you pick (Settings → Dic
 offline.
 
 ```bash
-./reader dict-add ~/Documents/dic/converted/duden --from de --to de
+./reader dict-add ~/Documents/dic/converted/duden --from de --to de --private   # only you (and admins) see it
 ./reader dict-add-all ~/Documents/dic/converted          # every folder listed in dictionaries.json
 ./reader dict-add-all ~/Documents/dic/converted --only duden,ldaf
 ./reader dict-list

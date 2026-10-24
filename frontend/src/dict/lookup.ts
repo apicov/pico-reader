@@ -1,7 +1,7 @@
 import { unzipSync } from 'fflate';
 import { store as fileStore } from '@/services/bookCache';
-import { getPref, setPref } from '@/services/prefs';
 import { candidateForms } from './forms';
+import { byOrder, dictPrefs, setDictOrder } from './prefs';
 import { cleanWord, fold, keyOf } from './normalize';
 import { backend, installedDicts, isCurrent, type DictEntry, type InstalledDict } from './store';
 
@@ -18,25 +18,24 @@ export interface Lookup {
   suggestions: string[];
 }
 
-const PREFERRED = 'dict_preferred'; // { [language]: dictId }
-
+/** The ★: the dictionary first in the reader's order for a language. */
 export async function preferredDict(language: string): Promise<string | null> {
-  return (await getPref<Record<string, string>>(PREFERRED))?.[language] ?? null;
+  return (await dictsFor(language))[0]?.id ?? null;
 }
 
 export async function setPreferredDict(language: string, dictId: string): Promise<void> {
-  const all = (await getPref<Record<string, string>>(PREFERRED)) ?? {};
-  all[language] = dictId;
-  await setPref(PREFERRED, all);
+  const ids = (await dictsFor(language)).map((d) => d.id);
+  await setDictOrder(language, [dictId, ...ids.filter((id) => id !== dictId)]);
 }
 
-/** The installed dictionaries for a language, the preferred one first. */
+/** The installed, switched-on dictionaries for a language, in the reader's order (then bilingual ones first,
+ *  then by name). */
 export async function dictsFor(language: string): Promise<InstalledDict[]> {
-  const preferred = await preferredDict(language);
-  return Object.values(await installedDicts())
-    .filter((d) => d.from_lang === language && isCurrent(d))
-    .sort((a, b) => Number(b.id === preferred) - Number(a.id === preferred)
-      || Number(a.to_lang === a.from_lang) - Number(b.to_lang === b.from_lang) || a.name.localeCompare(b.name));
+  const prefs = await dictPrefs();
+  const usable = Object.values(await installedDicts())
+    .filter((d) => d.from_lang === language && isCurrent(d) && !prefs.disabled.includes(d.id))
+    .sort((a, b) => Number(a.to_lang === a.from_lang) - Number(b.to_lang === b.from_lang) || a.name.localeCompare(b.name));
+  return byOrder(usable, prefs.order[language]);
 }
 
 /** Look a word up in every installed dictionary for `language`: the word, then its likely dictionary

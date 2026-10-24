@@ -42,6 +42,9 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Community** ([11](11-community.md)): profiles, 0–10 reviews with "recommend", posts linked to books with
   quotes that open the reader at the passage, comments with one level of replies, likes and top lists. Everyone
   signed in sees everything; other readers are shown by handle, never by email. Admins can hide anything.
+- **Dictionaries** ([12](12-dictionaries.md)): each is for every reader or only its uploader (admins see all);
+  admins upload StarDict from the app (converted by the indexer service) or the desktop tool; readers install
+  them per device and switch them on/off and order them for their account (`reader_settings.dictionaries`).
 - **AI usage** (`llm_usage`): every Groq call records its reader, purpose (translate, define, chat, chat_title,
   search, ask), model and tokens in and out (`groq_client._record`). Readers see their own on the statistics
   page and through the agent; `python -m app.cli usage` lists everyone's.
