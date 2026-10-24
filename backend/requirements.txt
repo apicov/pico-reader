@@ -13,3 +13,4 @@ boto3==1.35.99
 onnxruntime==1.22.1
 tokenizers==0.21.2
 numpy==2.2.6
+genanki==0.13.1
