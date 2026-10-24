@@ -20,6 +20,8 @@ import { ReflowView } from '@/reader/reflow/ReflowView';
 import { EpubView } from '@/reader/epub/EpubView';
 import { PdfView } from '@/reader/pdf/PdfView';
 import type { TocItem, ViewHandle } from '@/reader/types';
+import type { TextSelection } from '@/reader/selection';
+import { SelectionPanel } from '@/reader/SelectionPanel';
 
 // Best reading experience first: text that reflows, then EPUB, then fixed PDF pages
 const PREFERENCE: BookFormat[] = ['reflow', 'epub', 'pdf'];
@@ -56,6 +58,7 @@ export default function ReaderPage() {
   const [tocOpen, setTocOpen] = useState(false);
   const [settingsAnchor, setSettingsAnchor] = useState<HTMLElement | null>(null);
   const [formatAnchor, setFormatAnchor] = useState<HTMLElement | null>(null);
+  const [selection, setSelection] = useState<TextSelection | null>(null);
   const viewRef = useRef<ViewHandle>(null);
   const lastPosition = useRef<Position | null>(null);
 
@@ -118,7 +121,7 @@ export default function ReaderPage() {
 
   const colors = READING_THEMES[settings.theme];
   const viewProps = {
-    ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, settings,
+    ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection: setSelection, settings,
     vars: readingVars(settings), dark: colors.mode === 'dark',
   };
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
@@ -142,7 +145,7 @@ export default function ReaderPage() {
           </IconButton>
         </Toolbar>
       </AppBar>
-      <Box sx={{ flex: 1, minHeight: 0 }}>
+      <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {!book && library && <Alert severity="warning" sx={{ m: 2 }}>This book is no longer in the library.</Alert>}
         {book && formats.length === 0 && <Alert severity="info" sx={{ m: 2 }}>This book has no format the app can show.</Alert>}
         {phase.kind === 'loading' && <LinearProgress />}
@@ -163,6 +166,10 @@ export default function ReaderPage() {
         )}
         {phase.kind === 'ready' && phase.loaded.format === 'pdf' && (
           <PdfView key="pdf" blob={phase.loaded.blob} initial={phase.initial} {...viewProps} />
+        )}
+        {selection && book && (
+          <SelectionPanel selection={selection} language={book.language} dark={colors.mode === 'dark'}
+            onClose={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }} />
         )}
       </Box>
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}

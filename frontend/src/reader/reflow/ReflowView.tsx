@@ -13,7 +13,7 @@ function startTarget(bundle: ReflowBundle, initial: ViewProps['initial']): Reflo
 }
 
 export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBundle }>(function ReflowView(
-  { bundle, initial, onLocation, onToc, onCurrentToc, settings, vars, dark }, ref) {
+  { bundle, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars, dark }, ref) {
   const [target, setTarget] = useState<ReflowTarget>(() => startTarget(bundle, initial));
   const n = bundle.meta.chapters.length;
 
@@ -44,5 +44,5 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
   }), [navigate]);
 
   return <ReflowReader bundle={bundle} target={target} onNavigate={navigate} onScroll={onScroll}
-    style={vars} justify={settings.justify} dark={dark} />;
+    onSelection={onSelection} style={vars} justify={settings.justify} dark={dark} />;
 });

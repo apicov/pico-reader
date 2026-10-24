@@ -84,12 +84,12 @@ def test_delete_removes_row_and_files(client, admin_headers, bucket):
 
 
 def test_dictionary_upload_and_download(client, admin_headers, bucket):
-    data = b"SQLite format 3\x00"
+    data = b"PK zip with dictSQLite.db"
     r = client.post("/api/admin/dictionaries", headers=admin_headers, json={
         "name": "Duden", "from_lang": "de", "to_lang": "de", "entry_count": 118901,
-        "files": {"sqlite": info(data, "application/vnd.sqlite3")}})
+        "files": {"sqlite": info(data, "application/zip")}})
     dict_id = r.json()["id"]
-    httpx.put(r.json()["uploads"]["sqlite"], content=data, headers={"Content-Type": "application/vnd.sqlite3"})
+    httpx.put(r.json()["uploads"]["sqlite"], content=data, headers={"Content-Type": "application/zip"})
     client.post(f"/api/admin/dictionaries/{dict_id}/commit", headers=admin_headers)
     [d] = client.get("/api/library", headers=admin_headers).json()["dictionaries"]
     assert (d["from_lang"], d["entry_count"]) == ("de", 118901)

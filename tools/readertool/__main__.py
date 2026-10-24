@@ -8,6 +8,10 @@
   reader add-quarto path/to/book [--lang en] [--pdf book.pdf] [--id ID] [--cover image]
   reader list
   reader delete ID
+  reader dict-add path/to/stardict-folder --from de --to es [--name N]
+  reader dict-add-all ~/Documents/dic/converted [--map dictionaries.json] [--only duden,ldaf]
+  reader dict-list
+  reader dict-delete ID
 """
 
 import argparse
@@ -15,7 +19,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from readertool import client, markdown, metadata, quarto
+import json
+
+from readertool import client, markdown, metadata, quarto, stardict
 from readertool.client import Api, ToolError
 
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
@@ -44,12 +50,24 @@ def main() -> None:
     s.add_argument("folder", type=Path)
     _common(s)
     s.add_argument("--pdf", type=Path, help="also add this PDF of the book (and use its first page as cover)")
+    s = sub.add_parser("dict-add", help="convert and upload a StarDict dictionary")
+    s.add_argument("folder", type=Path)
+    s.add_argument("--from", dest="from_lang", required=True, help="language of the headwords, e.g. de")
+    s.add_argument("--to", dest="to_lang", required=True, help="language of the definitions")
+    s.add_argument("--name", help="name shown in the app (default: the dictionary's own)")
+    s = sub.add_parser("dict-add-all", help="convert and upload every dictionary listed in the map file")
+    s.add_argument("folder", type=Path)
+    s.add_argument("--map", type=Path, default=Path(__file__).resolve().parent.parent / "dictionaries.json")
+    s.add_argument("--only", help="comma-separated folder names")
+    sub.add_parser("dict-list", help="list the dictionaries")
+    sub.add_parser("dict-delete", help="delete a dictionary").add_argument("id")
     sub.add_parser("list", help="list the library")
     sub.add_parser("delete", help="delete a book and its files").add_argument("id")
     args = p.parse_args()
 
     try:
-        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete}[args.cmd](args)
+        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete,
+         "dict-add": dict_add, "dict-add-all": dict_add_all, "dict-list": dict_list, "dict-delete": dict_delete}[args.cmd](args)
     except ToolError as e:
         sys.exit(f"error: {e}")
 
@@ -150,6 +168,53 @@ def list_books(_args) -> None:
 
 def delete(args) -> None:
     Api().delete(f"/api/admin/books/{args.id}")
+    print(f"deleted {args.id}")
+
+
+_DICT_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}
+
+
+def _upload_dictionary(folder: Path, from_lang: str, to_lang: str, name: str | None) -> None:
+    print(f"{folder.name} [{from_lang} → {to_lang}]")
+    d = stardict.read(folder)
+    dict_id = stardict.dict_id_for(folder)
+    print(f"  {len(d.entries)} entries, {len(d.synonyms)} synonyms, {len(d.images)} images")
+    with tempfile.TemporaryDirectory() as tmp:
+        files = stardict.write_packages(d, dict_id, Path(tmp))
+        sizes = ", ".join(f"{k} {p.stat().st_size / 1e6:.1f} MB" for k, p in files.items())
+        print(f"  packages: {sizes}")
+        Api().upload("dictionaries", {"id": dict_id, "name": name or d.name, "from_lang": from_lang,
+                                      "to_lang": to_lang, "entry_count": len(d.entries)},
+                     {kind: (path, _DICT_TYPES[kind]) for kind, path in files.items()})
+    print(f"  added as {dict_id}")
+
+
+def dict_add(args) -> None:
+    _upload_dictionary(args.folder, args.from_lang, args.to_lang, args.name)
+
+
+def dict_add_all(args) -> None:
+    mapping = {k: v for k, v in json.loads(args.map.read_text()).items() if not k.startswith("_")}
+    only = set(args.only.split(",")) if args.only else None
+    for folder in sorted(p for p in args.folder.iterdir() if p.is_dir()):
+        if only and folder.name not in only:
+            continue
+        if folder.name not in mapping:
+            print(f"skipping {folder.name}: not in {args.map.name}")
+            continue
+        try:
+            _upload_dictionary(folder, *mapping[folder.name], None)
+        except ToolError as e:
+            print(f"  failed: {e}")
+
+
+def dict_list(_args) -> None:
+    for d in Api().get("/api/library")["dictionaries"]:
+        print(f"{d['id']:45} {d['from_lang']}→{d['to_lang']} {d['entry_count']:>8}  {d['name']}")
+
+
+def dict_delete(args) -> None:
+    Api().delete(f"/api/admin/dictionaries/{args.id}")
     print(f"deleted {args.id}")
 
 

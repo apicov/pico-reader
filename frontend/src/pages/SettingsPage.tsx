@@ -3,7 +3,9 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useBookCache } from '@/hooks/useBookCache';
 import { useLibrary } from '@/hooks/useLibrary';
 import { removeBook } from '@/services/bookCache';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useInstalledDicts } from '@/hooks/useInstalledDicts';
 import { useSettings } from '@/contexts/SettingsContext';
 import { LANGUAGES } from '@/services/languages';
 import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
@@ -12,6 +14,7 @@ export default function SettingsPage() {
   const { settings, update } = useSettings();
   const { reader, signOut } = useAuth();
   const files = useBookCache();
+  const dicts = useInstalledDicts();
   const { library } = useLibrary();
 
   // Downloaded books (covers don't count: they're tiny and stay for the library)
@@ -47,6 +50,13 @@ export default function SettingsPage() {
           {Object.entries(LANGUAGES).map(([code, name]) => <MenuItem key={code} value={code}>{name}</MenuItem>)}
         </Select>
       </FormControl>
+      <Box>
+        <Typography variant="h6">Dictionaries</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {Object.keys(dicts).length ? `${Object.keys(dicts).length} installed` : 'None installed yet.'}
+        </Typography>
+        <Button component={RouterLink} to="/dictionaries" variant="outlined">Manage dictionaries</Button>
+      </Box>
       <Divider />
       <Box>
         <Typography variant="h6">On this device</Typography>

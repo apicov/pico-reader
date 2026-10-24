@@ -7,6 +7,7 @@ import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import LibraryPage from '@/pages/LibraryPage';
 import LoginPage from '@/pages/LoginPage';
 import SettingsPage from '@/pages/SettingsPage';
+import DictionariesPage from '@/pages/DictionariesPage';
 import { createAppTheme } from '@/theme/readingThemes';
 
 // The readers (pdf.js, foliate, KaTeX) load only when a book is opened
@@ -23,6 +24,7 @@ function Routed() {
       <Route path="/read/:bookId" element={<Suspense fallback={spinner}><ReaderPage /></Suspense>} />
       <Route path="/" element={<AppShell><LibraryPage /></AppShell>} />
       <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
+      <Route path="/dictionaries" element={<AppShell><DictionariesPage /></AppShell>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

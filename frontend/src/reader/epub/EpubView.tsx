@@ -5,6 +5,7 @@ import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/vi
 import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
 import type { Settings } from '@/contexts/SettingsContext';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
+import { watchSelection } from '../selection';
 
 /** The app's @font-face rules with absolute URLs: the book's sections are separate documents (blob URLs),
  *  so they neither inherit the app's fonts nor resolve its relative font paths. */
@@ -61,11 +62,11 @@ function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] 
 
 /** EPUB in pages (foliate-js). Location: the EPUB CFI. */
 export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; language: string }>(function EpubView(
-  { blob, language, initial, onLocation, onToc, onCurrentToc, settings }, ref) {
+  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, settings }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
-  const callbacks = useRef({ onLocation, onToc, onCurrentToc });
-  callbacks.current = { onLocation, onToc, onCurrentToc };
+  const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection });
+  callbacks.current = { onLocation, onToc, onCurrentToc, onSelection };
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -91,6 +92,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       const doc = (e as CustomEvent<{ doc: Document }>).detail.doc;
       if (!doc.documentElement.lang) doc.documentElement.lang = language;
       doc.addEventListener('keydown', onKey);
+      watchSelection(doc, (sel) => callbacks.current.onSelection(sel));
     });
 
     void (async () => {

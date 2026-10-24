@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { Settings } from '@/contexts/SettingsContext';
+import type { TextSelection } from './selection';
 
 export interface TocItem {
   id: string;
@@ -17,6 +18,8 @@ export interface ViewProps {
   onLocation: (location: string, progress: number) => void;
   onToc: (items: TocItem[]) => void;
   onCurrentToc: (id: string | null) => void;
+  /** The reader selected text (null: the selection is gone) */
+  onSelection: (selection: TextSelection | null) => void;
   settings: Settings;
   vars: React.CSSProperties; // reading CSS variables (readingVars)
   dark: boolean;

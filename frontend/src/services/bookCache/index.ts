@@ -33,7 +33,8 @@ export interface FileStore {
 }
 
 const INDEX_KEY = 'book_cache_index';
-const store: FileStore = Capacitor.isNativePlatform() ? nativeStore : webStore;
+/** Also used for dictionary images (res zips) */
+export const store: FileStore = Capacitor.isNativePlatform() ? nativeStore : webStore;
 
 let index: Record<string, CachedFile> | null = null;
 const listeners = new Set<() => void>();

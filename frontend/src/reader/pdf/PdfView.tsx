@@ -8,6 +8,7 @@ import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist/types/src/display/api';
 import './pdf.css';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
+import { watchSelection } from '../selection';
 
 // The legacy build runs in older Android WebViews too
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -62,7 +63,7 @@ interface OutlineNode { title: string; dest: string | unknown[] | null; items: O
 
 /** PDF as a column of pages; location `p<page>:<fraction down the page>`. */
 export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(function PdfView(
-  { blob, initial, onLocation, onToc, onCurrentToc, settings, vars }, ref) {
+  { blob, initial, onLocation, onToc, onCurrentToc, onSelection, settings, vars }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
@@ -183,6 +184,7 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
   }, [doc, sizes, scale, pageTop, onLocation]);
 
   useEffect(() => onCurrentToc(null), [onCurrentToc]);
+  useEffect(() => watchSelection(document, onSelection, () => pagesRef.current), [onSelection]);
 
   // Pinch to zoom: scale the page column while the fingers move, re-render once at the end
   useEffect(() => {

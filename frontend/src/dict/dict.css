@@ -1,0 +1,9 @@
+.dict-def { font-size: 15px; line-height: 1.5; overflow-wrap: break-word; }
+.dict-def img { max-width: 100%; height: auto; vertical-align: middle; }
+.dict-def a { color: inherit; text-decoration: underline dotted; cursor: pointer; }
+.dict-def p { margin: 0.3em 0; }
+.dict-def ol, .dict-def ul { padding-left: 1.3em; margin: 0.3em 0; }
+.dict-def .phonetic { color: var(--mui-palette-text-secondary, #777); }
+.dict-def table { border-collapse: collapse; font-size: 0.95em; }
+/* dictionaries colour their markup for white paper: lift those colours on dark themes */
+.dict-dark .dict-def font[color], .dict-dark .dict-def [style*="color"] { filter: brightness(1.9) saturate(0.7); }

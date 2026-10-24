@@ -32,7 +32,8 @@ BOOK_KINDS = {
     "cover": Kind(("image/jpeg", "image/png", "image/webp"), ""),
 }
 DICT_KINDS = {
-    "sqlite": Kind(("application/vnd.sqlite3",), "sqlite"),  # opened as is on Android
+    # a zip holding <id>SQLite.db: the Android SQLite plugin downloads and unzips it into its database folder
+    "sqlite": Kind(("application/zip",), "zip"),
     "jsonl": Kind(("application/gzip",), "jsonl.gz"),  # imported into IndexedDB on the web
     "res": Kind(("application/zip",), "zip"),  # images the definitions point at
 }

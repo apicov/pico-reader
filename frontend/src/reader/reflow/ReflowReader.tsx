@@ -4,6 +4,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './reflow.css';
 import { resolvePath, type ReflowBundle } from './bundle';
+import { watchSelection, type TextSelection } from '../selection';
 
 export interface ReflowTarget {
   chapter: number;
@@ -17,6 +18,7 @@ interface Props {
   onNavigate: (target: ReflowTarget) => void;
   /** Called while reading: chapter, fraction down the chapter */
   onScroll: (chapter: number, fraction: number) => void;
+  onSelection: (selection: TextSelection | null) => void;
   style: React.CSSProperties; // CSS variables from the reading settings
   justify: boolean;
   dark: boolean;
@@ -48,7 +50,7 @@ function useBookStyles(bundle: ReflowBundle, dark: boolean) {
   }, [bundle, dark]);
 }
 
-export function ReflowReader({ bundle, target, onNavigate, onScroll, style, justify, dark }: Props) {
+export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection, style, justify, dark }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const chapters = bundle.meta.chapters;
@@ -97,6 +99,8 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, style, just
     scroller.addEventListener('scroll', onScrollEvt, { passive: true });
     return () => { scroller.removeEventListener('scroll', onScrollEvt); clearTimeout(pending); };
   }, [target.chapter, onScroll]);
+
+  useEffect(() => watchSelection(document, onSelection, () => contentRef.current), [onSelection]);
 
   // Links: same-chapter anchors, other chapters, the web
   const onClick = (e: React.MouseEvent) => {
