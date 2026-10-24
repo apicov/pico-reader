@@ -62,7 +62,11 @@ export default defineConfig({
     proxy: { '/api': process.env.VITE_PROXY_TARGET || 'http://localhost:8030' },
   },
   resolve: {
-    alias: [{ find: /^@\//, replacement: path.resolve(__dirname, 'src') + '/' }],
+    alias: [
+      { find: /^@\//, replacement: path.resolve(__dirname, 'src') + '/' },
+      // transformers.js: the plain WebAssembly runtime (11 MB, served from /ort/), not the WebGPU one (21 MB)
+      { find: /^onnxruntime-web$/, replacement: path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs') },
+    ],
   },
   // Syntax down-levelled for older Android WebViews; runtime methods come from core-js (polyfills.ts)
   build: { target: 'es2017' },

@@ -112,6 +112,21 @@ curl -s 127.0.0.1:8030/health        # {"status":"ok"}
 
 The unit runs uvicorn as tsp on `127.0.0.1:8030` with one worker (enough for one reader, and light on memory).
 
+## 6b. Indexer
+
+Books added from the app are indexed by a second service with the same code and settings
+([10](10-uploads-and-offline-search.md)):
+
+```bash
+cp /home/tsp/code/pico-reader/deploy/pico-reader-indexer.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now pico-reader-indexer
+journalctl -u pico-reader-indexer -f          # "Indexed <book>: N passages in S s"
+```
+
+It runs with one embedding thread and a lower priority (`Nice=10`), so the API stays responsive. It also
+unloads the model after 5 idle minutes.
+
 ## 7. Who can sign in
 
 Only emails on the allowlist get a sign-in code. As tsp, in `backend/`:
