@@ -73,8 +73,10 @@
 .reflow .callout-titled .callout-header { color: var(--callout); }
 
 /* margin notes and footnotes, inline on a narrow page */
-.reflow aside, .reflow .column-margin, .reflow .margin-aside { display: block; font-size: 0.85em; color: var(--r-muted);
-  border-left: 2px solid var(--r-divider); padding-left: 0.8em; margin: 0.8em 0; }
+.reflow .column-margin { display: block; margin: 0.6em 0; }
+.reflow aside, .reflow .margin-aside { display: block; font-size: 0.85em; color: var(--r-muted);
+  border-left: 2px solid var(--r-divider); padding-left: 0.8em; margin: 0.6em 0; }
+.reflow .column-margin .margin-aside { border-left: 0; padding-left: 0; }
 .reflow .footnotes { font-size: 0.85em; color: var(--r-muted); }
 .reflow details { margin: 1em 0; }
 .reflow summary { cursor: pointer; font-weight: 500; }
