@@ -160,7 +160,8 @@ def _search_plan(db: Session, history: list[Message], content: str, scope: list[
     names = ", ".join(f"{LANGUAGES.get(c, c)} ({c})" for c in languages) or "the question's language"
     prompt = REWRITE_PROMPT.format(
         languages=names, shape=", ".join(f'"{c}": string' for c in languages),
-        title="\nAlso give the conversation a short title (at most 6 words, in the message's language)." if first else "",
+        title=("\nAlso give the conversation a short title of at most 6 words, written in the SAME language as the"
+               " new message (a Spanish message gets a Spanish title)." if first else ""),
         title_key=', "title": string' if first else "")
     conversation = "\n".join(f"{m.role.upper()}: {m.content[:1500]}" for m in history) or "(none yet)"
     try:

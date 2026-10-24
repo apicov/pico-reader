@@ -25,6 +25,9 @@ import { READING_FONT } from '@/theme/readingThemes';
 
 const SIDEBAR = 300;
 
+/** The last message without Markdown marks and citations, for the list */
+const plainSnippet = (s = '') => s.replace(/\[\d+\]/g, '').replace(/[*_#>`]+/g, '').replace(/\s+/g, ' ').trim();
+
 /** The conversation list: search, new, pick, rename, delete. */
 function ConversationList({ current, onPick, onNew, refreshKey, online }: {
   current: string | null; onPick: (id: string) => void; onNew: () => void; refreshKey: number; online: boolean;
@@ -66,7 +69,7 @@ function ConversationList({ current, onPick, onNew, refreshKey, online }: {
           <ListItemButton key={c.id} selected={c.id === current} onClick={() => onPick(c.id)}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ el: e.currentTarget, c }); }}
             sx={{ pr: 5, position: 'relative' }}>
-            <ListItemText primary={c.title || 'New chat'} secondary={c.snippet}
+            <ListItemText primary={c.title || 'New chat'} secondary={plainSnippet(c.snippet)}
               slotProps={{ primary: { noWrap: true }, secondary: { noWrap: true } }} />
             <IconButton size="small" aria-label="Chat actions" disabled={!online}
               sx={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)' }}
