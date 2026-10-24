@@ -45,6 +45,8 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Dictionaries** ([12](12-dictionaries.md)): each is for every reader or only its uploader (admins see all);
   admins upload StarDict from the app (converted by the indexer service) or the desktop tool; readers install
   them per device and switch them on/off and order them for their account (`reader_settings.dictionaries`).
+- **Categories** ([13](13-categories.md)): a shared 3-level tree; the AI files each book after indexing (new
+  categories only under existing ones, approved by an admin); the uploader or an admin can change it.
 - **AI usage** (`llm_usage`): every Groq call records its reader, purpose (translate, define, chat, chat_title,
   search, ask), model and tokens in and out (`groq_client._record`). Readers see their own on the statistics
   page and through the agent; `python -m app.cli usage` lists everyone's.
