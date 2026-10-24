@@ -5,7 +5,6 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { cachedShelf, loadShelf, setShelfStatus, subscribeShelf, type ShelfEntry, type ShelfStatus } from '@/services/shelf';
 import { getPref, setPref } from '@/services/prefs';
 import { api } from '@/services/api';
-import { useAuth } from '@/contexts/AuthContext';
 import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
 
 interface IndexJob { book_id: string; status: 'queued' | 'running' | 'failed'; position?: number; error: string }
@@ -139,7 +138,6 @@ export default function LibraryPage() {
   const [query, setQuery] = useState('');
   const files = useBookCache();
   const online = useOnlineStatus();
-  const { reader } = useAuth();
   // Readers' average scores, from the community
   const [ratings, setRatings] = useState<Record<string, RatingSummary>>({});
   useEffect(() => { if (online) void fetchRatings().then(setRatings).catch(() => undefined); }, [online]);
@@ -213,7 +211,7 @@ export default function LibraryPage() {
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
         {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)}
-            job={jobs.get(book.id)} rating={ratings[book.id]} canDelete={!!reader && (reader.is_admin || book.uploaded_by === reader.email)}
+            job={jobs.get(book.id)} rating={ratings[book.id]} canDelete={!!book.can_change}
             onDeleted={() => void refresh()} />)}
       </Box>
     </>

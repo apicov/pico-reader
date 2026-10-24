@@ -171,3 +171,10 @@ def test_profile_shows_reading_only_when_allowed(client, admin_headers, auth_hea
 def test_generated_handles_are_valid():
     from app.community import HANDLE, generated_handle
     assert HANDLE.fullmatch(generated_handle("A.Very-Long.Name+tag@example.com"))
+
+
+def test_library_never_shows_who_uploaded(client, admin_headers, auth_headers, bucket):
+    make_book(client, admin_headers)
+    books = no_email(client.get("/api/library", headers=auth_headers)).json()["books"]
+    assert books[0]["can_change"] is False
+    assert client.get("/api/library", headers=admin_headers).json()["books"][0]["can_change"] is True

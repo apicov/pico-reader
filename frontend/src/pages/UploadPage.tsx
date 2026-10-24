@@ -44,7 +44,7 @@ export default function UploadPage() {
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [coverUrl, setCoverUrl] = useState<string>();
 
-  const mine = (library?.books ?? []).filter((b) => reader?.is_admin || b.uploaded_by === reader?.email);
+  const mine = (library?.books ?? []).filter((b) => b.can_change);
 
   useEffect(() => {
     if (online) void api<HistoryEvent[]>('/api/books/history?days=90').then(setHistory).catch(() => undefined);

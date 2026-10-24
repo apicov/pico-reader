@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api", tags=["library"])
 
 
 @router.get("/library")
-def library(request: Request, response: Response, _: Reader = Depends(get_current_reader),
+def library(request: Request, response: Response, reader: Reader = Depends(get_current_reader),
             db: Session = Depends(get_db)):
     """Books and dictionaries. The ETag covers the data, not the cover links (they're re-signed on every
     call), so a 304 means the app's cached manifest and covers are still right."""
@@ -26,7 +26,9 @@ def library(request: Request, response: Response, _: Reader = Depends(get_curren
     cover_keys = {r.id: r.files["cover"]["key"] for r in rows if "cover" in r.files}
     books = [
         {"id": r.id, "title": r.title, "author": r.author, "language": r.language,
-         "updated_at": r.updated_at.isoformat(), "uploaded_by": r.uploaded_by,
+         "updated_at": r.updated_at.isoformat(),
+         # who added a book stays private (the library is shared): only whether this reader may change it
+         "can_change": reader.is_admin or r.uploaded_by == reader.email,
          "formats": assets.public_files({k: f for k, f in r.files.items() if k not in ("cover", "search")}),
          # passages + vectors for searching offline (written by the indexer)
          "search": assets.public_files({"s": r.files["search"]})["s"] if "search" in r.files else None,

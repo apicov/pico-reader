@@ -14,7 +14,7 @@ Before sending, the reader edits title, author and language, and adds the book a
 format of a book they may change. Files go straight to R2 through signed links (`POST /api/books`, PUT,
 `POST /api/books/{id}/commit`).
 
-**Who may change a book:** the reader who added it, or an admin (`books.uploaded_by`). Everyone else only reads
+**Who may change a book:** the reader who added it, or an admin (`books.uploaded_by`; the app only learns `can_change`, never who uploaded). Everyone else only reads
 it.
 
 **History:** `book_events` keeps who did what and when: uploaded, files changed, deleted, reindexed, indexed,

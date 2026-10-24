@@ -19,7 +19,8 @@ export interface Book {
   updated_at: string;
   formats: Partial<Record<BookFormat, FileRef>>;
   cover: (FileRef & { url?: string }) | null;
-  uploaded_by?: string | null;
+  /** this reader added it, or is an admin: may delete it or replace its files */
+  can_change?: boolean;
   /** The offline search file (passages + vectors), once the server indexed the book */
   search?: FileRef | null;
   /** The search index, when the book has one */
