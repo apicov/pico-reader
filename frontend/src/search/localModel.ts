@@ -1,57 +1,55 @@
 /**
- * The embedding model on the device (transformers.js): multilingual-e5-small, the same quantized ONNX file
- * the server uses (backend/app/embed.py), so a question embedded here matches the passages embedded there.
- * Loaded only when offline search is switched on; the model files (~135 MB) are kept by the browser.
+ * The embedding model on the device (transformers.js in a Web Worker, embedWorker.ts): multilingual-e5-small,
+ * the same quantized ONNX file the server uses (backend/app/embed.py), so a question embedded here matches the
+ * passages embedded there. Loaded only when offline search is switched on; the files (~135 MB) are kept by the
+ * browser.
  */
-import type { FeatureExtractionPipeline } from '@huggingface/transformers';
-
 export const MODEL = 'Xenova/multilingual-e5-small';
-let pipe: Promise<FeatureExtractionPipeline> | null = null;
 
-export function modelLoaded(): boolean {
-  return pipe !== null;
+let worker: Worker | null = null;
+let ready: Promise<void> | null = null;
+let nextId = 0;
+const waiting = new Map<number, { resolve: (v: Float32Array[]) => void; reject: (e: Error) => void }>();
+let progressListener: ((f: number) => void) | undefined;
+
+function getWorker(): Worker {
+  if (!worker) {
+    worker = new Worker(new URL('./embedWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent) => {
+      const m = e.data as { type: string; id?: number; vectors?: Float32Array[]; message?: string; fraction?: number };
+      if (m.type === 'progress') progressListener?.(m.fraction ?? 0);
+      if (m.type === 'vectors' && m.id !== undefined) { waiting.get(m.id)?.resolve(m.vectors!); waiting.delete(m.id); }
+      if (m.type === 'error' && m.id !== undefined) { waiting.get(m.id)?.reject(new Error(m.message)); waiting.delete(m.id); }
+    };
+  }
+  return worker;
 }
 
-export async function loadModel(onProgress?: (fraction: number) => void): Promise<void> {
-  pipe ??= (async () => {
-    const { pipeline, env } = await import('@huggingface/transformers');
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-    const onnx = env.backends.onnx as { wasm?: { wasmPaths?: string; numThreads?: number } };
-    if (onnx.wasm) {
-      onnx.wasm.wasmPaths = new URL('ort/', `${window.location.origin}/`).href;
-      onnx.wasm.numThreads = 1; // threads need cross-origin isolation, which the app doesn't have
-    }
-    const loaded: Record<string, number> = {};
-    const total: Record<string, number> = {};
-    // pipeline()'s overloads are too complex for TypeScript: a narrower signature for this one use
-    const make = pipeline as unknown as (task: string, model: string, options: object) => Promise<FeatureExtractionPipeline>;
-    return (await make('feature-extraction', MODEL, {
-      dtype: 'q8',
-      progress_callback: (p: { status: string; file?: string; loaded?: number; total?: number }) => {
-        if (p.status === 'progress' && p.file && p.total) {
-          loaded[p.file] = p.loaded ?? 0;
-          total[p.file] = p.total;
-          const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0);
-          onProgress?.(sum(loaded) / Math.max(1, sum(total)));
-        }
-      },
-    })) as FeatureExtractionPipeline;
-  })();
-  pipe.catch(() => { pipe = null; });
-  await pipe;
+export function modelLoaded(): boolean {
+  return ready !== null;
+}
+
+export function loadModel(onProgress?: (fraction: number) => void): Promise<void> {
+  progressListener = onProgress;
+  ready ??= new Promise<void>((resolve, reject) => {
+    const w = getWorker();
+    const listener = (e: MessageEvent) => {
+      if (e.data.type === 'loaded') { w.removeEventListener('message', listener); resolve(); }
+      if (e.data.type === 'error' && e.data.id === undefined) { w.removeEventListener('message', listener); reject(new Error(e.data.message)); }
+    };
+    w.addEventListener('message', listener);
+    w.postMessage({ type: 'load', model: MODEL, wasmPaths: new URL('ort/', `${window.location.origin}/`).href });
+  });
+  ready.catch(() => { ready = null; });
+  return ready;
 }
 
 /** L2-normalised vectors, mean-pooled like app/embed.py; kind "query" (questions) or "passage" (book text). */
 export async function embedTexts(texts: string[], kind: 'query' | 'passage'): Promise<Float32Array[]> {
-  if (!pipe) await loadModel();
-  const extractor = await pipe!;
-  const out: Float32Array[] = [];
-  for (let i = 0; i < texts.length; i += 8) {
-    const res = await extractor(texts.slice(i, i + 8).map((t) => `${kind}: ${t}`), { pooling: 'mean', normalize: true });
-    const dims = res.dims[res.dims.length - 1];
-    const data = res.data as Float32Array;
-    for (let j = 0; j < data.length / dims; j++) out.push(data.slice(j * dims, (j + 1) * dims));
-  }
-  return out;
+  await loadModel(progressListener);
+  const id = ++nextId;
+  return new Promise((resolve, reject) => {
+    waiting.set(id, { resolve, reject });
+    getWorker().postMessage({ type: 'embed', id, texts, kind });
+  });
 }

@@ -68,6 +68,8 @@ export default defineConfig({
       { find: /^onnxruntime-web$/, replacement: path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs') },
     ],
   },
+  // the embedding worker imports transformers.js (offline search): module workers, alias applied as in the app
+  worker: { format: 'es', plugins: () => [] },
   // Syntax down-levelled for older Android WebViews; runtime methods come from core-js (polyfills.ts)
   build: { target: 'es2017' },
   test: {
