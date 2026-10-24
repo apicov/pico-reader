@@ -32,9 +32,13 @@ function bookCss(s: Settings): string {
   return `
     @namespace epub "http://www.idpf.org/2007/ops";
     ${appFontFaces()}
-    html { color-scheme: ${c.mode}; }
-    html, body { background: ${c.background} !important; color: ${c.text} !important; }
-    body { font-family: ${READING_FONT} !important; font-size: ${18 * s.fontScale}px !important; }
+    /* foliate paints the page background itself, from --theme-bg-color (also on a theme change) */
+    html { color-scheme: ${c.mode}; --theme-bg-color: ${c.background}; background: ${c.background} !important; }
+    body { background: transparent !important; color: ${c.text} !important; font-size: ${18 * s.fontScale}px !important; }
+    /* the reading font and colours win over the book's own (dark themes need it), except for code */
+    body, body * { font-family: ${READING_FONT} !important; }
+    pre, code, kbd, samp, pre *, code * { font-family: ui-monospace, monospace !important; }
+    body *:not(a) { color: inherit !important; }
     p, li, blockquote, dd { line-height: ${s.lineHeight} !important; text-align: ${s.justify ? 'justify' : 'start'};
       hyphens: auto; -webkit-hyphens: auto; widows: 2; orphans: 2; }
     a:link { color: ${c.accent} !important; }
