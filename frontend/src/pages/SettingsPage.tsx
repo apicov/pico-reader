@@ -1,4 +1,8 @@
-import { Box, Button, Divider, FormControl, InputLabel, MenuItem, Select, Stack, Typography } from '@mui/material';
+import { Box, Button, Divider, FormControl, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Select, Stack, Typography } from '@mui/material';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import { useBookCache } from '@/hooks/useBookCache';
+import { useLibrary } from '@/hooks/useLibrary';
+import { removeBook } from '@/services/bookCache';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { LANGUAGES } from '@/services/languages';
@@ -7,6 +11,16 @@ import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
 export default function SettingsPage() {
   const { settings, update } = useSettings();
   const { reader, signOut } = useAuth();
+  const files = useBookCache();
+  const { library } = useLibrary();
+
+  // Downloaded books (covers don't count: they're tiny and stay for the library)
+  const perBook = new Map<string, number>();
+  for (const f of Object.values(files)) {
+    if (f.kind !== 'cover') perBook.set(f.bookId, (perBook.get(f.bookId) ?? 0) + f.size);
+  }
+  const total = [...perBook.values()].reduce((a, b) => a + b, 0);
+  const mb = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 520 }}>
@@ -33,6 +47,24 @@ export default function SettingsPage() {
           {Object.entries(LANGUAGES).map(([code, name]) => <MenuItem key={code} value={code}>{name}</MenuItem>)}
         </Select>
       </FormControl>
+      <Divider />
+      <Box>
+        <Typography variant="h6">On this device</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {perBook.size === 0 ? 'No downloaded books.' : `${perBook.size} book${perBook.size > 1 ? 's' : ''}, ${mb(total)}`}
+        </Typography>
+        <List dense>
+          {[...perBook.entries()].map(([bookId, size]) => (
+            <ListItem key={bookId} disableGutters secondaryAction={
+              <IconButton edge="end" aria-label="Remove from this device" onClick={() => void removeBook(bookId)}>
+                <DeleteOutlineIcon />
+              </IconButton>
+            }>
+              <ListItemText primary={library?.books.find((b) => b.id === bookId)?.title ?? bookId} secondary={mb(size)} />
+            </ListItem>
+          ))}
+        </List>
+      </Box>
       <Divider />
       <Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Signed in as {reader?.email}</Typography>
