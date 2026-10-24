@@ -54,6 +54,9 @@ class Api:
     def post(self, path: str, body: dict | None = None):
         return _check(self.session.post(self.server + path, json=body, timeout=60)).json()
 
+    def post_list(self, path: str, body: list):
+        return _check(self.session.post(self.server + path, json=body, timeout=120)).json()
+
     def delete(self, path: str) -> None:
         _check(self.session.delete(self.server + path, timeout=60))
 

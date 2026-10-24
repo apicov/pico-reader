@@ -8,6 +8,7 @@
   reader add-quarto path/to/book [--lang en] [--pdf book.pdf] [--id ID] [--cover image]
   reader list
   reader delete ID
+  reader index [BOOK_ID ...] [--all] [--force]           (search index: passages + embeddings)
   reader dict-add path/to/stardict-folder --from de --to es [--name N]
   reader dict-add-all ~/Documents/dic/converted [--map dictionaries.json] [--only duden,ldaf]
   reader dict-list
@@ -21,7 +22,7 @@ from pathlib import Path
 
 import json
 
-from readertool import client, markdown, metadata, quarto, stardict
+from readertool import client, markdown, metadata, passages, quarto, stardict
 from readertool.client import Api, ToolError
 
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
@@ -61,12 +62,16 @@ def main() -> None:
     s.add_argument("--only", help="comma-separated folder names")
     sub.add_parser("dict-list", help="list the dictionaries")
     sub.add_parser("dict-delete", help="delete a dictionary").add_argument("id")
+    s = sub.add_parser("index", help="build the search index of books (on this computer)")
+    s.add_argument("ids", nargs="*", help="book ids (default with --all: every book)")
+    s.add_argument("--all", action="store_true", help="every book whose index is missing or out of date")
+    s.add_argument("--force", action="store_true", help="index again even when up to date")
     sub.add_parser("list", help="list the library")
     sub.add_parser("delete", help="delete a book and its files").add_argument("id")
     args = p.parse_args()
 
     try:
-        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete,
+        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete, "index": index_books,
          "dict-add": dict_add, "dict-add-all": dict_add_all, "dict-list": dict_list, "dict-delete": dict_delete}[args.cmd](args)
     except ToolError as e:
         sys.exit(f"error: {e}")
@@ -169,6 +174,51 @@ def list_books(_args) -> None:
 def delete(args) -> None:
     Api().delete(f"/api/admin/books/{args.id}")
     print(f"deleted {args.id}")
+
+
+INDEX_FORMATS = ["reflow", "epub", "pdf"]  # the best text first
+
+
+def index_books(args) -> None:
+    from readertool import embed
+    import requests
+
+    api = Api()
+    books = api.get("/api/library")["books"]
+    if args.ids:
+        books = [b for b in books if b["id"] in args.ids]
+    elif not args.all:
+        raise ToolError("name book ids, or pass --all")
+    for book in books:
+        fmt = next((f for f in INDEX_FORMATS if f in book["formats"]), None)
+        if not fmt:
+            continue
+        sha = book["formats"][fmt]["sha256"]
+        if book.get("index") and book["index"]["sha256"] == sha and not args.force:
+            print(f"{book['title']}: up to date")
+            continue
+        print(f"{book['title']} ({fmt})")
+        with tempfile.TemporaryDirectory() as tmp:
+            link = api.get(f"/api/books/{book['id']}/download", params={"kind": fmt})
+            path = Path(tmp) / f"book.{fmt}"
+            with requests.get(link["url"], stream=True, timeout=600) as r:
+                r.raise_for_status()
+                with path.open("wb") as f:
+                    for chunk in r.iter_content(1 << 20):
+                        f.write(chunk)
+            found = passages.EXTRACTORS[fmt](path)
+        if not found:
+            print("  no text found (a scanned PDF needs a text version first)")
+            continue
+        print(f"  {len(found)} passages, embedding…")
+        vectors = embed.embed([p.text for p in found])
+        api.post(f"/api/admin/books/{book['id']}/index/start", {"format": fmt, "sha256": sha, "model": embed.MODEL})
+        for start in range(0, len(found), 100):
+            batch = [{"seq": start + i, "location": p.location, "progress": round(p.progress, 5), "heading": p.heading,
+                      "text": p.text, "embedding": [round(float(x), 6) for x in vectors[start + i]]}
+                     for i, p in enumerate(found[start:start + 100])]
+            api.post_list(f"/api/admin/books/{book['id']}/index/chunks", batch)
+        print(f"  indexed")
 
 
 _DICT_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}

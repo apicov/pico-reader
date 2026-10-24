@@ -19,14 +19,18 @@ def library(request: Request, response: Response, _: Reader = Depends(get_curren
             db: Session = Depends(get_db)):
     """Books and dictionaries. The ETag covers the data, not the cover links (they're re-signed on every
     call), so a 304 means the app's cached manifest and covers are still right."""
-    rows = db.execute(text("""SELECT id, title, author, language, files, updated_at FROM books
-                               WHERE status = 'ready' ORDER BY lower(title)""")).fetchall()
+    rows = db.execute(text("""SELECT b.id, b.title, b.author, b.language, b.files, b.updated_at,
+                                      i.sha256 AS index_sha, i.chunks AS index_chunks
+                               FROM books b LEFT JOIN book_index i ON i.book_id = b.id
+                               WHERE b.status = 'ready' ORDER BY lower(b.title)""")).fetchall()
     cover_keys = {r.id: r.files["cover"]["key"] for r in rows if "cover" in r.files}
     books = [
         {"id": r.id, "title": r.title, "author": r.author, "language": r.language,
          "updated_at": r.updated_at.isoformat(),
          "formats": assets.public_files({k: f for k, f in r.files.items() if k != "cover"}),
-         "cover": assets.public_files(r.files)["cover"] if r.id in cover_keys else None}
+         "cover": assets.public_files(r.files)["cover"] if r.id in cover_keys else None,
+         # the file the search index was built from (the desktop tool re-indexes when it changes)
+         "index": {"sha256": r.index_sha, "chunks": r.index_chunks} if r.index_sha else None}
         for r in rows
     ]
     dictionaries = [
