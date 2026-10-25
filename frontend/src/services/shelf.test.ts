@@ -1,8 +1,9 @@
 import { ApiError } from '@/services/api';
-import { cachedMyShelf, loadMyShelf, loadShelf, setOnMyShelf, setShelfStatus } from './shelf';
+import { cachedCollections, cachedMyShelf, createCollection, deleteCollection, loadCollections, loadMyShelf, loadShelf,
+  moveCollection, renameCollection, setInCollection, setOnMyShelf, setShelfStatus } from './shelf';
 
 const net = vi.hoisted(() => ({ online: false, gone: new Set<string>(), calls: [] as string[],
-  shelf: [] as object[], mine: [] as object[] }));
+  shelf: [] as object[], mine: [] as object[], collections: [] as object[] }));
 vi.mock('@/services/connectivity', () => ({ isOnline: () => net.online }));
 vi.mock('@/services/api', async (original) => ({
   ...(await original<typeof import('@/services/api')>()),
@@ -14,11 +15,11 @@ vi.mock('@/services/api', async (original) => ({
       if (net.gone.has(id)) throw new ApiError(404, 'No such book');
       return null;
     }
-    return path === '/api/shelf' ? net.shelf : net.mine;
+    return path === '/api/shelf' ? net.shelf : path === '/api/shelf/collections' ? net.collections : net.mine;
   }),
 }));
 
-beforeEach(() => { localStorage.clear(); net.online = false; net.gone.clear(); net.calls.length = 0; net.shelf = []; net.mine = []; });
+beforeEach(() => { localStorage.clear(); net.online = false; net.gone.clear(); net.calls.length = 0; net.shelf = []; net.mine = []; net.collections = []; });
 
 describe('shelf queue', () => {
   it('a change for a deleted book is dropped and the shelf still loads from the server', async () => {
@@ -42,5 +43,45 @@ describe('shelf queue', () => {
     net.online = true;
     await loadMyShelf();
     expect(net.calls).toEqual(['DELETE /api/shelf/mine/b1', 'PUT /api/shelf/mine/b2']);
+  });
+});
+
+describe('collections', () => {
+  const short = (calls: string[]) => calls.map((c) => c.replace(/col-[0-9a-f-]+/g, 'COL'));
+
+  it('made offline: shown at once, sent in order when back online', async () => {
+    const uni = await createCollection('Uni ');
+    await setInCollection(uni, 'b1', true);
+    expect((await cachedCollections()).map((c) => [c.name, c.book_ids])).toEqual([['Uni', ['b1']]]);
+    expect((await cachedMyShelf()).map((e) => e.book_id)).toEqual(['b1']); // in a collection = on My shelf
+    await renameCollection(uni, 'Studium');
+    net.online = true;
+    await loadCollections();
+    expect(short(net.calls)).toEqual(['PUT /api/shelf/collections/COL', 'PUT /api/shelf/collections/COL/books/b1',
+      'PUT /api/shelf/collections/COL']);
+  });
+
+  it('taking a book off My shelf offline cancels its queued collection adds', async () => {
+    const id = await createCollection('Krimis');
+    await setInCollection(id, 'b2', true);
+    await setOnMyShelf('b2', false);
+    expect((await cachedCollections()).find((c) => c.id === id)!.book_ids).toEqual([]);
+    net.online = true;
+    await loadMyShelf();
+    expect(short(net.calls)).toEqual(['DELETE /api/shelf/mine/b2', 'PUT /api/shelf/collections/COL']);
+  });
+
+  it('a change the server refuses is dropped; moving and deleting work', async () => {
+    const a = await createCollection('A');
+    const b = await createCollection('B');
+    await moveCollection(b, -1);
+    expect((await cachedCollections()).map((c) => c.name)).toEqual(['B', 'A']);
+    await deleteCollection(a);
+    net.gone.add(a); // e.g. deleted on another device meanwhile
+    net.online = true;
+    await loadCollections();
+    net.calls.length = 0;
+    await loadCollections();
+    expect(net.calls).toEqual([]);
   });
 });

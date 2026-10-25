@@ -13,6 +13,19 @@ On My shelf and All books, a cover shows **Reading · N%** or **Finished ✓**. 
 on My shelf has a bookmark mark. Changes made offline are kept on the device and sent when the connection is
 back, like the status shelf. The chat agent's `list_books` says for each book whether it's on My shelf.
 
+## Collections
+
+On My shelf, books can be grouped in **collections** (a book can be in several). Chips above the books filter
+them: *All · <collection> (n) … · Not in a collection*; the last choice is remembered on the device.
+**Collections…** (the last chip) creates, renames, deletes and orders them; a book's ⋮ → **Collections…** ticks
+the ones it's in, or makes a new one for it.
+
+- Adding a book to a collection puts it on My shelf; taking it off My shelf takes it out of its collections.
+- Deleting a collection never touches its books (they stay on My shelf).
+- Made offline too: changes are shown at once and sent in the order they were made (`collections_pending`).
+- Tables `collections` (ids made on the device, `col-<uuid>`; at most 100 per reader, names up to 60
+  characters) and `collection_books`. The chat agent's `list_books` names each book's collections.
+
 ## API
 
 | Route | |
@@ -20,3 +33,7 @@ back, like the status shelf. The chat agent's `list_books` says for each book wh
 | `GET /api/shelf/mine` | `[{book_id, added_at}]`, newest first |
 | `PUT /api/shelf/mine/{book_id}` | Add (adding twice is fine; 404 for an unknown book) |
 | `DELETE /api/shelf/mine/{book_id}` | Remove |
+| `GET /api/shelf/collections` | `[{id, name, position, book_ids}]`, in order |
+| `PUT /api/shelf/collections/{id}` | `{name, position}`: create or rename/move |
+| `DELETE /api/shelf/collections/{id}` | Remove (the books stay on My shelf) |
+| `PUT` / `DELETE /api/shelf/collections/{id}/books/{book_id}` | Add (also puts it on My shelf) / take out |

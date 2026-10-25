@@ -3,8 +3,9 @@ import { Alert, Box, Button, Card, CardActionArea, Chip, IconButton, InputAdornm
   TextField, Typography } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
-import { cachedMyShelf, cachedShelf, loadMyShelf, loadShelf, setOnMyShelf, setShelfStatus, subscribeShelf, type MyShelfEntry,
-  type ShelfEntry, type ShelfStatus } from '@/services/shelf';
+import { cachedCollections, cachedMyShelf, cachedShelf, loadCollections, loadMyShelf, loadShelf, setOnMyShelf, setShelfStatus,
+  subscribeShelf, type Collection, type MyShelfEntry, type ShelfEntry, type ShelfStatus } from '@/services/shelf';
+import { BookCollections, CollectionChips, type CollectionFilter } from '@/components/collections';
 import { getPref, setPref } from '@/services/prefs';
 import { api } from '@/services/api';
 import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
@@ -32,13 +33,14 @@ const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', epub: 'EPUB', reflow:
 
 type LibraryTab = 'mine' | 'reading' | 'all' | 'finished';
 
-function BookCard({ book, files, online, shelf, mine, badge, job, rating, category, canDelete, onDeleted, onChanged }: {
+function BookCard({ book, files, online, shelf, mine, collections, badge, job, rating, category, canDelete, onDeleted, onChanged }: {
   book: Book; files: Record<string, CachedFile>; online: boolean; shelf?: ShelfEntry;
   /** on My shelf; `badge`: show the reading status on the cover (where the tab doesn't already say it) */
-  mine: boolean; badge: boolean; job?: IndexJob; rating?: RatingSummary; category?: string; canDelete: boolean; onDeleted: () => void; onChanged: () => void;
+  mine: boolean; collections: Collection[]; badge: boolean; job?: IndexJob; rating?: RatingSummary; category?: string; canDelete: boolean; onDeleted: () => void; onChanged: () => void;
 }) {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
   const choose = (status: ShelfStatus) => { setMenu(null); void setShelfStatus(book.id, status); };
   const navigate = useNavigate();
   const cover = useCoverUrl(book, files[`${book.id}/cover`], online);
@@ -106,6 +108,7 @@ function BookCard({ book, files, online, shelf, mine, badge, job, rating, catego
           Reviews & discussion
         </MenuItem>
         {canDelete && <MenuItem disabled={!online} onClick={() => { setMenu(null); setCategoryOpen(true); }}>Category…</MenuItem>}
+        <MenuItem onClick={() => { setMenu(null); setCollectionsOpen(true); }}>Collections…</MenuItem>
         <MenuItem onClick={() => { setMenu(null); void setOnMyShelf(book.id, !mine); }}>
           {mine ? 'Remove from My shelf' : 'Add to My shelf'}
         </MenuItem>
@@ -122,6 +125,8 @@ function BookCard({ book, files, online, shelf, mine, badge, job, rating, catego
           }}>Delete book…</MenuItem>
         )}
       </Menu>
+      {collectionsOpen && <BookCollections bookId={book.id} title={book.title} collections={collections} open
+        onClose={() => setCollectionsOpen(false)} />}
       {canDelete && <BookCategoryDialog book={book} open={categoryOpen} onClose={() => setCategoryOpen(false)} onSaved={onChanged} />}
     </Card>
   );
@@ -185,17 +190,22 @@ export default function LibraryPage() {
   // The reader's shelf: "Currently reading" first when there's anything on it
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
   const [mine, setMine] = useState<MyShelfEntry[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [tab, setTab] = useState<LibraryTab | null>(null);
+  const [collection, setCollection] = useState<CollectionFilter>('all');
   useEffect(() => {
-    const load = () => { void cachedShelf().then(setShelf); void cachedMyShelf().then(setMine); };
+    const load = () => { void cachedShelf().then(setShelf); void cachedMyShelf().then(setMine); void cachedCollections().then(setCollections); };
     load();
     void loadShelf().then(setShelf);
     void loadMyShelf().then(setMine);
+    void loadCollections().then(setCollections);
     return subscribeShelf(load);
   }, [online]);
   useEffect(() => {
     void getPref<LibraryTab>('library_tab').then((saved) => setTab((t) => t ?? saved ?? null));
+    void getPref<CollectionFilter>('shelf_collection').then((c) => c && setCollection(c));
   }, []);
+  const pickCollection = (c: CollectionFilter) => { setCollection(c); void setPref('shelf_collection', c); };
   // Categories: browse All books by them (the last choice is remembered)
   const [tree, setTree] = useState<Category[]>([]);
   const [category, setCategory] = useState<CategoryFilter>(null);
@@ -212,6 +222,13 @@ export default function LibraryPage() {
   const finished = shelf.filter((e) => e.status === 'finished');
   const current = tab ?? (reading.length ? 'reading' : 'all');
   const mineIds = useMemo(() => new Set(mine.map((e) => e.book_id)), [mine]);
+  // a collection deleted (maybe on another device) shows everything again
+  const shownCollection = collection === 'all' || collection === 'none' || collections.some((c) => c.id === collection) ? collection : 'all';
+  const inLibrary = useMemo(() => new Set((library?.books ?? []).map((b) => b.id)), [library]);
+  const collectionCounts = useMemo(() => Object.fromEntries(collections.map((c) =>
+    [c.id, c.book_ids.filter((b) => inLibrary.has(b) && mineIds.has(b)).length])), [collections, inLibrary, mineIds]);
+  const inSomeCollection = useMemo(() => new Set(collections.flatMap((c) => c.book_ids)), [collections]);
+  const unsorted = mine.filter((e) => inLibrary.has(e.book_id) && !inSomeCollection.has(e.book_id)).length;
   const pickTab = (t: LibraryTab) => { setTab(t); void setPref('library_tab', t); };
 
   const books = useMemo(() => {
@@ -219,8 +236,11 @@ export default function LibraryPage() {
     const all = (library?.books ?? []).filter((b) => !q || matches(b, q));
     if (current === 'all') return all.filter(inCategory(tree, typeof category === 'number' && !tree.some((c) => c.id === category) ? null : category));
     const order = new Map((current === 'mine' ? mine : shelf.filter((e) => e.status === current)).map((e, i) => [e.book_id, i]));
-    return all.filter((b) => order.has(b.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }, [library, query, shelf, mine, current, tree, category]);
+    const inShown = current !== 'mine' || shownCollection === 'all' ? () => true
+      : shownCollection === 'none' ? (b: Book) => !inSomeCollection.has(b.id)
+      : (b: Book) => !!collections.find((c) => c.id === shownCollection)?.book_ids.includes(b.id);
+    return all.filter((b) => order.has(b.id) && inShown(b)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  }, [library, query, shelf, mine, current, tree, category, collections, shownCollection, inSomeCollection]);
 
   return (
     <>
@@ -235,6 +255,10 @@ export default function LibraryPage() {
       <TextField fullWidth size="small" placeholder="Search title or author" value={query}
         onChange={(e) => setQuery(e.target.value)} sx={{ mb: 3 }}
         slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+      {current === 'mine' && mine.length > 0 && (
+        <CollectionChips collections={collections} value={shownCollection} onChange={pickCollection}
+          counts={collectionCounts} unsorted={unsorted} />
+      )}
       {current === 'all' && tree.length > 0 && (
         <CategoryBrowser tree={tree} value={category} onChange={pickCategory}
           uncategorised={(library?.books ?? []).filter((b) => !b.category_id).length} />
@@ -246,6 +270,8 @@ export default function LibraryPage() {
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
           {library.books.length === 0 ? 'No books yet. Add some with the desktop tool.'
             : query ? 'No book matches.'
+            : current === 'mine' && mine.length && shownCollection === 'none' ? 'Every book on your shelf is in a collection.'
+            : current === 'mine' && mine.length ? 'No book in this collection yet: ⋮ → Collections… on a book.'
             : current === 'mine' ? 'Nothing on your shelf yet: use ⋮ → Add to My shelf on any book.'
             : current === 'reading' ? 'Nothing here yet: books you open appear here.'
             : current === 'finished' ? 'No finished books yet.' : 'No book matches.'}
@@ -253,7 +279,7 @@ export default function LibraryPage() {
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
         {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)}
-            mine={mineIds.has(book.id)} badge={current === 'mine' || current === 'all'}
+            mine={mineIds.has(book.id)} collections={collections} badge={current === 'mine' || current === 'all'}
             job={jobs.get(book.id)} rating={ratings[book.id]} canDelete={!!book.can_change}
             category={book.category_id ? leafName.get(book.category_id) : undefined}
             onDeleted={() => void refresh()} onChanged={() => { void refresh(); reloadTree(); }} />)}
