@@ -8,3 +8,5 @@ dist/
 coverage/
 tools/.venv/
 public/ort/
+.coverage
+htmlcov/
