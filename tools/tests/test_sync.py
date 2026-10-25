@@ -1,6 +1,8 @@
 """`reader sync` against an in-memory stand-in for the server, in a temporary folder."""
 
+import copy
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -8,6 +10,7 @@ import pytest
 import requests
 
 from readertool.client import ToolError
+from readertool import sync as sync_module
 from readertool.sync import SOURCES_MARK, Sync, drop_file
 
 T0 = 1_800_000_000.0
@@ -18,7 +21,7 @@ class FakeApi:
 
     def __init__(self):
         self.drops, self.notes, self.delivered, self.down = [], {}, [], False
-        self.clock = 0
+        self.clock, self.patch_fails = 0, None
 
     def _tick(self) -> str:
         self.clock += 1
@@ -31,6 +34,9 @@ class FakeApi:
         return self.notes[note_id]
 
     def get(self, path):
+        return copy.deepcopy(self._get(path))  # like a server: later changes don't reach what was read
+
+    def _get(self, path):
         if self.down:
             raise requests.ConnectionError("network is down")
         if path == "/api/drops":
@@ -51,6 +57,8 @@ class FakeApi:
 
     def patch(self, path, body):
         note = self.notes[path.rsplit("/", 1)[1]]
+        if self.patch_fails:
+            raise self.patch_fails
         if body.get("updated_at_was") and body["updated_at_was"] != note["updated_at"]:
             raise ToolError("HTTP 409: The note changed meanwhile", 409)
         note.update(title=body["title"], markdown=body["markdown"], updated_at=self._tick())
@@ -221,6 +229,39 @@ def test_a_change_in_the_app_during_a_push_is_a_conflict_not_a_loss(env):
     sync.run_once()
     assert "Gleichzeitig" in path.read_text()
     assert "Meins" in next((folder / "notes" / "conflicts").iterdir()).read_text()
+    assert api.notes["note-1"]["markdown"] == "Gleichzeitig"  # the app's version wasn't overwritten
+    api.get = real_get
+    assert sync.run_once()["notes"] == 0  # settled
+
+
+def test_a_server_error_on_saving_keeps_the_edit_for_the_next_round(env):
+    api, sync, folder, _, log = env
+    api.add_note("Figuren", "Alt")
+    sync.run_once()
+    path = folder / "notes" / "Figuren.md"
+    path.write_text(path.read_text().replace("\nAlt\n", "\nMeins\n"))
+    age(path, 5)
+    api.patch_fails = ToolError("HTTP 500: Internal Server Error", 500)
+    sync.run_once()
+    assert any("500" in line for line in log)
+    assert "Meins" in path.read_text() and not list((folder / "notes" / "conflicts").iterdir())
+    api.patch_fails = None
+    sync.run_once()
+    assert api.notes["note-1"]["markdown"] == "Meins"
+
+
+def test_a_file_still_being_written_waits(env):
+    api, sync, folder, now, _ = env
+    api.add_note("Figuren", "Alt")
+    sync.run_once()
+    path = folder / "notes" / "Figuren.md"
+    path.write_text(path.read_text().replace("\nAlt\n", "\nMei\n"))
+    age(path, 0.5)
+    sync.run_once()
+    assert api.notes["note-1"]["markdown"] == "Alt"
+    now[0] += 5
+    sync.run_once()
+    assert api.notes["note-1"]["markdown"] == "Mei"
 
 
 def test_a_network_failure_is_retried_next_round_without_losing_anything(env):
@@ -239,3 +280,24 @@ def test_the_state_survives_a_restart(env, tmp_path):
     sync.run_once()
     again = Sync(api, folder, tmp_path / "state.json", log=lambda _: None, clock=lambda: now[0])
     assert again.run_once()["notes"] == 0
+
+
+def test_install_writes_a_user_service_and_uninstall_removes_it(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda args, check: calls.append(args))
+    sync_module.install(Path("~/pico"), 15)
+    unit = tmp_path / "systemd" / "user" / "pico-reader-sync.service"
+    text = unit.read_text()
+    assert f"sync --folder {Path.home() / 'pico'} --interval 15" in text and "Restart=on-failure" in text
+    assert ["systemctl", "--user", "enable", "--now", "pico-reader-sync.service"] in calls
+    sync_module.uninstall()
+    assert not unit.exists() and ["systemctl", "--user", "disable", "--now", "pico-reader-sync.service"] in calls
+
+
+def test_run_once_does_one_round(tmp_path, monkeypatch):
+    monkeypatch.setattr(sync_module, "Sync", lambda api, folder: Sync(api, folder, tmp_path / "state.json"))
+    api = FakeApi()
+    api.drops = [drop(1, "text", "hello")]
+    sync_module.run(api, tmp_path / "pico", 15, once=True)
+    assert api.delivered == ["drop-1"]
