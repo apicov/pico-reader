@@ -4,7 +4,8 @@ import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { serverVectors } from '@/search/localIndex';
 import { embedTexts, loadModel } from '@/search/localModel';
-import { fetchSearchFiles, offlineSearchEnabled, searchableOffline, setOfflineSearch } from '@/search/offlineSearch';
+import { fetchSearchFiles, offlineSearchEnabled, offlineSearchWordsOnly, searchableOffline, setOfflineSearch,
+  setOfflineSearchWordsOnly } from '@/search/offlineSearch';
 import type { Book } from '@/services/types';
 
 /** Offline search: the model on the device + the downloaded books' search files; and the in-browser test. */
@@ -15,11 +16,12 @@ export function OfflineSearchSettings() {
   const [progress, setProgress] = useState<number | null>(null);
   const [ready, setReady] = useState<Book[]>([]);
   const [error, setError] = useState('');
+  const [wordsOnly, setWordsOnly] = useState(false);
   const [testBook, setTestBook] = useState('');
   const [test, setTest] = useState<string | null>(null);
 
   const refreshReady = async () => setReady(await searchableOffline(library?.books ?? []));
-  useEffect(() => { void offlineSearchEnabled().then(setOn); }, []);
+  useEffect(() => { void offlineSearchEnabled().then(setOn); void offlineSearchWordsOnly().then(setWordsOnly); }, []);
   useEffect(() => { void refreshReady(); }, [library]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const enable = async (value: boolean) => {
@@ -29,11 +31,17 @@ export function OfflineSearchSettings() {
     setError('');
     setProgress(0);
     try {
-      await loadModel(setProgress);
+      // Without the model (an old WebView), offline search still works by words
+      const model = await loadModel(setProgress).then(() => true, (e: Error) => {
+        console.warn('Offline search model:', e.message);
+        return false;
+      });
+      setWordsOnly(!model);
+      await setOfflineSearchWordsOnly(!model);
       await fetchSearchFiles(library?.books ?? []);
       await refreshReady();
     } catch (e) {
-      setError(`The model couldn't load on this device: ${(e as Error).message}`);
+      setError(`Offline search couldn't be set up: ${(e as Error).message}`);
       setOn(false);
       await setOfflineSearch(false);
     } finally {
@@ -73,12 +81,19 @@ export function OfflineSearchSettings() {
         onChange={(e) => void enable(e.target.checked)} />} label={on ? 'On' : 'Off'} />
       {progress !== null && <LinearProgress variant={progress > 0 ? 'determinate' : 'indeterminate'} value={progress * 100} sx={{ my: 1 }} />}
       {error && <Alert severity="warning" sx={{ mt: 1 }}>{error}</Alert>}
+      {on && wordsOnly && progress === null && (
+        <Alert severity="info" sx={{ my: 1 }}>
+          This device can't run the search model (its WebView is too old), so offline search matches words, not
+          meaning. On Android, updating “Android System WebView” from the Play Store and switching offline search
+          off and on again may fix this.
+        </Alert>
+      )}
       {on && progress === null && (
         <Typography variant="body2" color="text.secondary">
           {ready.length ? `Searchable offline: ${ready.map((b) => b.title).join(', ')}` : 'No downloaded book has its search file yet: open a book once while online.'}
         </Typography>
       )}
-      {on && ready.length > 0 && (
+      {on && !wordsOnly && ready.length > 0 && (
         <Stack spacing={1} sx={{ mt: 2, maxWidth: 420 }}>
           <Typography variant="subtitle2">Test: index a book in this browser</Typography>
           <Typography variant="caption" color="text.secondary">

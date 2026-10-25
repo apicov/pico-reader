@@ -66,32 +66,53 @@ export async function isCached(bookId: string, kind: FileKind, file: FileRef): P
   return (await loadIndex())[fileName(bookId, kind)]?.sha256 === file.sha256;
 }
 
+// Downloads under way, by file name: asking for a file that's already coming waits for that download (two at
+// once would write the same .part file, and the second rename would find it gone)
+const inFlight = new Map<string, Promise<void>>();
+
+function saveOnce(name: string, url: () => Promise<string>, size: number, onProgress?: (fraction: number) => void,
+                  done?: () => Promise<void>): Promise<void> {
+  let running = inFlight.get(name);
+  if (!running) {
+    running = (async () => {
+      await store.save(name, await url(), size, onProgress);
+      await done?.();
+    })().finally(() => inFlight.delete(name));
+    inFlight.set(name, running);
+  }
+  return running;
+}
+
 /** Make sure the current version of a book's file is on the device. */
 export async function ensureFile(book: Book, kind: Exclude<FileKind, 'cover' | 'search'>,
                                  onProgress?: (fraction: number) => void): Promise<void> {
   const file = book.formats[kind];
   if (!file) throw new Error(`This book has no ${kind}`);
   if (await isCached(book.id, kind, file)) return;
-  const link = await api<{ url: string }>(`/api/books/${encodeURIComponent(book.id)}/download?kind=${kind}`);
-  await store.save(fileName(book.id, kind), link.url, file.size, onProgress);
-  await record(book.id, kind, file);
+  await saveOnce(fileName(book.id, kind), () => downloadLink(book.id, kind), file.size, onProgress,
+    () => record(book.id, kind, file));
+}
+
+async function downloadLink(bookId: string, kind: FileKind): Promise<string> {
+  return (await api<{ url: string }>(`/api/books/${encodeURIComponent(bookId)}/download?kind=${kind}`)).url;
 }
 
 /** Keep a book's offline search file (passages + vectors) on the device, when the server made one. */
 export async function ensureSearchFile(book: Book): Promise<boolean> {
   if (!book.search) return false;
   if (await isCached(book.id, 'search', book.search)) return true;
-  const link = await api<{ url: string }>(`/api/books/${encodeURIComponent(book.id)}/download?kind=search`);
-  await store.save(fileName(book.id, 'search'), link.url, book.search.size);
-  await record(book.id, 'search', book.search);
+  const search = book.search;
+  await saveOnce(fileName(book.id, 'search'), () => downloadLink(book.id, 'search'), search.size, undefined,
+    () => record(book.id, 'search', search));
   return true;
 }
 
 /** Keep a book's cover for offline use (links come with the library). */
 export async function ensureCover(book: Book): Promise<void> {
   if (!book.cover?.url || (await isCached(book.id, 'cover', book.cover))) return;
-  await store.save(fileName(book.id, 'cover'), book.cover.url, book.cover.size);
-  await record(book.id, 'cover', book.cover);
+  const cover = book.cover;
+  await saveOnce(fileName(book.id, 'cover'), async () => cover.url!, cover.size, undefined,
+    () => record(book.id, 'cover', cover));
 }
 
 async function record(bookId: string, kind: FileKind, file: FileRef): Promise<void> {

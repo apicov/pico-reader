@@ -8,6 +8,9 @@ It talks to `https://books.apicov.xyz` (`frontend/.env.production`). Differences
   zip and unzips `<id>SQLite.db` into its database folder.
 - Requests go through CapacitorHttp, so CORS doesn't apply; connectivity comes from `@capacitor/network`.
 - No service worker.
+- Android 10 and older: the FileTransfer plugin asks for the storage permission before any download (even into
+  the app's own folder), so the manifest declares `READ/WRITE_EXTERNAL_STORAGE` with `maxSdkVersion="29"`; the
+  phone asks once, at the first download. Newer Android never asks.
 
 ## Build tools
 

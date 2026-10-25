@@ -4,7 +4,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import type { Book } from '@/services/types';
 import { READING_FONT } from '@/theme/readingThemes';
 import { searchOffline, type LocalPassage } from './localIndex';
-import { offlineSearchEnabled, searchableOffline } from './offlineSearch';
+import { offlineSearchEnabled, offlineSearchWordsOnly, searchableOffline } from './offlineSearch';
 
 /** Without a connection the chat can't answer, but the downloaded books can still be searched on the device. */
 export function OfflineSearchPanel({ books, onOpen }: { books: Book[]; onOpen: (p: LocalPassage) => void }) {
@@ -14,8 +14,13 @@ export function OfflineSearchPanel({ books, onOpen }: { books: Book[]; onOpen: (
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<LocalPassage[] | null>(null);
   const [error, setError] = useState('');
+  const [wordsOnly, setWordsOnly] = useState(false);
 
-  useEffect(() => { void offlineSearchEnabled().then(setEnabled); void searchableOffline(books).then(setReady); }, [books]);
+  useEffect(() => {
+    void offlineSearchEnabled().then(setEnabled);
+    void offlineSearchWordsOnly().then(setWordsOnly);
+    void searchableOffline(books).then(setReady);
+  }, [books]);
 
   const run = async (e: FormEvent) => {
     e.preventDefault();
@@ -23,7 +28,7 @@ export function OfflineSearchPanel({ books, onOpen }: { books: Book[]; onOpen: (
     setBusy(true);
     setError('');
     try {
-      setResults(await searchOffline(query.trim(), ready));
+      setResults(await searchOffline(query.trim(), ready, wordsOnly));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -37,7 +42,8 @@ export function OfflineSearchPanel({ books, onOpen }: { books: Book[]; onOpen: (
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 2 }}>
-        Offline: searching {ready.length ? ready.map((b) => b.title).join(', ') : 'no book yet (open a book once while online)'} on this device.
+        Offline: searching {ready.length ? ready.map((b) => b.title).join(', ') : 'no book yet (open a book once while online)'} on this device
+        {wordsOnly ? ' by words only (the search model can’t run on this device).' : '.'}
       </Alert>
       <Box component="form" onSubmit={run}>
         <TextField fullWidth value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your downloaded books"

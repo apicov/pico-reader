@@ -49,23 +49,23 @@ export async function loadBookIndex(book: Book): Promise<BookIndex> {
 
 const words = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().match(/\p{L}{3,}/gu) ?? [];
 
-/** Best passages in the given (downloaded, indexed) books. */
-export async function searchOffline(query: string, books: Book[], limit = 10): Promise<LocalPassage[]> {
+/** Best passages in the given (downloaded, indexed) books. `wordsOnly`: without the model, by words alone. */
+export async function searchOffline(query: string, books: Book[], wordsOnly = false, limit = 10): Promise<LocalPassage[]> {
   const indexes = await Promise.all(books.map(loadBookIndex));
-  const [q] = await embedTexts([query], 'query');
+  const q = wordsOnly ? null : (await embedTexts([query], 'query'))[0];
   const all: { idx: BookIndex; i: number; cos: number; hits: number }[] = [];
   const terms = new Set(words(query));
   for (const idx of indexes) {
     for (let i = 0; i < idx.passages.length; i++) {
       let dot = 0;
       const off = i * idx.dims;
-      for (let d = 0; d < idx.dims; d++) dot += q[d] * idx.vectors[off + d];
+      if (q) for (let d = 0; d < idx.dims; d++) dot += q[d] * idx.vectors[off + d];
       const hits = terms.size ? words(idx.passages[i].text).filter((w) => terms.has(w)).length : 0;
       all.push({ idx, i, cos: dot, hits });
     }
   }
   const score = new Map<(typeof all)[number], number>();
-  const byMeaning = [...all].sort((a, b) => b.cos - a.cos).slice(0, CANDIDATES);
+  const byMeaning = q ? [...all].sort((a, b) => b.cos - a.cos).slice(0, CANDIDATES) : [];
   const byWords = all.filter((x) => x.hits > 0).sort((a, b) => b.hits - a.hits).slice(0, CANDIDATES);
   for (const ranking of [byMeaning, byWords]) {
     ranking.forEach((x, rank) => score.set(x, (score.get(x) ?? 0) + 1 / (RRF_K + rank + 1)));

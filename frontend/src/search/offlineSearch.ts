@@ -4,9 +4,13 @@ import { getPref, setPref } from '@/services/prefs';
 import type { Book } from '@/services/types';
 
 const KEY = 'offline_search';
+const WORDS_ONLY = 'offline_search_words_only';
 
 export const offlineSearchEnabled = async () => (await getPref<boolean>(KEY)) ?? false;
 export const setOfflineSearch = (on: boolean) => setPref(KEY, on);
+/** The model can't run here (an old WebView without WebAssembly SIMD): offline search matches words only */
+export const offlineSearchWordsOnly = async () => (await getPref<boolean>(WORDS_ONLY)) ?? false;
+export const setOfflineSearchWordsOnly = (on: boolean) => setPref(WORDS_ONLY, on);
 
 /** Downloaded books whose search file is on the device */
 export async function searchableOffline(books: Book[]): Promise<Book[]> {

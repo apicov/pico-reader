@@ -52,7 +52,11 @@ library shows "Queued for search (n)" and "Making it searchable…" until it's d
   by the browser. It's the same quantized ONNX file the server uses, so questions embedded on the device
   match the server's passage vectors.
 - **The runtime:** the ONNX WebAssembly runtime is served by the app from `/ort/`, copied there at build
-  time. It's bundled in the Android app, and cached by the service worker on the web.
+  time. It's bundled in the Android app, and cached by the service worker on the web. It needs WebAssembly
+  SIMD (Chrome/Android WebView 91+, Firefox 89+, Safari 16.4+).
+- **Without the model:** where it can't load (an old WebView: "WebAssembly SIMD is not supported"), offline
+  search still switches on and matches words only; Settings and the search page say so. Updating Android
+  System WebView and switching offline search off and on again brings meaning back.
 - **Search files:** the device fetches the search files of the books it has downloaded, and of each book
   opened later.
 
