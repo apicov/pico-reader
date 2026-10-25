@@ -33,7 +33,8 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Chats** ("Ask your library"): `conversations` and `messages` in Postgres (so in the daily backup). The
   chat is an agent (`backend/app/agent_tools.py`): with the recent turns and a list of every book, the model
   calls fixed tools (book passages, reading and lookup statistics, translations, highlights, review cards,
-  the reading goal, book links, the Anki export, notes) and answers with citations. Tools that change something
+  the reading goal, book links, the Anki export, notes, My shelf and its collections, community posts with
+  their comments, the reader's reviews; spoilers stay hidden) and answers with citations. Tools that change something
   (goal, known words, review cards, saving a note) are only proposed; they run when the reader confirms
   (`chat_actions`).
 - **Notes** ([16](16-notes.md)): private Markdown documents with citations and Mermaid diagrams, written by the

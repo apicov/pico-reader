@@ -254,6 +254,80 @@ def member_lists(ctx: Context, handle: str | None = None) -> dict:
                       for l in community.lists(ctx.db, ctx.reader, owner_email=owner) if not l["hidden"]][:20]}
 
 
+def _no_spoilers(text_: str) -> str:
+    """`||…||` marks a spoiler in community texts: the agent doesn't pass them on."""
+    return re.sub(r"\|\|[^|\n]+?\|\|", "(spoiler hidden)", text_)
+
+
+def _reader_named(ctx: Context, name: str) -> str | None:
+    return ctx.db.execute(text("SELECT reader_email FROM profiles WHERE handle = :h OR lower(display_name) = :h"),
+                          {"h": name.lower().lstrip("@")}).scalar()
+
+
+def my_shelf(ctx: Context) -> dict:
+    """The books on My shelf, by collection, with where the reader is in each."""
+    rows = ctx.db.execute(text("""
+        SELECT b.id, b.title, b.author, sh.status, coalesce(rs.progress, 0) AS progress, ms.added_at,
+               (SELECT array_agg(c.name ORDER BY c.position) FROM collection_books cb JOIN collections c ON c.id = cb.collection_id
+                WHERE cb.book_id = b.id AND c.reader_email = :e) AS collections
+        FROM my_shelf ms JOIN books b ON b.id = ms.book_id AND b.status = 'ready'
+        LEFT JOIN shelf sh ON sh.book_id = b.id AND sh.reader_email = :e
+        LEFT JOIN reading_state rs ON rs.book_id = b.id AND rs.reader_email = :e
+        WHERE ms.reader_email = :e ORDER BY ms.added_at DESC"""), {"e": ctx.reader.email}).fetchall()
+    collections = [c for (c,) in ctx.db.execute(text("SELECT name FROM collections WHERE reader_email = :e ORDER BY position, created_at"),
+                                               {"e": ctx.reader.email})]
+    book = lambda r: {"title": r.title, "author": r.author, "status": r.status or "not started",
+                      "progress_percent": round(r.progress * 100)}
+    return {"collections": {c: [book(r) for r in rows if c in (r.collections or [])] for c in collections},
+            "not_in_a_collection": [book(r) for r in rows if not r.collections]}
+
+
+def community_posts(ctx: Context, book: str | None = None, author: str | None = None, mine: bool = False) -> dict:
+    found, error = _book_or_error(ctx, book)
+    if error:
+        return error
+    email = ctx.reader.email if mine else None
+    if author and not mine:
+        email = _reader_named(ctx, author)
+        if email is None:
+            return {"error": f"No reader called {author!r}"}
+    posts = community.list_posts(ctx.db, ctx.reader, book_id=found["id"] if found else None, author_email=email, limit=15)
+    return {"posts": [{"id": p["id"], "title": p["title"], "by": p["author"]["display_name"], "date": p["created_at"][:10],
+                       "books": [b["title"] for b in p["books"]], "text": _no_spoilers(p["body"])[:600],
+                       "comments": p["comment_count"], "likes": p["likes"]}
+                      for p in posts if not p["hidden"]]}
+
+
+def read_post(ctx: Context, post: str) -> dict:
+    """One post in full with its comments; `post` is an id from community_posts or (part of) a title."""
+    import uuid
+
+    try:
+        post_id = str(uuid.UUID(post))
+    except ValueError:
+        wanted = _plain(post)
+        match = next((p for p in community.list_posts(ctx.db, ctx.reader, limit=100)
+                      if not p["hidden"] and wanted in _plain(p["title"])), None)
+        if match is None:
+            return {"error": f"No post {post!r}; community_posts lists them"}
+        post_id = match["id"]
+    p = community.get_post(ctx.db, ctx.reader, post_id)
+    if p["hidden"]:
+        return {"error": "That post is hidden"}
+    return {"title": p["title"], "by": p["author"]["display_name"], "date": p["created_at"][:10],
+            "books": [b["title"] for b in p["books"]], "text": _no_spoilers(p["body"]),
+            "quotes": [{"book": q["book"]["title"], "text": q["text"]} for q in p["quotes"]],
+            "comments": [{"by": c["author"]["display_name"], "text": "(spoiler hidden)" if c["spoiler"] else _no_spoilers(c["body"]),
+                          "reply": bool(c["parent_id"])}
+                         for c in p["comments"] if c["author"] and not c["hidden"]][:40]}
+
+
+def my_reviews(ctx: Context) -> dict:
+    return {"reviews": [{"book": r["book"]["title"], "score": r["score"], "recommend": r["recommend"], "text": r["body"],
+                         "date": r["updated_at"][:10]}
+                        for r in community.reviews(ctx.db, ctx.reader, author_email=ctx.reader.email, limit=100)]}
+
+
 def _find_note(ctx: Context, note: str) -> notes_routes.Note | None:
     """One of the reader's notes by id or (part of) its title."""
     mine = notes_routes.list_notes(ctx.db, ctx.reader.email)
@@ -432,6 +506,15 @@ TOOLS = {t.name: t for t in [
          add_review_cards, changes=True,
          label=lambda a: ("Add review cards for the words you keep looking up" if a.get("repeated")
                           else f"Add review cards: {', '.join(a.get('words', [])[:8])}")),
+    Tool("my_shelf", "The reader's own My shelf: their collections with the books in each (and those in none), "
+         "with reading status and progress. Use for 'what's in my Uni collection', 'what should I read next'.",
+         _obj({}), my_shelf),
+    Tool("community_posts", "Recent community posts with their text (shortened), books, comments and likes. `book`: "
+         "only about that book; `author`: a reader's handle or name; `mine`: the reader's own posts.",
+         _obj({"book": BOOK, "author": {"type": "string"}, "mine": {"type": "boolean"}}), community_posts),
+    Tool("read_post", "One community post in full with its quotes and comments. `post`: an id from community_posts or "
+         "(part of) its title.", _obj({"post": {"type": "string"}}, ["post"]), read_post),
+    Tool("my_reviews", "The reader's own reviews (book, score 0–10, recommend, text).", _obj({}), my_reviews),
     Tool("list_notes", "The reader's notes (id, title, book, last change, length), newest first; `book` filters.",
          _obj({"book": BOOK}), list_notes),
     Tool("read_note", "One of the reader's notes in full (Markdown). `note`: its id or (part of) its title.",

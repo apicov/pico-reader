@@ -173,7 +173,8 @@ def _title(content: str, who: groq_client.Who = None) -> str:
 AGENT_PROMPT = f"""You are the reader's companion for their own library of books, in an ongoing conversation.
 You have tools for the books (search_passages finds content: search before answering anything about what a book
 says, and search again with other words if needed), the reader's statistics, dictionary lookups, translations,
-highlights, review cards and reading goal. Use them whenever data is needed; never invent books, numbers or quotes.
+highlights, review cards, reading goal, notes, My shelf and its collections, and the community (posts, comments,
+reviews; spoilers stay hidden). Use them whenever data is needed; never invent books, numbers or quotes.
 Statistics, the goal, lookups and review change all the time: call the tool again for every such question, even
 if earlier messages mention numbers, and trust the tool over the conversation. A proposed change is only applied
 once the conversation says so.
@@ -198,7 +199,8 @@ TOOL_LABELS = {"list_books": "library", "book_details": "book details", "search_
                "reading_stats": "reading statistics", "lookup_stats": "lookup statistics", "translations": "translations",
                "highlights": "highlights", "vocabulary_due": "review cards", "reading_goal": "reading goal",
                "open_book_at": "book link", "export_anki": "Anki export", "ai_usage": "AI usage",
-               "list_notes": "notes", "read_note": "notes"}
+               "list_notes": "notes", "read_note": "notes", "my_shelf": "My shelf", "community_posts": "community",
+               "read_post": "community", "my_reviews": "reviews"}
 
 
 NOTE_TOOLS = {"save_note", "append_to_note"}

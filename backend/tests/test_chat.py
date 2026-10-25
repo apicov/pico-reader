@@ -249,3 +249,34 @@ def test_a_bad_time_zone_is_handled(client, admin_headers, indexed_book, groq):
     r = client.post(f"/api/conversations/{cid}/messages", headers=admin_headers,
                     json={"content": "How much this week?", "tz": "Mars/Olympus"})
     assert events(r)[-1][0] == "done"
+
+
+def test_the_agent_reads_my_shelf_posts_and_reviews(client, admin_headers, auth_headers, indexed_book, groq):
+    # another reader posts and comments; one post is hidden by an admin; a spoiler stays hidden
+    client.get("/api/profiles/me", headers=auth_headers)
+    client.put("/api/profiles/me", headers=auth_headers, json={"handle": "anna", "display_name": "Anna"})
+    shown = client.post("/api/posts", headers=auth_headers, json={
+        "title": "Pruning thoughts", "body": "Magnitude pruning works. ||The end is a twist.||", "book_ids": [indexed_book]}).json()["id"]
+    client.post(f"/api/posts/{shown}/comments", headers=admin_headers, json={"body": "Agreed"})
+    client.post(f"/api/posts/{shown}/comments", headers=admin_headers, json={"body": "Secret ending", "spoiler": True})
+    hidden = client.post("/api/posts", headers=auth_headers, json={"title": "Spam"}).json()["id"]
+    client.post(f"/api/admin/hide/post/{hidden}", headers=admin_headers)
+    client.put(f"/api/books/{indexed_book}/review", headers=admin_headers, json={"score": 8, "recommend": True, "body": "Useful"})
+    client.put("/api/shelf/collections/col-00000001", headers=admin_headers, json={"name": "Uni"})
+    client.put(f"/api/shelf/collections/col-00000001/books/{indexed_book}", headers=admin_headers)
+
+    groq.steps += [call("my_shelf", {}), call("community_posts", {"author": "anna"}, "call_2"),
+                   call("read_post", {"post": "pruning"}, "call_3"), call("my_reviews", {}, "call_4"), say("Here you go.")]
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "What's on my shelf, what did Anna post, and what did I review?")
+    assert evs[-1][0] == "done"
+    r = {m["tool_call_id"]: json.loads(m["content"]) for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"}
+    assert r["call_1"]["collections"]["Uni"][0]["title"] == "Efficient ML"
+    assert [p["title"] for p in r["call_2"]["posts"]] == ["Pruning thoughts"]  # the hidden one isn't there
+    assert "twist" not in r["call_2"]["posts"][0]["text"] and "(spoiler hidden)" in r["call_2"]["posts"][0]["text"]
+    post = r["call_3"]
+    assert post["books"] == ["Efficient ML"] and [c["text"] for c in post["comments"]] == ["Agreed", "(spoiler hidden)"]
+    assert r["call_4"]["reviews"][0] == {"book": "Efficient ML", "score": 8, "recommend": True, "text": "Useful",
+                                         "date": r["call_4"]["reviews"][0]["date"]}
+    stored = client.get(f"/api/conversations/{cid}", headers=admin_headers).json()["messages"][1]
+    assert set(stored["extras"]["tools"]) == {"My shelf", "community", "reviews"}
