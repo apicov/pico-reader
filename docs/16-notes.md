@@ -21,7 +21,8 @@ that in the app. The answer limit is 4,000 tokens, so a whole note fits in one c
   deleted. Tapping one opens the book at the passage.
 - Diagrams are ```` ```mermaid ```` blocks (flowchart, mindmap, timeline, …), drawn by
   [mermaid](https://mermaid.js.org) in `frontend/src/components/diagrams.ts`. The library loads only when a text
-  has a diagram. Diagrams keep their natural size and scroll sideways on a phone; colours follow the reading
+  has a diagram; on the web it's fetched the first time one is shown and kept for offline use after that (the
+  Android app has it built in). Diagrams keep their natural size and scroll sideways on a phone; colours follow the reading
   theme (Night turns them amber like everything else). A block that doesn't parse is shown as code with a note.
 - Citations inside code (a diagram's `A[1]`) stay as they are.
 

@@ -35,6 +35,10 @@ allowlisted email ([04](04-backend.md) §7).
 
 - `polyfills.ts` (core-js) and `build.target: es2017`: the app also runs in older Android WebViews.
 - A service worker (vite-plugin-pwa) that caches the app shell, so the web app opens offline. It is registered
-  on the web only, never inside the Android app.
+  on the web only, never inside the Android app. It controls the page from the first visit (`clientsClaim`).
+- What the service worker doesn't fetch on install, but keeps once used: the ONNX runtime for offline search
+  (`/ort/`), and the diagram library (mermaid, ~3 MB). `vite.config.ts` (`findDiagramChunks`) leaves out of the
+  precache the chunks reachable only through `import('mermaid')`; anything the rest of the app also uses (katex)
+  stays in.
 - Fonts (Literata, Inter) bundled with every character set, so German, Portuguese, Spanish, French, Greek
   and Cyrillic text renders offline.

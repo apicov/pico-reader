@@ -24,9 +24,38 @@ function copyOnnxRuntime(): Plugin {
   }
 }
 
+/** The diagram library (mermaid, ~3 MB in some 60 chunks) only loads when a text has a diagram, so the service
+ *  worker shouldn't fetch it on install. This finds the chunks reachable only through `import('mermaid')`
+ *  (anything the rest of the app also uses, like katex, stays precached); they're cached when first used. */
+const diagramOnly = new Set<string>()
+
+function findDiagramChunks(): Plugin {
+  return {
+    name: 'find-diagram-chunks',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle).filter((c) => c.type === 'chunk')
+      const byName = new Map(chunks.map((c) => [c.fileName, c]))
+      // the chunk holding mermaid itself (it has no facade module: its diagram chunks import from it)
+      const isMermaid = (name: string) => !!byName.get(name)?.moduleIds.some((id) => id.includes('/node_modules/mermaid/'))
+      const reached = new Set<string>()
+      const visit = (name: string) => {
+        const c = byName.get(name)
+        if (!c || reached.has(name)) return
+        reached.add(name)
+        for (const i of c.imports) visit(i)
+        for (const i of c.dynamicImports) if (!isMermaid(i)) visit(i)
+      }
+      for (const c of chunks) if (c.isEntry) visit(c.fileName)
+      diagramOnly.clear()
+      for (const c of chunks) if (!reached.has(c.fileName)) diagramOnly.add(c.fileName)
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     copyOnnxRuntime(),
+    findDiagramChunks(),
     react(),
     // Web-app install + offline shell. The service worker is registered in main.tsx and only on the
     // web: the same dist/ is synced into the Android app, where a SW would pin stale builds.
@@ -53,8 +82,16 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/health/],
         cleanupOutdatedCaches: true,
-        // the ONNX runtime (11 MB, too big to precache): kept once fetched, for offline search
-        runtimeCaching: [{ urlPattern: /\/ort\/.*/, handler: 'CacheFirst', options: { cacheName: 'onnx-runtime' } }],
+        // control the page from the first visit, so what loads later (diagrams) is kept for offline use already
+        clientsClaim: true,
+        manifestTransforms: [async (entries) => ({ manifest: entries.filter((e) => !diagramOnly.has(e.url)), warnings: [] })],
+        runtimeCaching: [
+          // the ONNX runtime (11 MB, too big to precache): kept once fetched, for offline search
+          { urlPattern: /\/ort\/.*/, handler: 'CacheFirst', options: { cacheName: 'onnx-runtime' } },
+          // the diagram chunks left out of the precache: kept once fetched (hashed names never change)
+          { urlPattern: /\/assets\/.*\.js$/, handler: 'CacheFirst',
+            options: { cacheName: 'diagrams', expiration: { maxEntries: 150 } } },
+        ],
       },
     }),
   ],
