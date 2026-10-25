@@ -19,10 +19,11 @@ def test_the_chat_proposes_a_note_and_after_confirming_it_is_on_the_notes_page(p
     page.get_by_text("Save note: Die Wolke: Figuren").wait_for(timeout=20_000)
     page.get_by_role("button", name="Show the note").click()
     page.locator(".diagram svg").first.wait_for(timeout=20_000)  # the preview draws the diagram
-    assert api.get("/api/notes").json() == []  # nothing saved before confirming
+    mine = lambda: [n for n in api.get("/api/notes").json() if n["title"].startswith("Die Wolke: Figuren")]
+    assert mine() == []  # nothing saved before confirming
     page.get_by_role("button", name="Confirm").click()
     page.get_by_text("Done ✓").wait_for()
-    [note] = until(lambda: api.get("/api/notes").json(), what="the note on the server")
+    [note] = until(mine, what="the note on the server")
     assert note["book_title"] == "Die Wolke (Probe)"
 
     page.goto(f"{WEB}/#/notes")

@@ -30,6 +30,7 @@ import { setShelfStatus } from '@/services/shelf';
 import { offlineSearchEnabled } from '@/search/offlineSearch';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
+import { sendToComputer, type Drop } from '@/services/computer';
 
 // Best reading experience first: text that reflows, then EPUB, then fixed PDF pages
 const PREFERENCE: BookFormat[] = ['reflow', 'epub', 'pdf'];
@@ -174,6 +175,19 @@ export default function ReaderPage() {
     window.getSelection()?.removeAllRanges();
   };
 
+  // Sending to the study computer: code as a snippet (its language kept), anything else as a highlight
+  const [sentNote, setSentNote] = useState('');
+  const send = (d: Drop) => void sendToComputer(d).then((r) =>
+    setSentNote(r === 'sent' ? 'Sent to your computer' : 'Queued: it goes to your computer when online'));
+  const meta = (place?: { location: string; progress: number }) => ({ book_id: book?.id, book_title: book?.title,
+    heading: toc.find((t) => t.id === currentToc)?.label ?? '', location: place?.location, progress: place?.progress });
+  const sendSelection = () => {
+    if (!selection) return;
+    send(selection.code
+      ? { kind: 'snippet', language: selection.code.language, body: selection.code.text, meta: meta(selection.anchor) }
+      : { kind: 'highlight', body: selection.text, meta: meta(selection.anchor) });
+  };
+
   /** Opens the post editor with this passage as a quote (it jumps back here from the post). */
   const quoteInPost = (q: { format: string; location: string; progress: number; text: string }) => {
     if (!book) return;
@@ -305,7 +319,7 @@ export default function ReaderPage() {
         {selection && book && (
           <SelectionPanel selection={selection} language={book.language} dark={colors.mode === 'dark'}
             bookId={book.id} location={lastPosition.current?.location ?? ''}
-            onHighlight={selection.anchor ? highlightSelection : undefined}
+            onHighlight={selection.anchor ? highlightSelection : undefined} onSend={sendSelection}
             onQuote={selection.anchor && format ? () => quoteInPost({ format, location: selection.anchor!.location,
               progress: selection.anchor!.progress, text: selection.text }) : undefined}
             onClose={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }} />
@@ -314,8 +328,10 @@ export default function ReaderPage() {
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}
         current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)}
         annotations={annotations} onAnnotation={openAnnotation} onShare={quoteInPost}
+        onSend={(a) => send({ kind: 'highlight', body: a.text, meta: { ...meta(a), heading: '' } })}
         words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
         onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
+      <Snackbar open={!!sentNote} autoHideDuration={3_000} onClose={() => setSentNote('')} message={sentNote} />
       <Snackbar open={ratePrompt} autoHideDuration={12_000} onClose={() => setRatePrompt(false)}
         message="Finished! Tell the others what you thought?"
         action={<Button color="primary" size="small" onClick={() => book && navigate(`/book/${encodeURIComponent(book.id)}`)}>Rate it</Button>} />

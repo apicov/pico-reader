@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardActionArea, CardContent, IconButton, Link, Menu, MenuItem, Stack, Tab, Tabs,
-  TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardActionArea, CardContent, IconButton, Link, Menu, MenuItem, Snackbar, Stack, Tab,
+  Tabs, TextField, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { Markdown } from '@/components/Markdown';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import type { Passage } from '@/services/chat';
 import { exportText } from '@/services/download';
+import { sendToComputer } from '@/services/computer';
 import { cachedNotes, changeNote, deleteNote, getNote, loadNotes, subscribeNotes, type Note } from '@/services/notes';
 import { READING_FONT } from '@/theme/readingThemes';
 
@@ -94,6 +95,7 @@ export function NotePage() {
   const [draft, setDraft] = useState<{ title: string; markdown: string } | null>(null);
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [error, setError] = useState('');
+  const [sent, setSent] = useState('');
   useEffect(() => { void getNote(noteId).then((n) => setNote(n ?? null)); }, [noteId]);
 
   const openPassage = (p: Passage) => navigate(`/read/${encodeURIComponent(p.book_id)}?${new URLSearchParams({
@@ -126,6 +128,12 @@ export function NotePage() {
         <MenuItem onClick={() => { setMenu(null); void exportText(asMarkdown(note), `${note.title.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'note'}.md`); }}>
           Export .md
         </MenuItem>
+        <MenuItem onClick={() => {
+          setMenu(null);
+          void sendToComputer({ kind: 'note', title: note.title, body: asMarkdown(note),
+            meta: { book_id: note.book_id ?? undefined, book_title: note.book_title ?? '' } })
+            .then((r) => setSent(r === 'sent' ? 'Sent to your computer (inbox)' : 'Queued: it goes to your computer when online'));
+        }}>Send to computer (copy)</MenuItem>
         <MenuItem disabled={!online} sx={{ color: 'error.main' }} onClick={() => {
           setMenu(null);
           if (window.confirm(`Delete the note “${note.title}”?`)) {
@@ -134,6 +142,7 @@ export function NotePage() {
         }}>Delete…</MenuItem>
       </Menu>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      <Snackbar open={!!sent} autoHideDuration={3_000} onClose={() => setSent('')} message={sent} />
       {draft ? (
         <Stack spacing={1.5}>
           <TextField label="Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />

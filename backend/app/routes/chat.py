@@ -181,8 +181,8 @@ once the conversation says so.
 {CITATION_RULES}
 Only passages from search_passages get [n] citations; statistics, lists and other tool results are stated
 without brackets.
-For changes (set_reading_goal, mark_known, add_review_cards, save_note, append_to_note) call the tool: the reader
-confirms in the chat, so say what you proposed.
+For changes (set_reading_goal, mark_known, add_review_cards, save_note, append_to_note, send_to_computer) call the
+tool: the reader confirms in the chat, so say what you proposed.
 Notes: only when the reader asks to save or keep something (a summary, outline, study sheet, diagram), search first,
 then call save_note with the whole note in Markdown: ## headings, short lists, [n] citations of the passages it
 draws on. Diagrams (character maps, timelines, mind maps, how ideas connect) go in ```mermaid blocks: flowchart,
@@ -298,8 +298,8 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                             args["_sources"] = [p.model_dump() for p in ctx.sources]
                         action = {"id": f"act-{uuid.uuid4()}", "tool": name, "args": args,
                                   "label": tool.label(args) or name, "status": "pending"}
-                        if name in NOTE_TOOLS:
-                            action["preview"] = str(args.get("markdown", ""))
+                        if name in NOTE_TOOLS or name == "send_to_computer":
+                            action["preview"] = str(args.get("markdown") or args.get("text") or "")
                         session.execute(text("""INSERT INTO chat_actions (id, conversation_id, tool, args, label)
                                                 VALUES (:id, :c, :t, CAST(:a AS jsonb), :l)"""),
                                         {"id": action["id"], "c": conversation_id, "t": name, "a": json.dumps(args),

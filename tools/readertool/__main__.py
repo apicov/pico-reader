@@ -1,7 +1,8 @@
-"""reader — add books to the library from this computer.
+"""reader — add books to the library from this computer, and sync this computer's folder with the app.
 
   reader login you@example.com [--server URL]      (emails a code)
   reader login you@example.com --code 123456
+  reader sync [--folder ~/pico] [--interval 15] [--once] [--install | --uninstall]
   reader add book.pdf|book.epub [--title T] [--author A] [--lang de] [--id ID] [--cover image]
   reader add book.pdf --reflow | --reflow-from marker-output.md     (also a text version)
   reader add-markdown book.md --title T [--author A] --lang de
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import json
 
-from readertool import client, markdown, metadata, passages, quarto, stardict
+from readertool import client, markdown, metadata, passages, quarto, stardict, sync
 from readertool.client import Api, ToolError
 
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
@@ -31,7 +32,7 @@ _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"
 def main() -> None:
     p = argparse.ArgumentParser(prog="reader", description="Add books to the reader's library.")
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("login", help="sign in as an admin (a code is emailed)")
+    s = sub.add_parser("login", help="sign in (a code is emailed); adding books needs an admin")
     s.add_argument("email")
     s.add_argument("--server", default=client.DEFAULT_SERVER)
     s.add_argument("--code", help="the code from the email")
@@ -69,13 +70,20 @@ def main() -> None:
     s.add_argument("--all", action="store_true", help="every book whose index is missing or out of date")
     s.add_argument("--force", action="store_true", help="index again even when up to date")
     s.add_argument("--server", action="store_true", help="queue the books on the server instead of indexing here")
+    s = sub.add_parser("sync", help="sync a folder on this computer with the app (inbox, outbox, notes)")
+    s.add_argument("--folder", type=Path, default=Path("~/pico"))
+    s.add_argument("--interval", type=float, default=15, help="seconds between rounds")
+    s.add_argument("--once", action="store_true", help="one round, then stop")
+    s.add_argument("--install", action="store_true", help="run it as a systemd user service (starts with the session)")
+    s.add_argument("--uninstall", action="store_true", help="stop and remove the service")
     sub.add_parser("list", help="list the library")
     sub.add_parser("delete", help="delete a book and its files").add_argument("id")
     args = p.parse_args()
 
     try:
         {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete, "index": index_books,
-         "dict-add": dict_add, "dict-add-all": dict_add_all, "dict-list": dict_list, "dict-delete": dict_delete}[args.cmd](args)
+         "dict-add": dict_add, "dict-add-all": dict_add_all, "dict-list": dict_list, "dict-delete": dict_delete,
+         "sync": sync_folder}[args.cmd](args)
     except ToolError as e:
         sys.exit(f"error: {e}")
 
@@ -94,6 +102,18 @@ def login(args) -> None:
     else:
         client.send_code(server, args.email)
         print(f"If {args.email} can sign in, a code is on its way. Then: reader login {args.email} --code <code>")
+
+
+def sync_folder(args) -> None:
+    if args.uninstall:
+        return sync.uninstall()
+    if args.install:
+        Api()  # signed in?
+        return sync.install(args.folder, args.interval)
+    try:
+        sync.run(Api(), args.folder, args.interval, args.once)
+    except KeyboardInterrupt:
+        pass
 
 
 def _cover(args, files: dict, fallback_pdf: Path | None, tmp: Path) -> None:

@@ -39,6 +39,9 @@ web app / PWA  ·  Android app (Capacitor, same build)
   (`chat_actions`).
 - **Notes** ([16](16-notes.md)): private Markdown documents with citations and Mermaid diagrams, written by the
   agent on request (`notes`).
+- **The study computer** ([17](17-computer-sync.md)): highlights, code and notes sent from the app (or by the
+  agent) wait in `drops` until the desktop tool (`reader sync`) writes them into a folder; files saved there
+  become notes, and Notes are kept there as `.md` files both ways.
   Turns stream as server-sent events (Apache passes them through with `flushpackets=on`).
 - **Uploads and indexing** ([10](10-uploads-and-offline-search.md)): any reader adds books from the app;
   `book_events` keeps who uploaded, changed or deleted what and when; `index_jobs` + the

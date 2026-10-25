@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { flushEvents } from '@/services/events';
+import { flushComputer } from '@/services/computer';
 import { syncDictPrefs } from '@/dict/prefs';
 import { subscribeOnline } from '@/services/connectivity';
 import { Box, CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
@@ -40,6 +41,7 @@ function Routed() {
     if (!reader) return;
     const flush = () => {
       void flushEvents().catch(() => undefined);
+      void flushComputer().catch(() => undefined);
       void syncDictPrefs();
     };
     flush();

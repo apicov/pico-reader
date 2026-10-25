@@ -6,13 +6,14 @@ import BorderColorIcon from '@mui/icons-material/BorderColor';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import type { Annotation } from '@/services/annotations';
+import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined';
 import type { TocItem } from './types';
 
 const FORMAT_LABEL: Record<string, string> = { reflow: 'Text', epub: 'EPUB', pdf: 'PDF' };
 
 /** Contents and notes (highlights + bookmarks) of the open book. */
 export function TocDrawer({ open, onClose, title, items, current, onPick, annotations, onAnnotation, onEditNote, onDelete,
-  onShare, words, onWord }: {
+  onShare, onSend, words, onWord }: {
   open: boolean; onClose: () => void; title: string; items: TocItem[]; current: string | null;
   onPick: (id: string) => void;
   annotations: Annotation[];
@@ -21,6 +22,7 @@ export function TocDrawer({ open, onClose, title, items, current, onPick, annota
   onDelete: (a: Annotation) => void;
   /** Quote a highlight in a community post */
   onShare: (a: Annotation) => void;
+  onSend: (a: Annotation) => void;
   /** Words looked up before that appear in the open chapter */
   words: { word: string; count: number }[];
   onWord: (word: string) => void;
@@ -85,6 +87,11 @@ export function TocDrawer({ open, onClose, title, items, current, onPick, annota
                 {a.kind === 'highlight' && (
                   <IconButton size="small" aria-label="Share to a post" onClick={() => { onShare(a); onClose(); }}>
                     <ForumOutlinedIcon fontSize="small" />
+                  </IconButton>
+                )}
+                {a.kind === 'highlight' && (
+                  <IconButton size="small" aria-label="Send to computer" onClick={() => onSend(a)}>
+                    <ComputerOutlinedIcon fontSize="small" />
                   </IconButton>
                 )}
                 <IconButton size="small" aria-label="Delete" onClick={() => onDelete(a)}><DeleteOutlineIcon fontSize="small" /></IconButton>

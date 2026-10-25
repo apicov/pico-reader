@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app import categories, community
 from app.auth import Reader
+from app.routes import computer as computer_routes
 from app.routes import notes as notes_routes
 from app.routes import stats as stats_routes
 from app.routes.search import retrieve
@@ -340,7 +341,7 @@ def list_notes(ctx: Context, book: str | None = None) -> dict:
     if error:
         return error
     return {"notes": [{"id": n.id, "title": n.title, "book": n.book_title, "updated": n.updated_at[:10],
-                       "characters": len(n.markdown)}
+                       "characters": len(n.markdown), "made_in": n.origin}
                       for n in notes_routes.list_notes(ctx.db, ctx.reader.email, found["id"] if found else None)]}
 
 
@@ -349,7 +350,7 @@ def read_note(ctx: Context, note: str) -> dict:
     if found is None:
         return {"error": f"No note {note!r}; list_notes shows them"}
     # its [n] belong to the note's own sources, not to this answer's: left out so they aren't cited by mistake
-    return {"id": found.id, "title": found.title, "book": found.book_title,
+    return {"id": found.id, "title": found.title, "book": found.book_title, "made_in": found.origin,
             "markdown": re.sub(r"\s?\[\d+\]", "", found.markdown)}
 
 
@@ -382,6 +383,13 @@ def save_note(ctx: Context, title: str, markdown: str, book: str | None = None,
     except notes_routes.NoteLimit as e:
         return {"error": str(e)}
     return {"saved": n.title, "id": n.id}
+
+
+def send_to_computer(ctx: Context, title: str, text: str, kind: str = "text", language: str = "") -> dict:
+    """Into the reader's study computer's inbox folder (the desktop tool writes it as a file)."""
+    drop = computer_routes.DropIn(kind=kind if kind in ("text", "snippet", "note") else "text", title=title[:200],
+                                  language=language[:30], body=text)
+    return {"sent": title, "id": computer_routes.create_drop(ctx.db, ctx.reader.email, drop)}
 
 
 def append_to_note(ctx: Context, note: str, markdown: str, _sources: list[dict] | None = None) -> dict:
@@ -524,6 +532,12 @@ TOOLS = {t.name: t for t in [
          "as ```mermaid blocks). `book`: the book it is about, if one. Runs after the reader confirms.",
          _obj({"title": {"type": "string"}, "markdown": {"type": "string"}, "book": BOOK}, ["title", "markdown"]),
          save_note, changes=True, label=lambda a: f"Save note: {a.get('title', '')}"),
+    Tool("send_to_computer", "Send text to the reader's study computer: it arrives as a file in their inbox folder "
+         "(Markdown, or a source file for code). `kind`: 'snippet' for code (give `language`, e.g. python), 'note' or "
+         "'text'. Only when the reader asks. Runs after the reader confirms.",
+         _obj({"title": {"type": "string"}, "text": {"type": "string"}, "kind": {"type": "string", "enum": ["text", "snippet", "note"]},
+               "language": {"type": "string"}}, ["title", "text"]),
+         send_to_computer, changes=True, label=lambda a: f"Send to your computer: {a.get('title', '')}"),
     Tool("append_to_note", "Add a section to the end of one of the reader's notes (find it with list_notes). "
          "`markdown`: only the new part. Runs after the reader confirms.",
          _obj({"note": {"type": "string"}, "markdown": {"type": "string"}}, ["note", "markdown"]),

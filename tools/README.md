@@ -16,7 +16,8 @@ styles).
 
 ## Signing in
 
-Only admin readers can add books ([docs/04](../docs/04-backend.md) §7). Two steps, like the app:
+Two steps, like the app. Any reader can sign in to sync (below); adding books needs an admin
+([docs/04](../docs/04-backend.md) §7):
 
 ```bash
 ./reader login you@example.com                  # emails a code
@@ -121,3 +122,15 @@ KaTeX, and follows links between chapters. Links to local files (`file://`) are 
 From a Quarto book, each chapter is the content of the rendered page's `<main>`, without Quarto's
 navigation, and `book.css` is the book's own `.scss` theme files compiled without Quarto's Bootstrap
 theme.
+
+## Sync with this computer
+
+`reader sync` keeps a folder (default `~/pico`) in step with the app: `inbox/` gets what you send from the app
+(highlights as Markdown, code as source files), a file saved in `outbox/` becomes a note, and `notes/` holds your
+Notes as `.md` files, edited on either side. Details: [docs/17](../docs/17-computer-sync.md).
+
+```bash
+./reader sync --once            # one round
+./reader sync                   # every 15 s until Ctrl+C (--interval, --folder)
+./reader sync --install         # as a systemd user service; --uninstall removes it
+```

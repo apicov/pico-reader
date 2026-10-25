@@ -5,6 +5,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BorderColorIcon from '@mui/icons-material/BorderColor';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined';
 import { DictResults } from '@/dict/DictResults';
 import type { TextSelection } from './selection';
 import { TranslationCard } from './TranslationCard';
@@ -13,12 +14,14 @@ const isWord = (text: string) => !/\s/.test(text) && text.length <= 48;
 
 /** Under the text while something is selected: one word → its dictionary entries (and its sentence's
  *  translation on request); more → the passage's translation. */
-export function SelectionPanel({ selection, language, dark, bookId, location, onClose, onHighlight, onQuote }: {
+export function SelectionPanel({ selection, language, dark, bookId, location, onClose, onHighlight, onQuote, onSend }: {
   selection: TextSelection; language: string; dark: boolean; bookId: string; location: string; onClose: () => void;
   /** Absent when the selection's place isn't known (it can't be highlighted) */
   onHighlight?: () => void;
   /** Quote the selection in a community post (absent like onHighlight) */
   onQuote?: () => void;
+  /** Send it to the reader's study computer (code as code) */
+  onSend?: () => void;
 }) {
   const word = isWord(selection.text);
   // a word picked from a translation's vocabulary, looked up in place
@@ -46,6 +49,9 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
         )}
         {onQuote && !word && !term && !sentence && (
           <IconButton size="small" aria-label="Quote in a post" onClick={onQuote}><ForumOutlinedIcon fontSize="small" /></IconButton>
+        )}
+        {onSend && !term && !sentence && (
+          <IconButton size="small" aria-label="Send to computer" onClick={onSend}><ComputerOutlinedIcon fontSize="small" /></IconButton>
         )}
         <IconButton size="small" aria-label="Copy" onClick={() => void navigator.clipboard?.writeText(showDict ?? passage)}>
           <ContentCopyIcon fontSize="small" />

@@ -22,6 +22,7 @@ repository. Follow the guides in order for a fresh install.
 | [14 My shelf](14-my-shelf.md) | The library tabs; My shelf, a hand-picked list apart from reading status |
 | [15 Night theme](15-night-mode.md) | Amber, no-blue reading before sleep: the filter, the dimming, the research |
 | [16 Notes](16-notes.md) | Summaries and diagrams the chat agent writes on request; reading, editing, exporting |
+| [17 Computer sync](17-computer-sync.md) | Highlights, code and notes to the study computer as files, and back (`reader sync`) |
 | [tools/README](../tools/README.md) | Adding books and dictionaries from your computer; the reflow book format |
 
 Secrets are never in this repository. The server keeps them in `/etc/pico-reader/reader.env`; a local copy of

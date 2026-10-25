@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useInstalledDicts } from '@/hooks/useInstalledDicts';
 import { ReadingGoalSettings } from '@/components/ReadingGoalSettings';
 import { OfflineSearchSettings } from '@/components/OfflineSearchSettings';
+import { ComputerSettings } from '@/components/ComputerSettings';
 import { useSettings } from '@/contexts/SettingsContext';
 import { LANGUAGES } from '@/services/languages';
 import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
@@ -61,6 +62,7 @@ export default function SettingsPage() {
           {Object.entries(LANGUAGES).map(([code, name]) => <MenuItem key={code} value={code}>{name}</MenuItem>)}
         </Select>
       </FormControl>
+      <ComputerSettings />
       <Box>
         <Typography variant="h6">Community</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

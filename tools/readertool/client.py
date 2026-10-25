@@ -1,4 +1,5 @@
-"""The backend's admin API, signed in as an admin reader. The token is kept in ~/.config/pico-reader/tool.json."""
+"""The backend's API, signed in as a reader (adding books needs an admin; syncing with this computer doesn't).
+The token is kept in ~/.config/pico-reader/tool.json."""
 
 import hashlib
 import json
@@ -13,7 +14,10 @@ DEFAULT_SERVER = "https://books.apicov.xyz"
 
 
 class ToolError(Exception):
-    pass
+    def __init__(self, message: str, status: int | None = None, detail=None):
+        super().__init__(message)
+        self.status = status  # the HTTP status, when the server answered
+        self.detail = detail
 
 
 def load_config() -> dict:
@@ -34,9 +38,9 @@ def login(server: str, email: str, code: str) -> None:
     r = requests.post(f"{server}/api/auth/verify-code", json={"email": email, "code": code}, timeout=30)
     _check(r)
     reader = r.json()["reader"]
+    save_config({"server": server, "token": r.json()["access_token"], "email": email, "is_admin": reader["is_admin"]})
     if not reader["is_admin"]:
-        raise ToolError(f"{email} is not an admin; only admins can add books")
-    save_config({"server": server, "token": r.json()["access_token"], "email": email})
+        print(f"{email} can sync with this computer (`reader sync`); adding books needs an admin")
 
 
 class Api:
@@ -56,6 +60,9 @@ class Api:
 
     def post_list(self, path: str, body: list):
         return _check(self.session.post(self.server + path, json=body, timeout=120)).json()
+
+    def patch(self, path: str, body: dict):
+        return _check(self.session.patch(self.server + path, json=body, timeout=60)).json()
 
     def delete(self, path: str) -> None:
         _check(self.session.delete(self.server + path, timeout=60))
@@ -105,5 +112,6 @@ def _check(r: requests.Response) -> requests.Response:
             detail = r.json().get("detail")
         except ValueError:
             detail = r.text[:200]
-        raise ToolError(f"HTTP {r.status_code}: {detail}")
+        message = detail.get("message", detail) if isinstance(detail, dict) else detail
+        raise ToolError(f"HTTP {r.status_code}: {message}", r.status_code, detail)
     return r

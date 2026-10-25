@@ -4,6 +4,19 @@ export interface TextSelection {
   context: string;
   /** Where it is, in the open format's terms (for highlights); set by the view */
   anchor?: { location: string; progress: number };
+  /** Inside a code block: the text as it is (lines and indentation kept) and its language, if the block says */
+  code?: { text: string; language: string };
+}
+
+/** `language-python` (Markdown, EPUB), or Quarto's `sourceCode python` */
+function codeLanguage(el: Element | null): string {
+  for (let e = el; e; e = e.parentElement) {
+    const cls = e.getAttribute('class') ?? '';
+    const m = /(?:^|\s)(?:language|lang)-([\w+#-]+)/.exec(cls) ?? /(?:^|\s)sourceCode\s+(\w[\w+#-]*)/.exec(cls);
+    if (m) return m[1].toLowerCase();
+    if (e.tagName === 'PRE') break;
+  }
+  return '';
 }
 
 const BLOCK = 'p, li, dd, dt, td, th, blockquote, h1, h2, h3, h4, h5, h6, figcaption, div';
@@ -15,6 +28,11 @@ export function readSelection(sel: Selection | null): TextSelection | null {
   if (!text) return null;
   const node = sel.getRangeAt(0).startContainer;
   const el = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement) as Element | null;
+  const pre = el?.closest('pre') ?? (el?.closest('code') && !el.closest('p, li') ? el.closest('code') : null);
+  if (pre) {
+    const raw = sel.toString().replace(/\s+$/, '');
+    return { text, context: text, code: { text: raw, language: codeLanguage(el) } };
+  }
   const block = el?.closest(BLOCK) ?? el;
   const whole = (block?.textContent ?? text).replace(/\s+/g, ' ').trim();
   const at = whole.indexOf(text);
