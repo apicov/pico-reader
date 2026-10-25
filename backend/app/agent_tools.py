@@ -5,6 +5,7 @@ Tools marked `changes=True` don't run when the model calls them: the chat propos
 after the reader confirms (chat.py)."""
 
 import json
+import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app import categories, community
 from app.auth import Reader
+from app.routes import notes as notes_routes
 from app.routes import stats as stats_routes
 from app.routes.search import retrieve
 
@@ -246,7 +248,75 @@ def member_lists(ctx: Context, handle: str | None = None) -> dict:
                       for l in community.lists(ctx.db, ctx.reader, owner_email=owner) if not l["hidden"]][:20]}
 
 
+def _find_note(ctx: Context, note: str) -> notes_routes.Note | None:
+    """One of the reader's notes by id or (part of) its title."""
+    mine = notes_routes.list_notes(ctx.db, ctx.reader.email)
+    wanted = _plain(note)
+    return next((n for n in mine if n.id == note), None) or next((n for n in mine if wanted in _plain(n.title)), None)
+
+
+def list_notes(ctx: Context, book: str | None = None) -> dict:
+    found, error = _book_or_error(ctx, book)
+    if error:
+        return error
+    return {"notes": [{"id": n.id, "title": n.title, "book": n.book_title, "updated": n.updated_at[:10],
+                       "characters": len(n.markdown)}
+                      for n in notes_routes.list_notes(ctx.db, ctx.reader.email, found["id"] if found else None)]}
+
+
+def read_note(ctx: Context, note: str) -> dict:
+    found = _find_note(ctx, note)
+    if found is None:
+        return {"error": f"No note {note!r}; list_notes shows them"}
+    # its [n] belong to the note's own sources, not to this answer's: left out so they aren't cited by mistake
+    return {"id": found.id, "title": found.title, "book": found.book_title,
+            "markdown": re.sub(r"\s?\[\d+\]", "", found.markdown)}
+
+
 # --- tools that change something (run after the reader confirms) ---
+
+def _cited(markdown: str, sources: list[dict], first: int = 1) -> tuple[str, list[dict]]:
+    """The note's own copy of the passages it cites, numbered from `first` in the order they appear; [n] that
+    point at no passage are dropped."""
+    numbers: dict[int, int] = {}
+
+    def renumber(m: re.Match) -> str:
+        n = int(m.group(2))
+        if not 1 <= n <= len(sources):
+            return ""
+        numbers.setdefault(n, first + len(numbers))
+        return f"{m.group(1)}[{numbers[n]}]"
+
+    out = re.sub(r"(\s?)\[(\d+)\]", renumber, markdown)
+    return out, [sources[n - 1] for n in numbers]
+
+
+def save_note(ctx: Context, title: str, markdown: str, book: str | None = None,
+              _sources: list[dict] | None = None) -> dict:
+    found, error = _book_or_error(ctx, book)
+    if error:
+        return error
+    markdown, sources = _cited(markdown, _sources or [])
+    try:
+        n = notes_routes.create_note(ctx.db, ctx.reader.email, title, markdown, found["id"] if found else None, sources)
+    except notes_routes.NoteLimit as e:
+        return {"error": str(e)}
+    return {"saved": n.title, "id": n.id}
+
+
+def append_to_note(ctx: Context, note: str, markdown: str, _sources: list[dict] | None = None) -> dict:
+    found = _find_note(ctx, note)
+    if found is None:
+        return {"error": f"No note {note!r}"}
+    added, sources = _cited(markdown, _sources or [], first=len(found.sources) + 1)
+    try:
+        n = notes_routes.change_note(ctx.db, ctx.reader.email, found.id,
+                                     markdown=f"{found.markdown.rstrip()}\n\n{added.strip()}\n",
+                                     sources=found.sources + sources)
+    except notes_routes.NoteLimit as e:
+        return {"error": str(e)}
+    return {"updated": n.title, "id": n.id}
+
 
 def set_reading_goal(ctx: Context, enabled: bool, minutes: int | None = None, days: list[int] | None = None) -> dict:
     settings = stats_routes.load_settings(ctx.db, ctx.reader.email)
@@ -356,6 +426,19 @@ TOOLS = {t.name: t for t in [
          add_review_cards, changes=True,
          label=lambda a: ("Add review cards for the words you keep looking up" if a.get("repeated")
                           else f"Add review cards: {', '.join(a.get('words', [])[:8])}")),
+    Tool("list_notes", "The reader's notes (id, title, book, last change, length), newest first; `book` filters.",
+         _obj({"book": BOOK}), list_notes),
+    Tool("read_note", "One of the reader's notes in full (Markdown). `note`: its id or (part of) its title.",
+         _obj({"note": {"type": "string"}}, ["note"]), read_note),
+    Tool("save_note", "Save a new note for the reader: a summary, outline, study sheet or diagram they asked to "
+         "keep. `markdown`: the whole note (## headings, lists, [n] citations of search_passages sources, diagrams "
+         "as ```mermaid blocks). `book`: the book it is about, if one. Runs after the reader confirms.",
+         _obj({"title": {"type": "string"}, "markdown": {"type": "string"}, "book": BOOK}, ["title", "markdown"]),
+         save_note, changes=True, label=lambda a: f"Save note: {a.get('title', '')}"),
+    Tool("append_to_note", "Add a section to the end of one of the reader's notes (find it with list_notes). "
+         "`markdown`: only the new part. Runs after the reader confirms.",
+         _obj({"note": {"type": "string"}, "markdown": {"type": "string"}}, ["note", "markdown"]),
+         append_to_note, changes=True, label=lambda a: f"Add to note: {a.get('note', '')}"),
 ]}
 
 

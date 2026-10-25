@@ -41,6 +41,7 @@ export interface ChatAction {
   id: string;
   label: string;
   status: 'pending' | 'done' | 'cancelled' | 'failed';
+  preview?: string; // a note the agent wants to save, in Markdown (its [n] are the message's sources)
 }
 
 export interface MessageExtras {

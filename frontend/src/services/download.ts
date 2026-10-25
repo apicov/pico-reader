@@ -1,7 +1,7 @@
 /** Files made by the backend (exports): saved by the browser on the web, handed to Android's share sheet
  *  in the app (e.g. straight into AnkiDroid). */
 import { Capacitor } from '@capacitor/core';
-import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { FileTransfer } from '@capacitor/file-transfer';
 import { Share } from '@capacitor/share';
 import { ApiError, getToken } from '@/services/api';
@@ -23,6 +23,21 @@ export async function downloadExport(path: string, filename: string): Promise<vo
     throw new ApiError(res.status, typeof detail === 'string' ? detail : `Download failed (${res.status})`);
   }
   const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/** Text made on the device (a note as .md): saved by the browser, or handed to Android's share sheet. */
+export async function exportText(text: string, filename: string, type = 'text/markdown'): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    const { uri } = await Filesystem.writeFile({ directory: Directory.Cache, path: filename, data: text, encoding: Encoding.UTF8 });
+    await Share.share({ title: filename, files: [uri] });
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

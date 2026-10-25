@@ -14,6 +14,7 @@ import { useLoad } from '@/hooks/useLoad';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { bookCommunity, deleteReview, saveReview, setHidden, type Review } from '@/services/community';
 import type { Book } from '@/services/types';
+import { BookNotes } from '@/pages/NotesPage';
 import { loadCategories, pretty, type Category } from '@/services/categories';
 
 function Cover({ book }: { book: Book }) {
@@ -143,6 +144,7 @@ function BookView({ bookId }: { bookId: string }) {
           )}
         </Box>
       </Stack>
+      <BookNotes bookId={bookId} />
       {data.book.available && <ReviewForm bookId={bookId} mine={data.my_review} onSaved={() => void reload()} />}
       {others.length > 0 && (
         <>

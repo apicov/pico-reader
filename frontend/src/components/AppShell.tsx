@@ -7,6 +7,7 @@ import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlin
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import NoteAltOutlinedIcon from '@mui/icons-material/NoteAltOutlined';
 import { Link as RouterLink } from 'react-router-dom';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { READING_FONT } from '@/theme/readingThemes';
@@ -37,6 +38,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </IconButton>
           <IconButton component={RouterLink} to="/ask" aria-label="Ask your library">
             <QuestionAnswerOutlinedIcon />
+          </IconButton>
+          <IconButton component={RouterLink} to="/notes" aria-label="Notes">
+            <NoteAltOutlinedIcon />
           </IconButton>
           <IconButton component={RouterLink} to="/translations" aria-label="Translations">
             <TranslateIcon />

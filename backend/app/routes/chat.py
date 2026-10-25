@@ -180,8 +180,14 @@ once the conversation says so.
 {CITATION_RULES}
 Only passages from search_passages get [n] citations; statistics, lists and other tool results are stated
 without brackets.
-For changes (set_reading_goal, mark_known, add_review_cards) call the tool: the reader confirms in the chat, so
-say what you proposed. open_book_at and export_anki show buttons; mention them briefly.
+For changes (set_reading_goal, mark_known, add_review_cards, save_note, append_to_note) call the tool: the reader
+confirms in the chat, so say what you proposed.
+Notes: only when the reader asks to save or keep something (a summary, outline, study sheet, diagram), search first,
+then call save_note with the whole note in Markdown: ## headings, short lists, [n] citations of the passages it
+draws on. Diagrams (character maps, timelines, mind maps, how ideas connect) go in ```mermaid blocks: flowchart,
+mindmap or timeline, short labels in double quotes. To add to a note the reader already has, find it with
+list_notes and call append_to_note with only the new part. Don't paste the note into your answer: say what it
+holds. open_book_at and export_anki show buttons; mention them briefly.
 Write plain text with light Markdown (short paragraphs, "- " lists, **bold** for key terms).
 Today is {{today}}. {{scope}}
 
@@ -191,7 +197,11 @@ LIBRARY:
 TOOL_LABELS = {"list_books": "library", "book_details": "book details", "search_passages": "searched the books",
                "reading_stats": "reading statistics", "lookup_stats": "lookup statistics", "translations": "translations",
                "highlights": "highlights", "vocabulary_due": "review cards", "reading_goal": "reading goal",
-               "open_book_at": "book link", "export_anki": "Anki export", "ai_usage": "AI usage"}
+               "open_book_at": "book link", "export_anki": "Anki export", "ai_usage": "AI usage",
+               "list_notes": "notes", "read_note": "notes"}
+
+
+NOTE_TOOLS = {"save_note", "append_to_note"}
 
 
 def _event(name: str, data) -> str:
@@ -253,7 +263,8 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
             extras: dict = {"tools": [], "links": [], "actions": []}
             answer = ""
             for _round in range(MAX_ROUNDS):
-                reply = groq_client.chat_tools(messages, schemas, max_tokens=1500, who=(reader.email, "chat"))
+                # room for a whole note in a save_note call
+                reply = groq_client.chat_tools(messages, schemas, max_tokens=4000, who=(reader.email, "chat"))
                 calls = reply.get("tool_calls") or []
                 if not calls:
                     answer = (reply.get("content") or "").strip()
@@ -269,14 +280,19 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                             args = json.loads(raw)
                         except json.JSONDecodeError:
                             args = {}
+                        if name in NOTE_TOOLS:
+                            # the passages its [n] cite, kept with the note; the reader sees it before confirming
+                            args["_sources"] = [p.model_dump() for p in ctx.sources]
                         action = {"id": f"act-{uuid.uuid4()}", "tool": name, "args": args,
                                   "label": tool.label(args) or name, "status": "pending"}
+                        if name in NOTE_TOOLS:
+                            action["preview"] = str(args.get("markdown", ""))
                         session.execute(text("""INSERT INTO chat_actions (id, conversation_id, tool, args, label)
                                                 VALUES (:id, :c, :t, CAST(:a AS jsonb), :l)"""),
                                         {"id": action["id"], "c": conversation_id, "t": name, "a": json.dumps(args),
                                          "l": action["label"]})
                         session.commit()
-                        extras["actions"].append({k: action[k] for k in ("id", "label", "status")})
+                        extras["actions"].append({k: action[k] for k in ("id", "label", "status", "preview") if k in action})
                         yield _event("action", extras["actions"][-1])
                         result = {"status": "proposed; the reader is asked to confirm in the chat"}
                     else:

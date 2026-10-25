@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   Alert, AppBar, Box, Button, Card, CardActionArea, CardContent, CircularProgress, Collapse, Dialog, DialogActions,
-  DialogContent, DialogTitle, Drawer, IconButton, InputAdornment, List, ListItemButton, ListItemText, Menu, MenuItem,
+  DialogContent, DialogTitle, Drawer, IconButton, InputAdornment, List, ListItemButton, Link, ListItemText, Menu, MenuItem,
   Chip, Stack, TextField, Toolbar, Tooltip, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
@@ -13,7 +13,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { Markdown } from '@/components/Markdown';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -110,6 +110,21 @@ function ConversationList({ current, onPick, onNew, refreshKey, online }: {
           }}>Save</Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+}
+
+/** The note the agent wants to save, folded until opened, so the reader sees what they confirm */
+function NotePreview({ markdown, onCite }: { markdown: string; onCite: (n: number) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Box sx={{ mb: 1 }}>
+      <Button size="small" onClick={() => setOpen(!open)} sx={{ px: 0 }}>{open ? 'Hide the note' : 'Show the note'}</Button>
+      {open && (
+        <Box sx={{ mt: 1, p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1, maxHeight: 420, overflowY: 'auto' }}>
+          <Markdown text={markdown} onCite={onCite} sx={{ fontFamily: READING_FONT, lineHeight: 1.55 }} />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -358,6 +373,7 @@ export default function AskPage() {
                       <Card key={a.id} sx={{ mt: 1.5, fontFamily: 'Inter, sans-serif' }}>
                         <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                           <Typography variant="body2" sx={{ mb: a.status === 'pending' ? 1 : 0 }}>{a.label}</Typography>
+                          {a.preview && <NotePreview markdown={a.preview} onCite={(n) => m.sources[n - 1] && openPassage(m.sources[n - 1])} />}
                           {a.status === 'pending' ? (
                             <Stack direction="row" spacing={1}>
                               <Button size="small" variant="contained" disableElevation disabled={m.id < 0 || !online}
@@ -365,7 +381,10 @@ export default function AskPage() {
                               <Button size="small" disabled={m.id < 0 || !online} onClick={() => void decide(m.id, a.id, false)}>Cancel</Button>
                             </Stack>
                           ) : (
-                            <Typography variant="caption" color="text.secondary">{a.status === 'done' ? 'Done ✓' : a.status === 'failed' ? 'Failed' : 'Cancelled'}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {a.status === 'done' ? 'Done ✓' : a.status === 'failed' ? 'Failed' : 'Cancelled'}
+                              {a.status === 'done' && a.preview && <> · <Link component={RouterLink} to="/notes">Notes</Link></>}
+                            </Typography>
                           )}
                         </CardContent>
                       </Card>
