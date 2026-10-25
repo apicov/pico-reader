@@ -10,8 +10,8 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && npx cap sync",
-    "build:web": "tsc -b && vite build",
+    "build": "tsc -b && NODE_OPTIONS=--max-old-space-size=2048 vite build && npx cap sync",
+    "build:web": "tsc -b && NODE_OPTIONS=--max-old-space-size=2048 vite build",
     "preview": "vite preview",
     "test": "vitest"
   },
