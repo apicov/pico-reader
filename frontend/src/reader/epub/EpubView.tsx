@@ -36,7 +36,8 @@ function bookCss(s: Settings): string {
     @namespace epub "http://www.idpf.org/2007/ops";
     ${appFontFaces()}
     /* foliate paints the page background itself, from --theme-bg-color (also on a theme change) */
-    html { color-scheme: ${c.mode}; --theme-bg-color: ${c.background}; background: ${c.background} !important; }
+    html { color-scheme: ${c.mode}; --theme-bg-color: ${c.background}; background: ${c.background} !important;
+      -webkit-tap-highlight-color: ${c.tap}; }
     body { background: transparent !important; color: ${c.text} !important; font-size: ${18 * s.fontScale}px !important; }
     /* the reading font and colours win over the book's own (dark themes need it), except for code */
     body, body * { font-family: ${READING_FONT} !important; }

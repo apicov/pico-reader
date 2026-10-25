@@ -15,6 +15,8 @@ interface ReadingColors {
   code: { bg: string; kw: string; str: string; num: string; fn: string; type: string };
   /** how the theme picker shows it, when the colours above aren't what the eye sees (night: greys under a filter) */
   swatch?: { background: string; text: string };
+  /** the flash when a tap lands (Android paints it outside CSS filters, so night needs it amber itself) */
+  tap: string;
 }
 
 /** Quiet, low-contrast-glare palettes for long reading. The accent is a muted ink blue in every theme but night:
@@ -23,20 +25,24 @@ interface ReadingColors {
 export const READING_THEMES: Record<ReadingThemeName, ReadingColors> = {
   paper: { label: 'Paper', mode: 'light', background: '#faf8f3', surface: '#ffffff', text: '#2b2b2b',
     muted: '#6f6a61', accent: '#3d5a80', divider: '#e6e1d6',
-    code: { bg: '#f1eee6', kw: '#7a3e9d', str: '#3f7a3a', num: '#a0522d', fn: '#2f5e8f', type: '#8a5a00' } },
+    code: { bg: '#f1eee6', kw: '#7a3e9d', str: '#3f7a3a', num: '#a0522d', fn: '#2f5e8f', type: '#8a5a00' },
+    tap: 'rgba(43, 43, 43, 0.12)' },
   sepia: { label: 'Sepia', mode: 'light', background: '#f4ecd8', surface: '#f9f3e3', text: '#5b4636',
     muted: '#857060', accent: '#7a5a3a', divider: '#e2d6ba',
-    code: { bg: '#ede2c8', kw: '#7a3e6d', str: '#4f6b2a', num: '#9a4a1d', fn: '#3d5a7a', type: '#7a5200' } },
+    code: { bg: '#ede2c8', kw: '#7a3e6d', str: '#4f6b2a', num: '#9a4a1d', fn: '#3d5a7a', type: '#7a5200' },
+    tap: 'rgba(91, 70, 54, 0.14)' },
   dark: { label: 'Dark', mode: 'dark', background: '#1e1e1e', surface: '#262626', text: '#d6d3cd',
     muted: '#9a968e', accent: '#8fb3d9', divider: '#363431',
-    code: { bg: '#2a2a2a', kw: '#c59bd9', str: '#9ccc8a', num: '#e0a372', fn: '#8fb3d9', type: '#d9c27a' } },
+    code: { bg: '#2a2a2a', kw: '#c59bd9', str: '#9ccc8a', num: '#e0a372', fn: '#8fb3d9', type: '#d9c27a' },
+    tap: 'rgba(214, 211, 205, 0.14)' },
   black: { label: 'Black', mode: 'dark', background: '#000000', surface: '#111111', text: '#c9c6c0',
     muted: '#8a877f', accent: '#8fb3d9', divider: '#262626',
-    code: { bg: '#161616', kw: '#c59bd9', str: '#9ccc8a', num: '#e0a372', fn: '#8fb3d9', type: '#d9c27a' } },
+    code: { bg: '#161616', kw: '#c59bd9', str: '#9ccc8a', num: '#e0a372', fn: '#8fb3d9', type: '#d9c27a' },
+    tap: 'rgba(201, 198, 192, 0.14)' },
   night: { label: 'Night', mode: 'dark', background: '#000000', surface: '#0e0e0e', text: '#c8c8c8',
     muted: '#7a7a7a', accent: '#9a9a9a', divider: '#222222',
     code: { bg: '#141414', kw: '#f0f0f0', str: '#a8a8a8', num: '#dcdcdc', fn: '#ffffff', type: '#b8b8b8' },
-    swatch: { background: '#000000', text: '#c84c00' } },
+    swatch: { background: '#000000', text: '#c84c00' }, tap: 'rgba(200, 76, 0, 0.3)' },
 };
 
 export const READING_FONT = '"Literata", "Noto Serif", Georgia, serif';
@@ -65,6 +71,7 @@ export function createAppTheme(name: ReadingThemeName): Theme {
         styleOverrides: { root: { backgroundColor: c.background, borderBottom: `1px solid ${c.divider}` } },
       },
       MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
+      MuiCssBaseline: { styleOverrides: { html: { WebkitTapHighlightColor: c.tap } } }, // inherited by everything
       MuiCard: { defaultProps: { variant: 'outlined' } },
     },
   });

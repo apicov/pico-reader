@@ -62,3 +62,15 @@ def test_night_theme_leaves_no_blue_anywhere(page):
     image = Image.open(io.BytesIO(page.screenshot())).convert("RGB")
     assert image.getchannel("B").getextrema()[1] == 0
     assert image.getchannel("R").getextrema()[1] > 100  # not just a black screen
+
+
+def test_night_theme_taps_flash_amber_not_blue(page, book_id):
+    """Android paints the tap flash outside the night filter: its own colour must have no blue."""
+    page.goto(f"{WEB}/#/settings")
+    page.get_by_role("button", name="Night").click()
+    frame = open_book(page, book_id)
+    tap = "el => getComputedStyle(el).webkitTapHighlightColor"
+    for colour in (page.get_by_label("Next page").evaluate(tap), page.get_by_label("Previous page").evaluate(tap),
+                   frame.locator("html").evaluate(tap)):
+        r, g, b, _ = (float(x) for x in colour.removeprefix("rgba(").removesuffix(")").split(","))
+        assert b == 0 and r > g > 0, colour
