@@ -56,9 +56,9 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Learning**: `known_words`; `review_cards` scheduled on the device with FSRS (ts-fsrs) and synced like
   annotations; words looked up before are underlined while reading; `/api/define` asks the model for a word
   no offline dictionary has.
-- **Search**: book passages with embeddings (pgvector) and full-text vectors in `book_chunks`, built on the
-  desktop (`reader index`); the backend embeds questions with the same small model (~120 MB, loaded on the
-  first search). A question is first translated (Groq) into the languages of the indexed books, and every
+- **Search**: book passages with embeddings (pgvector) and full-text vectors in `book_chunks`, built by the
+  server's indexer for books uploaded from the app, or on the desktop (`reader index`) for big batches; the
+  backend embeds questions with the same small model (~135 MB, loaded on the first search). A question is first translated (Groq) into the languages of the indexed books, and every
   version is searched, because the small model matches best within one language.
 
 ## Names and addresses

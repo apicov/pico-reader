@@ -73,13 +73,16 @@ make them part of the value):
 | `EMAIL_PROVIDER` | `cloudflare` |
 | `EMAIL_FROM` | `noreply@thestitchpatterns.store` (an onboarded sending domain) |
 | `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | the Email Sending token and its account ([01](01-cloudflare.md) §4) |
-| `GROQ_API_KEY` | Groq API key (console.groq.com → API Keys), for translations |
+| `GROQ_API_KEY` | Groq API key (console.groq.com → API Keys): translations, definitions, the chat, search, categories |
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` (follows the JSON reply format reliably and translates well; `openai/gpt-oss-120b` also works) |
 | `GROQ_AGENT_MODEL` | the chat agent's model (tool calling); empty = `GROQ_MODEL`. Qwen 3.8 calls several tools at once and answers well |
 
 Optional: `TOKEN_DAYS` (sign-in lifetime, default 365: the app reads offline and shouldn't log you out),
 `DOWNLOAD_URL_SECONDS` / `UPLOAD_URL_SECONDS` (signed link lifetime, default 3600),
-`EMAIL_FROM_NAME` (default `Pico Reader`), `EMAIL_FALLBACK_PROVIDER=brevo` with `BREVO_API_KEY`.
+`EMAIL_FROM_NAME` (default `Pico Reader`), `EMAIL_FALLBACK_PROVIDER=brevo` with `BREVO_API_KEY`,
+`GROQ_REASONING_FORMAT` (default `hidden`; empty = not sent), `GROQ_BASE_URL` (default Groq's OpenAI-compatible
+API), `PICO_READER_MODELS` (where the search model is kept, default `~/.cache/pico-reader/models`),
+`EMBED_THREADS` (embedding threads; the indexer's unit sets 1).
 
 Keep a copy of the file in `~/tsp-configs/pico-reader/reader.server.env` on your workstation.
 
