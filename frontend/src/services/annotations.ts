@@ -6,6 +6,7 @@ import Dexie, { type Table } from 'dexie';
 import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import { getPref, setPref } from '@/services/prefs';
+import { dropRejected, rejectedForGood } from '@/services/syncQueue';
 
 export interface Annotation {
   id: string;
@@ -31,6 +32,9 @@ class AnnotationsDb extends Dexie {
 }
 
 const db = new AnnotationsDb();
+const MAX_TEXT = 5000; // what the server takes (routes/annotations.py)
+const capped = <T extends { text?: string; note?: string }>(a: T): T => ({ ...a,
+  ...(a.text !== undefined && { text: a.text.slice(0, MAX_TEXT) }), ...(a.note !== undefined && { note: a.note.slice(0, MAX_TEXT) }) });
 const CURSOR = 'annotations_cursor';
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((l) => l());
@@ -47,8 +51,8 @@ export async function annotationsFor(bookId: string): Promise<Annotation[]> {
 
 export async function saveAnnotation(a: Omit<Annotation, 'id' | 'deleted' | 'client_updated_at' | 'note' | 'color'>
   & Partial<Pick<Annotation, 'id' | 'note' | 'color'>>): Promise<Annotation> {
-  const full: Annotation = { note: '', color: a.kind === 'highlight' ? 'yellow' : '', ...a,
-    id: a.id ?? crypto.randomUUID(), deleted: false, client_updated_at: new Date().toISOString(), dirty: 1 };
+  const full: Annotation = capped({ note: '', color: a.kind === 'highlight' ? 'yellow' : '', ...a,
+    id: a.id ?? crypto.randomUUID(), deleted: false, client_updated_at: new Date().toISOString(), dirty: 1 });
   await db.items.put(full);
   changed();
   void syncAnnotations().catch(() => undefined);
@@ -58,7 +62,7 @@ export async function saveAnnotation(a: Omit<Annotation, 'id' | 'deleted' | 'cli
 export async function updateAnnotation(id: string, patch: Partial<Pick<Annotation, 'note' | 'color' | 'deleted'>>): Promise<void> {
   const current = await db.items.get(id);
   if (!current) return;
-  await db.items.put({ ...current, ...patch, client_updated_at: new Date().toISOString(), dirty: 1 });
+  await db.items.put(capped({ ...current, ...patch, client_updated_at: new Date().toISOString(), dirty: 1 }));
   changed();
   void syncAnnotations().catch(() => undefined);
 }
@@ -74,7 +78,15 @@ export function syncAnnotations(): Promise<void> {
     try {
       for (const a of await db.items.where('dirty').equals(1).toArray()) {
         const { id, dirty: _, ...body } = a;
-        const saved = await api<Annotation>(`/api/annotations/${encodeURIComponent(id)}`, { method: 'PUT', body });
+        let saved: Annotation;
+        try {
+          saved = await api<Annotation>(`/api/annotations/${encodeURIComponent(id)}`, { method: 'PUT', body });
+        } catch (e) {
+          if (!rejectedForGood(e)) throw e;
+          dropRejected('highlight', id, e);
+          await db.items.update(id, { dirty: 0 }); // kept on this device, not sent again
+          continue;
+        }
         const now = await db.items.get(id);
         // keep it dirty if it changed again meanwhile
         if (now && now.client_updated_at === a.client_updated_at) await db.items.put({ ...saved, dirty: 0 });

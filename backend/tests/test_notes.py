@@ -92,3 +92,12 @@ def _db():
     from sqlalchemy.orm import sessionmaker
     from app.db import get_engine
     return sessionmaker(bind=get_engine())()
+
+
+def test_a_note_about_a_book_deleted_before_confirming_fails_cleanly(client, admin_headers, indexed_book, groq):
+    cid, action = propose(client, admin_headers, groq, "save_note",
+                          {"title": "Gone", "markdown": "Text", "book": "Efficient"}, search=False)
+    client.delete(f"/api/books/{indexed_book}", headers=admin_headers)
+    r = confirm(client, admin_headers, cid, action)
+    assert r.status_code == 200 and r.json()["content"].startswith("Couldn't do it")
+    assert client.get("/api/notes", headers=admin_headers).json() == []

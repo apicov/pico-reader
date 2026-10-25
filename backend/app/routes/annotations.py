@@ -32,6 +32,10 @@ class Annotation(AnnotationIn):
     updated_at: datetime
 
 
+# Pulls re-read the last seconds before the cursor: a change committed just after another device's pull (its
+# updated_at is from before the commit) isn't skipped. Devices merge by id, so a repeat is harmless.
+OVERLAP = "interval '10 seconds'"
+
 _COLUMNS = "id, book_id, kind, format, location, progress, text, note, color, deleted, client_updated_at, updated_at"
 
 
@@ -39,7 +43,8 @@ _COLUMNS = "id, book_id, kind, format, location, progress, text, note, color, de
 def changes(since: datetime | None = None, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """What changed after `since` (all when absent), and the cursor for the next call."""
     rows = db.execute(text(f"""SELECT {_COLUMNS} FROM annotations WHERE reader_email = :e
-                               AND (CAST(:since AS timestamptz) IS NULL OR updated_at > :since) ORDER BY updated_at"""),
+                               AND (CAST(:since AS timestamptz) IS NULL OR updated_at > CAST(:since AS timestamptz) - {OVERLAP})
+                               ORDER BY updated_at"""),
                       {"e": reader.email, "since": since}).fetchall()
     cursor = rows[-1].updated_at if rows else since
     return {"annotations": [Annotation(**r._mapping) for r in rows], "cursor": cursor}
@@ -57,7 +62,8 @@ def save(annotation_id: str, body: AnnotationIn, reader: Reader = Depends(get_cu
     db.execute(text("""
         INSERT INTO annotations (id, reader_email, book_id, kind, format, location, progress, text, note, color,
                                  deleted, client_updated_at)
-        VALUES (:id, :e, :book_id, :kind, :format, :location, :progress, :text, :note, :color, :deleted, :client_updated_at)
+        VALUES (:id, :e, :book_id, :kind, :format, :location, :progress, :text, :note, :color, :deleted,
+                least(CAST(:client_updated_at AS timestamptz), now()))  -- a device clock ahead can't win for days
         ON CONFLICT (id) DO UPDATE SET book_id = EXCLUDED.book_id, kind = EXCLUDED.kind, format = EXCLUDED.format,
             location = EXCLUDED.location, progress = EXCLUDED.progress, text = EXCLUDED.text, note = EXCLUDED.note,
             color = EXCLUDED.color, deleted = EXCLUDED.deleted, client_updated_at = EXCLUDED.client_updated_at,

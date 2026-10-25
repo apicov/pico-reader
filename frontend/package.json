@@ -13,7 +13,8 @@
     "build": "tsc -b && NODE_OPTIONS=--max-old-space-size=2048 vite build && npx cap sync",
     "build:web": "tsc -b && NODE_OPTIONS=--max-old-space-size=2048 vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "coverage": "vitest run --coverage --coverage.include=src --coverage.reporter=text-summary --coverage.reporter=html"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",
@@ -57,6 +58,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
+    "@vitest/coverage-v8": "4.1.12",
     "fake-indexeddb": "^6.0.0",
     "jsdom": "^27.2.0",
     "typescript": "~5.9.3",

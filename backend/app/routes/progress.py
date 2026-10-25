@@ -34,7 +34,7 @@ def save_position(body: Position, reader: Reader = Depends(get_current_reader), 
     """Returns the position the server keeps: the one sent, or a newer one from another device."""
     row = db.execute(text("""
         INSERT INTO reading_state (reader_email, book_id, format, location, progress, updated_at)
-        VALUES (:e, :b, :f, :l, :p, :u)
+        VALUES (:e, :b, :f, :l, :p, least(CAST(:u AS timestamptz), now()))  -- a device clock ahead can't win for days
         ON CONFLICT (reader_email, book_id) DO UPDATE SET format = EXCLUDED.format,
             location = EXCLUDED.location, progress = EXCLUDED.progress, updated_at = EXCLUDED.updated_at
             WHERE reading_state.updated_at < EXCLUDED.updated_at

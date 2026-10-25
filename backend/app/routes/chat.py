@@ -204,6 +204,17 @@ TOOL_LABELS = {"list_books": "library", "book_details": "book details", "search_
 NOTE_TOOLS = {"save_note", "append_to_note"}
 
 
+def _valid_zone(tz: str) -> str:
+    """The device's time zone, or UTC when Python doesn't know it (statistics are counted in its days)."""
+    from zoneinfo import ZoneInfo
+
+    try:
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "UTC"
+
+
 def _event(name: str, data) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
@@ -252,7 +263,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
         # the request's session is closed once a streamed body runs: the agent gets a session of its own
         session = sessionmaker(bind=get_engine())()
         try:
-            ctx = agent_tools.Context(db=session, reader=reader, tz=body.tz, sources=[])
+            ctx = agent_tools.Context(db=session, reader=reader, tz=_valid_zone(body.tz), sources=[])
             today = datetime.now().date().isoformat()
             messages: list[dict] = [{"role": "system", "content": AGENT_PROMPT.format(
                 today=today, scope=_scope_note(session, book_ids), library=library_overview(session))}]
@@ -328,6 +339,10 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                                   "title": title or convo.title})
         except groq_client.GroqError as e:
             yield _event("error", {"message": str(e), "user_message_id": user_id})
+        except Exception:  # never a stream that just stops: the app shows the error and keeps the question
+            logger.exception("Answering in %s failed", conversation_id)
+            yield _event("error", {"message": "Something went wrong answering; please try again.",
+                                   "user_message_id": user_id})
         finally:
             session.close()
 
@@ -355,7 +370,7 @@ def decide(conversation_id: str, action_id: str, body: ActionDecision, tz: str =
     if action.status != "pending":
         raise HTTPException(409, f"Already {action.status}")
     if body.approve:
-        ctx = agent_tools.Context(db=db, reader=reader, tz=tz, sources=[])
+        ctx = agent_tools.Context(db=db, reader=reader, tz=_valid_zone(tz), sources=[])
         result = agent_tools.run(ctx, action.tool, action.args)
         failed = isinstance(result, dict) and "error" in result
         status, content = ("failed", f"Couldn't do it: {result['error']}") if failed else ("done", f"Done: {action.label}.")

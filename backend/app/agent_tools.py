@@ -5,6 +5,7 @@ Tools marked `changes=True` don't run when the model calls them: the chat propos
 after the reader confirms (chat.py)."""
 
 import json
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -19,6 +20,8 @@ from app.auth import Reader
 from app.routes import notes as notes_routes
 from app.routes import stats as stats_routes
 from app.routes.search import retrieve
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -454,3 +457,7 @@ def run(ctx: Context, name: str, raw_args: str | dict) -> Any:
         return tool.run(ctx, **args)
     except TypeError as e:
         return {"error": f"Bad arguments: {e}"}
+    except Exception as e:  # a bad value from the model, a database error: the model is told and can recover
+        ctx.db.rollback()
+        logger.warning("Tool %s failed: %s", name, e)
+        return {"error": getattr(e, "detail", None) or str(e) or type(e).__name__}

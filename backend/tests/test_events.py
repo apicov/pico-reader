@@ -42,3 +42,13 @@ def test_another_reader_cannot_overwrite_a_session(client, auth_headers, admin_h
     client.post("/api/events", headers=auth_headers, json={"sessions": [SESSION]})
     client.post("/api/events", headers=admin_headers, json={"sessions": [{**SESSION, "seconds": 5}]})
     assert rows("reading_sessions")[0].seconds == 1200
+
+
+def test_a_batch_at_the_limit_is_taken_and_one_over_is_refused(client, auth_headers):
+    # the app sends at most 500 sessions per batch (events.ts), well inside the server's 1,000
+    def sessions(n):
+        return [{"id": f"sess-{i:06d}", "book_id": "b1", "format": "epub", "started_at": "2026-10-24T10:00:00Z",
+                 "ended_at": "2026-10-24T10:01:00Z", "seconds": 60, "progress_start": 0.1, "progress_end": 0.11}
+                for i in range(n)]
+    assert client.post("/api/events", headers=auth_headers, json={"sessions": sessions(1000)}).status_code == 200
+    assert client.post("/api/events", headers=auth_headers, json={"sessions": sessions(1001)}).status_code == 422

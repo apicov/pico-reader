@@ -42,6 +42,8 @@ class EventsDb extends Dexie {
 
 const db = new EventsDb();
 const KEEP_SENT_DAYS = 30;
+const SESSIONS_PER_BATCH = 500;
+const LOOKUPS_PER_BATCH = 2000;
 
 export async function saveSession(s: Omit<ReadingSession, 'sent'>): Promise<void> {
   await db.sessions.put({ ...s, sent: 0 });
@@ -58,23 +60,28 @@ export function flushEvents(): Promise<void> {
   if (!isOnline()) return Promise.resolve();
   flushing ??= (async () => {
     try {
-      const sessions = await db.sessions.where('sent').equals(0).toArray();
-      const lookups = await db.lookups.toArray();
-      if (!sessions.length && !lookups.length) return;
-      await api('/api/events', {
-        method: 'POST',
-        body: { sessions: sessions.map(({ sent: _, ...s }) => s), lookups },
-      });
-      // a session that grew meanwhile stays unsent (its new length goes next time)
-      await db.transaction('rw', db.sessions, db.lookups, async () => {
-        for (const s of sessions) {
-          const now = await db.sessions.get(s.id);
-          if (now && now.ended_at === s.ended_at) await db.sessions.update(s.id, { sent: 1 });
-        }
-        await db.lookups.bulkDelete(lookups.map((l) => l.id));
-        const old = new Date(Date.now() - KEEP_SENT_DAYS * 86_400_000).toISOString();
-        await db.sessions.where('ended_at').below(old).filter((s) => s.sent === 1).delete();
-      });
+      const allSessions = await db.sessions.where('sent').equals(0).toArray();
+      const allLookups = await db.lookups.toArray();
+      // in batches the server takes (at most 1,000 sessions and 5,000 lookups): a long time offline can
+      // gather more, and one batch too big would be refused every time
+      for (let i = 0; i * SESSIONS_PER_BATCH < allSessions.length || i * LOOKUPS_PER_BATCH < allLookups.length; i++) {
+        const sessions = allSessions.slice(i * SESSIONS_PER_BATCH, (i + 1) * SESSIONS_PER_BATCH);
+        const lookups = allLookups.slice(i * LOOKUPS_PER_BATCH, (i + 1) * LOOKUPS_PER_BATCH);
+        await api('/api/events', {
+          method: 'POST',
+          body: { sessions: sessions.map(({ sent: _, ...s }) => s), lookups },
+        });
+        // a session that grew meanwhile stays unsent (its new length goes next time)
+        await db.transaction('rw', db.sessions, db.lookups, async () => {
+          for (const s of sessions) {
+            const now = await db.sessions.get(s.id);
+            if (now && now.ended_at === s.ended_at) await db.sessions.update(s.id, { sent: 1 });
+          }
+          await db.lookups.bulkDelete(lookups.map((l) => l.id));
+        });
+      }
+      const old = new Date(Date.now() - KEEP_SENT_DAYS * 86_400_000).toISOString();
+      await db.sessions.where('ended_at').below(old).filter((s) => s.sent === 1).delete();
     } finally {
       flushing = null;
     }

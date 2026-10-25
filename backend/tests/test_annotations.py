@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 HL = {"book_id": "b1", "kind": "highlight", "format": "epub", "location": "epubcfi(/6/8!/4/2,/1:0,/1:20)",
       "progress": 0.12, "text": "Sie hatten Mühe", "color": "yellow", "client_updated_at": "2026-10-24T10:00:00Z"}
 
@@ -7,8 +9,14 @@ def test_create_and_pull(client, auth_headers):
     assert r.status_code == 200 and r.json()["text"] == "Sie hatten Mühe"
     first = client.get("/api/annotations", headers=auth_headers).json()
     assert [a["id"] for a in first["annotations"]] == ["aaaaaaaa-1"]
-    # nothing new after the cursor
-    assert client.get("/api/annotations", headers=auth_headers, params={"since": first["cursor"]}).json()["annotations"] == []
+    # a later pull repeats only the last seconds (the overlap), not older rows
+    from sqlalchemy import text
+    from app.db import get_engine
+    with get_engine().begin() as c:
+        c.execute(text("UPDATE annotations SET updated_at = now() - interval '1 minute'"))
+    since = client.get("/api/annotations", headers=auth_headers).json()["cursor"]
+    later = (datetime.fromisoformat(since) + timedelta(seconds=30)).isoformat()
+    assert client.get("/api/annotations", headers=auth_headers, params={"since": later}).json()["annotations"] == []
 
 
 def test_newest_edit_wins_and_deletes_sync(client, auth_headers):

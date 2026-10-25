@@ -215,3 +215,37 @@ def test_community_tools(client, admin_headers, auth_headers, indexed_book, groq
     opinions, lists = results["call_1"], results["call_2"]
     assert opinions["avg_score"] == 9.0 and opinions["reviews"][0] == {"by": "Anna", "score": 9, "recommend": True, "text": "Loved it"}
     assert lists["lists"][0]["books"] == ["Efficient ML"]
+
+
+def test_a_tool_error_goes_back_to_the_model_and_the_answer_completes(client, admin_headers, indexed_book, groq):
+    # a period the statistics don't know: the tool fails, the model is told, the answer still arrives
+    groq.steps += [call("reading_stats", {"period": "fortnight"}), say("I couldn't get that period; try a week.")]
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "How much did I read this fortnight?")
+    assert evs[-1][0] == "done"
+    result = json.loads([m for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"][0]["content"])
+    assert "error" in result
+
+
+def test_a_failing_confirmed_change_is_reported_not_a_server_error(client, admin_headers, indexed_book, groq):
+    groq.steps += [call("set_reading_goal", {"enabled": True, "minutes": "thirty"}), say("Proposed.")]
+    cid = new(client, admin_headers)
+    action = next(d for n, d in ask(client, admin_headers, cid, "Goal of thirty minutes") if n == "action")
+    r = client.post(f"/api/conversations/{cid}/actions/{action['id']}", headers=admin_headers, json={"approve": True})
+    assert r.status_code == 200 and r.json()["content"].startswith("Couldn't do it")
+
+
+def test_an_unexpected_failure_ends_the_stream_with_an_error(client, admin_headers, indexed_book, groq, monkeypatch):
+    from app.routes import chat
+    monkeypatch.setattr(chat, "library_overview", lambda db: 1 / 0)
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "Hello")
+    assert evs[-1][0] == "error" and evs[-1][1]["user_message_id"]
+
+
+def test_a_bad_time_zone_is_handled(client, admin_headers, indexed_book, groq):
+    groq.steps += [call("reading_stats", {"period": "week"}), say("Done.")]
+    cid = new(client, admin_headers)
+    r = client.post(f"/api/conversations/{cid}/messages", headers=admin_headers,
+                    json={"content": "How much this week?", "tz": "Mars/Olympus"})
+    assert events(r)[-1][0] == "done"

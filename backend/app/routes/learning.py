@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import Reader, get_current_reader
 from app.db import get_db
+from app.routes.annotations import OVERLAP
 
 router = APIRouter(prefix="/api", tags=["learning"])
 
@@ -80,7 +81,8 @@ _COLUMNS = "id, language, term, meaning, example, source, book_id, state, due, d
 @router.get("/review-cards")
 def card_changes(since: datetime | None = None, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     rows = db.execute(text(f"""SELECT {_COLUMNS} FROM review_cards WHERE reader_email = :e
-                               AND (CAST(:since AS timestamptz) IS NULL OR updated_at > :since) ORDER BY updated_at"""),
+                               AND (CAST(:since AS timestamptz) IS NULL OR updated_at > CAST(:since AS timestamptz) - {OVERLAP})
+                               ORDER BY updated_at"""),
                       {"e": reader.email, "since": since}).fetchall()
     return {"cards": [Card(**r._mapping) for r in rows], "cursor": rows[-1].updated_at if rows else since}
 
@@ -98,7 +100,7 @@ def save_card(card_id: str, body: CardIn, reader: Reader = Depends(get_current_r
         INSERT INTO review_cards (id, reader_email, language, term, meaning, example, source, book_id, state, due,
                                   deleted, client_updated_at)
         VALUES (:id, :e, :language, :term, :meaning, :example, :source, :book_id, CAST(:state AS jsonb), :due,
-                :deleted, :client_updated_at)
+                :deleted, least(CAST(:client_updated_at AS timestamptz), now()))
         ON CONFLICT (id) DO UPDATE SET language = EXCLUDED.language, term = EXCLUDED.term,
             meaning = EXCLUDED.meaning, example = EXCLUDED.example, state = EXCLUDED.state, due = EXCLUDED.due,
             deleted = EXCLUDED.deleted, client_updated_at = EXCLUDED.client_updated_at, updated_at = clock_timestamp()

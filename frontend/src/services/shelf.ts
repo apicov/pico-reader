@@ -1,9 +1,10 @@
 /** The reader's own shelf in the shared library: reading / finished / removed, and apart from that "My shelf",
  *  the books they picked to keep in sight. Kept on the device for offline use; changes made offline are sent when
  *  the connection is back. */
-import { api, ApiError } from '@/services/api';
+import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import { getPref, setPref } from '@/services/prefs';
+import { dropRejected, rejectedForGood } from '@/services/syncQueue';
 
 export type ShelfStatus = 'reading' | 'finished' | 'removed';
 
@@ -37,14 +38,18 @@ export async function cachedShelf(): Promise<ShelfEntry[]> {
 async function flush(): Promise<void> {
   const pending = (await getPref<Record<string, { status: ShelfStatus; only_if_new: boolean }>>(PENDING)) ?? {};
   for (const [bookId, body] of Object.entries(pending)) {
-    await api(`/api/shelf/${encodeURIComponent(bookId)}`, { method: 'PUT', body });
+    await api(`/api/shelf/${encodeURIComponent(bookId)}`, { method: 'PUT', body }).catch((e) => {
+      if (!rejectedForGood(e)) throw e; // e.g. the book was deleted meanwhile: dropped, the rest goes on
+      dropRejected('shelf change for', bookId, e);
+    });
     delete pending[bookId];
     await setPref(PENDING, pending);
   }
   const mine = (await getPref<Record<string, boolean>>(MINE_PENDING)) ?? {};
   for (const [bookId, on] of Object.entries(mine)) {
     await api(`/api/shelf/mine/${encodeURIComponent(bookId)}`, { method: on ? 'PUT' : 'DELETE' }).catch((e) => {
-      if (!(e instanceof ApiError && e.status === 404)) throw e; // the book was deleted meanwhile
+      if (!rejectedForGood(e)) throw e;
+      dropRejected('My shelf change for', bookId, e);
     });
     delete mine[bookId];
     await setPref(MINE_PENDING, mine);

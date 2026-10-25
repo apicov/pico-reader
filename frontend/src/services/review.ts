@@ -7,6 +7,7 @@ import { createEmptyCard, fsrs, Rating, type Card as FsrsCard, type Grade } from
 import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import { getPref, setPref } from '@/services/prefs';
+import { dropRejected, rejectedForGood } from '@/services/syncQueue';
 
 export interface ReviewCard {
   id: string;
@@ -53,7 +54,9 @@ function fromFsrs(card: FsrsCard): Record<string, unknown> {
 }
 
 async function put(card: ReviewCard): Promise<void> {
-  await db.cards.put({ ...card, client_updated_at: new Date().toISOString(), dirty: 1 });
+  // within what the server takes (routes/learning.py): a translated passage can be long
+  await db.cards.put({ ...card, term: card.term.slice(0, 200), meaning: card.meaning.slice(0, 2000),
+    example: card.example.slice(0, 2000), client_updated_at: new Date().toISOString(), dirty: 1 });
   changed();
   void syncReview().catch(() => undefined);
 }
@@ -106,7 +109,15 @@ export function syncReview(): Promise<void> {
     try {
       for (const c of await db.cards.where('dirty').equals(1).toArray()) {
         const { id, dirty: _, ...body } = c;
-        const saved = await api<ReviewCard>(`/api/review-cards/${encodeURIComponent(id)}`, { method: 'PUT', body });
+        let saved: ReviewCard;
+        try {
+          saved = await api<ReviewCard>(`/api/review-cards/${encodeURIComponent(id)}`, { method: 'PUT', body });
+        } catch (e) {
+          if (!rejectedForGood(e)) throw e;
+          dropRejected('review card', id, e);
+          await db.cards.update(id, { dirty: 0 }); // kept on this device, not sent again
+          continue;
+        }
         const now = await db.cards.get(id);
         if (now && now.client_updated_at === c.client_updated_at) await db.cards.put({ ...saved, dirty: 0 });
       }
