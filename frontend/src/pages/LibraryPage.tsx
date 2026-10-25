@@ -247,9 +247,9 @@ export default function LibraryPage() {
       {loading && <LinearProgress sx={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000 }} />}
       <GoalBar />
       <Tabs value={current} onChange={(_, v) => pickTab(v)} variant="scrollable" scrollButtons={false} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab value="all" label="All books" />
         <Tab value="mine" label={`My shelf${mine.length ? ` (${mine.length})` : ''}`} />
         <Tab value="reading" label={`Reading${reading.length ? ` (${reading.length})` : ''}`} />
-        <Tab value="all" label="All books" />
         <Tab value="finished" label={`Finished${finished.length ? ` (${finished.length})` : ''}`} />
       </Tabs>
       <TextField fullWidth size="small" placeholder="Search title or author" value={query}

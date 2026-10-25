@@ -1,6 +1,6 @@
 # 14 — My shelf
 
-The library has four tabs: **My shelf**, **Reading**, **All books**, **Finished**. The last tab chosen is
+The library has four tabs: **All books**, **My shelf**, **Reading**, **Finished**. The last tab chosen is
 remembered on the device.
 
 - **Reading** and **Finished** fill themselves: opening a book puts it on Reading, reading to 98% moves it to
