@@ -49,6 +49,36 @@ On a new server, set up the database container ([04](04-backend.md) §1), restor
 `alembic upgrade head` as above (it does nothing if the dump is current). Books and dictionaries are in R2 and
 need no restore.
 
+## Moving R2 to another account
+
+The database refers to files by key and links are signed per request, so moving the bucket means copying the
+objects and changing four settings. There's no rebuild, and books already on devices stay.
+
+1. **The new account:** create the bucket (`pico-library`), its CORS policy and an Object Read & Write token,
+   as in [01](01-cloudflare.md) §1–3. Then write `/etc/pico-reader/r2-new.env` (root:tsp, 640) with
+   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. Copy the current `R2_*` lines of
+   `reader.env` into `r2-old.env` the same way.
+2. **Check the new bucket:** the token check of [01](01-cloudflare.md) §2, and the CORS preflight of §3 against
+   the new account's host (`204`).
+3. **Copy:** as tsp in `backend/`:
+   `.venv/bin/python -m app.r2_copy /etc/pico-reader/r2-old.env /etc/pico-reader/r2-new.env`.
+   - It copies every object with its key, content type and cache header, skips what's already there, and
+     finishes with "N copied, N already there, 0 missing" (exit 1 if anything is missing).
+   - The app keeps running meanwhile.
+4. **Switch:**
+   - `cp reader.env reader.env.before-move`;
+   - put the new `R2_*` values into `reader.env`;
+   - restart both services.
+5. **Copy once more** (the same command): it copies what was uploaded between steps 3 and 4.
+6. **Check:**
+   - a book not yet on the device opens, and a cover shows;
+   - an upload works;
+   - the next backup lands in the new bucket (`deploy/backup-db.sh` by hand).
+7. **A week later:** delete the old bucket and its token in the old account, then `r2-old.env` and
+   `reader.env.before-move`.
+
+**Back out:** restore `reader.env.before-move` and restart (the old bucket is untouched until step 7).
+
 ## Rotating secrets
 
 | Secret | Where to change it |

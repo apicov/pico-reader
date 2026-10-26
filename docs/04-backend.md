@@ -67,7 +67,7 @@ make them part of the value):
 | `SECRET_KEY` | `openssl rand -hex 32`; signs the sign-in tokens. Changing it signs everyone out |
 | `DATABASE_URL` | `postgresql+psycopg://reader:<DB_PASSWORD>@127.0.0.1:5440/reader` |
 | `CORS_ORIGINS` | `https://books.apicov.xyz,http://localhost:5173,https://localhost,capacitor://localhost` |
-| `R2_ACCOUNT_ID` | `c10b6d4948424c31eab1b0cd8137caa2` |
+| `R2_ACCOUNT_ID` | `7e0d7635ec1403cb200c1af7fccb814b` (the account with the bucket, [01](01-cloudflare.md)) |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | the bucket token ([01](01-cloudflare.md) §2) |
 | `R2_BUCKET` | `pico-library` |
 | `EMAIL_PROVIDER` | `cloudflare` |

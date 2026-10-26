@@ -14,19 +14,24 @@ from botocore.exceptions import ClientError
 from app.config import get_settings  # noqa: F401 (re-exported for callers)
 
 
-@lru_cache
-def get_client():
-    s = get_settings()
-    if not (s.r2_access_key_id and s.r2_secret_access_key and (s.r2_endpoint or s.r2_account_id)):
+def client_for(account_id: str, access_key_id: str, secret_access_key: str, endpoint: str = ""):
+    """An S3 client for an R2 account (or `endpoint`, e.g. moto in tests)."""
+    if not (access_key_id and secret_access_key and (endpoint or account_id)):
         raise RuntimeError("R2 is not configured: set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY")
     return boto3.client(
         "s3",
-        endpoint_url=s.r2_endpoint or f"https://{s.r2_account_id}.r2.cloudflarestorage.com",
-        aws_access_key_id=s.r2_access_key_id,
-        aws_secret_access_key=s.r2_secret_access_key,
+        endpoint_url=endpoint or f"https://{account_id}.r2.cloudflarestorage.com",
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
         config=Config(signature_version="s3v4"),
         region_name="auto",
     )
+
+
+@lru_cache
+def get_client():
+    s = get_settings()
+    return client_for(s.r2_account_id, s.r2_access_key_id, s.r2_secret_access_key, s.r2_endpoint)
 
 
 def download_url(key: str) -> str:

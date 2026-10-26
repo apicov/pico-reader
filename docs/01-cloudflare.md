@@ -1,6 +1,9 @@
 # 01 — Cloudflare
 
-Everything here is in the Cloudflare account `c10b6d4948424c31eab1b0cd8137caa2` (the main app account).
+Two Cloudflare accounts (the same login):
+- **R2** (§1–3), the library's files: the reader's own account `7e0d7635ec1403cb200c1af7fccb814b`. It moved
+  there from the business account in October 2026 ([08](08-operations.md#moving-r2-to-another-account)).
+- **Email Sending** (§4): still the business account `c10b6d4948424c31eab1b0cd8137caa2`.
 
 ## 1. The bucket
 
@@ -56,14 +59,14 @@ Android app's WebView. Check it with a preflight; the answer must be `204`:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X OPTIONS \
-  "https://c10b6d4948424c31eab1b0cd8137caa2.r2.cloudflarestorage.com/pico-library/x" \
+  "https://7e0d7635ec1403cb200c1af7fccb814b.r2.cloudflarestorage.com/pico-library/x" \
   -H "Origin: https://books.apicov.xyz" -H "Access-Control-Request-Method: GET"
 ```
 
 ## 4. Email sender
 
 Sign-in codes are sent with **Cloudflare Email Sending** from `noreply@thestitchpatterns.store`, a domain
-already onboarded for sending in this account (Email → Email Sending). Any domain onboarded there works;
+already onboarded for sending in the business account `c10b6d…` (Email → Email Sending). Any domain onboarded there works;
 set it as `EMAIL_FROM`.
 
 The API token: My Profile → **API Tokens** → **Create token** → custom token with the permission
