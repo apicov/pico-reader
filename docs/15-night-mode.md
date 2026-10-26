@@ -19,6 +19,11 @@ EPUBs, highlights, dialogs. `d` is the **Night brightness** slider (0.25–1), w
 brightness. Colours differ only by how light they are, so the theme's accent is a darker grey than the text
 (filled buttons stay dim). The browser bar / Android status bar takes the theme's background colour.
 
+**The tap flash:** Android paints its tap highlight (the flash on the page-turn zones, links, …) outside CSS
+filters, so the filter can't make it amber. Each theme sets the flash colour itself (`tap` in
+`readingThemes.ts`, as `-webkit-tap-highlight-color` on the app and inside EPUB pages). Night's is amber with no
+blue; the other themes flash in their text colour instead of the system blue.
+
 ## Why these settings
 
 - The eye's melanopsin cells, which drive melatonin and the body clock, respond most to blue light around

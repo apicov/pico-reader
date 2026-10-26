@@ -41,9 +41,11 @@ web app / PWA  ·  Android app (Capacitor, same build)
   agent on request (`notes`).
 - **The study computer** ([17](17-computer-sync.md)): highlights, code and notes sent from the app (or by the
   agent) wait in `drops` until the desktop tool (`reader sync`) writes them into a folder; files saved there
-  become notes, and Notes are kept there as `.md` files both ways.
+  become notes, and Notes are kept there as `.md` files both ways, within seconds. Projects (`projects`,
+  `reader project add`) are folders there with their own `notes/` and `inbox/`.
   Turns stream as server-sent events (Apache passes them through with `flushpackets=on`).
-- **Uploads and indexing** ([10](10-uploads-and-offline-search.md)): any reader adds books from the app;
+- **Uploads and indexing** ([10](10-uploads-and-offline-search.md)): any reader adds books from the app,
+  several at once (files, folders, marker's Markdown projects);
   `book_events` keeps who uploaded, changed or deleted what and when; `index_jobs` + the
   `pico-reader-indexer` service make uploaded books searchable and write each book's offline search file.
 - **Community** ([11](11-community.md)): profiles, 0–10 reviews with "recommend", posts linked to books with

@@ -11,7 +11,8 @@ and **Confirm** / **Cancel**; nothing is saved before confirming. "Add chapter 6
 the note and proposes **Add to note: …**, which appends a section.
 
 Agent tools (`backend/app/agent_tools.py`): `list_notes`, `read_note` (run at once), `save_note`,
-`append_to_note` (proposed, run after confirming). The agent never deletes or rewrites a note; the reader does
+`append_to_note` (proposed, run after confirming). `list_notes` names the reader's projects and filters by one;
+`save_note` can put the note into a project ("…as a note in my rust-book project"). The agent never deletes or rewrites a note; the reader does
 that in the app. The answer limit is 4,000 tokens, so a whole note fits in one call.
 
 ## Citations and diagrams
@@ -28,21 +29,31 @@ that in the app. The answer limit is 4,000 tokens, so a whole note fits in one c
 
 ## In the app
 
-- **Notes** (top bar, `/notes`): every note, newest first. A note (`/notes/<id>`): ⋮ → **Edit** (title and
-  Markdown, with a preview), **Export .md** (the cited passages are listed at the end; shared on Android, saved
-  in the browser), **Delete…**.
+- **Notes** (top bar, `/notes`): every note, newest first. With projects ([17](17-computer-sync.md#projects)),
+  chips filter them: *All · a project (n) … · No project* (remembered).
+- **A note** (`/notes/<id>`), ⋮ menu:
+  - **Edit**: title and Markdown, with a preview.
+  - **Project…**: moves the note to a project, or out of it; on the computer its file moves along.
+  - **Export .md**: the cited passages are listed at the end; shared on Android, saved in the browser.
+  - **Send to computer (copy)**.
+  - **Delete…**.
+- **Live:** an open note follows changes made elsewhere, for example in its `.md` file on the computer. Every 4
+  s while it's on screen and not being edited, it shows the new version ("Updated just now").
+- **Saving over a newer version:** if the note changed meanwhile, the app asks: **Take theirs**, or
+  **Save mine** over it (`updated_at_was`, 409).
 - A book's page shows **My notes** about it.
 - Offline: notes are kept on the device (IndexedDB) and read without a connection; changing one needs it.
 
 ## Limits and data
 
 Table `notes` (migration 0016): id, reader, book (set to empty when the book is deleted), title, Markdown,
-sources, times. At most 30,000 characters per note and 300 notes per reader (`backend/app/routes/notes.py`);
+sources, times. Later: `origin` (`chat`, `app`, `computer`; 0018), `project_id` (0019). At most 30,000 characters per note and 300 notes per reader (`backend/app/routes/notes.py`);
 past them, saving fails with a message in the chat.
 
 | Route | |
 |---|---|
 | `GET /api/notes` | The reader's notes (full), newest first; `?book=<id>` for one book's |
 | `GET /api/notes/{id}` | One note |
-| `PATCH /api/notes/{id}` | `{title?, markdown?}` |
+| `POST /api/notes` | A new note `{title, markdown, book_id?, origin?, project_id?}` |
+| `PATCH /api/notes/{id}` | `{title?, markdown?, project_id?, updated_at_was?}` (409 when it changed meanwhile) |
 | `DELETE /api/notes/{id}` | Remove |
