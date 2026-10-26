@@ -17,9 +17,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', color: 'text.primary' }}>
       <AppBar position="sticky" sx={{ pt: 'env(safe-area-inset-top)' }}>
-        <Toolbar>
+        {/* on a tablet: bigger icons, further apart (a phone has no room to spare for seven of them) */}
+        <Toolbar sx={{ minHeight: { sm: 72 }, gap: { xs: 0, sm: 1.5 },
+          '& .MuiIconButton-root': { p: { sm: 1.5 } }, '& .MuiIconButton-root .MuiSvgIcon-root': { fontSize: { sm: 32 } } }}>
           <Typography component={RouterLink} to="/" variant="h6"
-            sx={{ flexGrow: 1, fontFamily: READING_FONT, color: 'inherit', textDecoration: 'none' }}>
+            sx={{ flexGrow: 1, fontFamily: READING_FONT, fontSize: { sm: 24 }, color: 'inherit', textDecoration: 'none' }}>
             Library
           </Typography>
           {!online && (

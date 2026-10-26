@@ -17,9 +17,9 @@ const isWord = (text: string) => !/\s/.test(text) && text.length <= 48;
 function Action({ label, name, icon, onClick }: { label: string; name: string; icon: ReactNode; onClick: () => void }) {
   return (
     <Button color="inherit" aria-label={label} onClick={onClick}
-      sx={{ flex: 1, maxWidth: { xs: 120, sm: 160 }, minHeight: { xs: 56, sm: 68 }, flexDirection: 'column', gap: 0.5,
-        borderRadius: 2, fontSize: { xs: 12, sm: 14 }, fontWeight: 500, color: 'text.secondary',
-        '& .MuiSvgIcon-root': { fontSize: { xs: 24, sm: 30 }, color: 'text.primary' } }}>
+      sx={{ flex: 1, maxWidth: { xs: 110, sm: 140 }, minHeight: { xs: 48, sm: 56 }, py: 0.5, flexDirection: 'column',
+        gap: 0.25, borderRadius: 2, fontSize: { xs: 11, sm: 13 }, lineHeight: 1.2, fontWeight: 500, color: 'text.secondary',
+        '& .MuiSvgIcon-root': { fontSize: { xs: 22, sm: 26 }, color: 'text.primary' } }}>
       {icon}
       {name}
     </Button>
@@ -52,16 +52,16 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
       <Stack direction="row" alignItems="center" spacing={1} sx={{ px: { xs: 1, sm: 2 }, pt: 0.5 }}>
         {(term || sentence) && (
           <IconButton aria-label="Back" onClick={() => { setTerm(null); setSentence(false); }}
-            sx={{ p: { xs: 1.25, sm: 1.5 } }}>
-            <ArrowBackIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+            sx={{ p: { xs: 1, sm: 1.25 } }}>
+            <ArrowBackIcon sx={{ fontSize: { xs: 22, sm: 26 } }} />
           </IconButton>
         )}
         <Typography sx={{ flex: 1, pl: term || sentence ? 0 : 1, fontFamily: 'Literata, serif', fontSize: { xs: 16, sm: 18 },
           fontWeight: showDict ? 600 : 400 }} noWrap>
           {showDict ?? `“${passage}”`}
         </Typography>
-        <IconButton aria-label="Close" onClick={onClose} sx={{ p: { xs: 1.25, sm: 1.5 } }}>
-          <CloseIcon sx={{ fontSize: { xs: 24, sm: 28 } }} />
+        <IconButton aria-label="Close" onClick={onClose} sx={{ p: { xs: 1, sm: 1.25 } }}>
+          <CloseIcon sx={{ fontSize: { xs: 22, sm: 26 } }} />
         </IconButton>
       </Stack>
       <Stack direction="row" spacing={{ xs: 0.5, sm: 2 }} sx={{ px: { xs: 1, sm: 2 }, justifyContent: 'space-around',
@@ -80,7 +80,7 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
       </Stack>
       <Box sx={{ overflowY: 'auto', px: 2, pb: 2, pt: 1.5,
         // the buttons inside (translate, known, review card…): thumb-sized too, apart from each other
-        '& .MuiButton-root': { minHeight: { xs: 40, sm: 48 }, px: { xs: 1.5, sm: 2 }, fontSize: { xs: 14, sm: 16 } },
+        '& .MuiButton-root': { minHeight: { xs: 36, sm: 42 }, px: { xs: 1.25, sm: 1.75 }, fontSize: { xs: 14, sm: 15 } },
         '& .MuiButton-root + .MuiButton-root': { ml: { xs: 1, sm: 2 } } }}>
         {showDict ? (
           <>

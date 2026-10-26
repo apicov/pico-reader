@@ -272,10 +272,10 @@ export default function ReaderPage() {
       flexDirection: 'column', bgcolor: colors.background }}>
       <AppBar position="static" sx={{ pt: 'env(safe-area-inset-top)' }}>
         {/* thumb-sized buttons, bigger and further apart on a tablet */}
-        <Toolbar variant="dense" sx={{ minHeight: { xs: 52, sm: 64 }, gap: { xs: 0.5, sm: 2 },
-          '& .MuiIconButton-root': { p: { xs: 1.25, sm: 1.5 } }, '& .MuiSvgIcon-root': { fontSize: { xs: 24, sm: 30 } } }}>
+        <Toolbar variant="dense" sx={{ minHeight: { xs: 52, sm: 72 }, gap: { xs: 0.5, sm: 2.5 },
+          '& .MuiIconButton-root': { p: { xs: 1.25, sm: 1.75 } }, '& .MuiSvgIcon-root': { fontSize: { xs: 24, sm: 34 } } }}>
           <IconButton edge="start" aria-label="Back to the library" onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
-          <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: { xs: 15, sm: 18 } }}>{title}</Typography>
+          <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: { xs: 15, sm: 20 } }}>{title}</Typography>
           {formats.length > 1 && (
             <Button color="inherit" startIcon={<SwapHorizIcon />} aria-label="Switch format"
               sx={{ minHeight: 44, px: { xs: 1, sm: 2 }, fontSize: { xs: 14, sm: 16 } }}
