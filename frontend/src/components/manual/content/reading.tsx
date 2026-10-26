@@ -64,6 +64,9 @@ export const reading: ManualChapter = {
             { icon: <TocIcon />, label: 'Contents', text: 'The chapters, your highlights and bookmarks, and the words you looked up (next section).' },
             { icon: <FormatSizeIcon />, label: 'Text settings', text: <>Theme, text size, spacing, margins (<ManualLink to="themes">Text and themes</ManualLink>).</> },
           ]} />
+          <p>Under it (or in the same row on a wide screen) are the app's tools: Ask, Notes, Translations, Statistics,
+            Community and Settings. A chat started from a book asks about that book. Come back with the back button, or
+            <em> Continue reading</em> on any page (<ManualLink to="around.topbar">The top bar</ManualLink>).</p>
         </>
       ),
     },

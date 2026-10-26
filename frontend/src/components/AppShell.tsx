@@ -1,19 +1,16 @@
 import type { ReactNode } from 'react';
-import { AppBar, Box, IconButton, Toolbar, Tooltip, Typography } from '@mui/material';
+import { AppBar, Box, Button, Toolbar, Tooltip, Typography } from '@mui/material';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import TranslateIcon from '@mui/icons-material/Translate';
-import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
-import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
-import AddIcon from '@mui/icons-material/Add';
-import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
-import NoteAltOutlinedIcon from '@mui/icons-material/NoteAltOutlined';
 import { Link as RouterLink } from 'react-router-dom';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { readingNow } from '@/reader/readingNow';
+import { ToolLinks } from './ToolLinks';
 import { READING_FONT } from '@/theme/readingThemes';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const online = useOnlineStatus();
+  const reading = readingNow();
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', color: 'text.primary' }}>
       <AppBar position="sticky" sx={{ pt: 'env(safe-area-inset-top)' }}>
@@ -29,28 +26,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               <CloudOffOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />
             </Tooltip>
           )}
-          <IconButton component={RouterLink} to="/upload" aria-label="Add a book">
-            <AddIcon />
-          </IconButton>
-          <IconButton component={RouterLink} to="/stats" aria-label="Reading statistics">
-            <InsightsOutlinedIcon />
-          </IconButton>
-          <IconButton component={RouterLink} to="/community" aria-label="Community">
-            <PeopleAltOutlinedIcon />
-          </IconButton>
-          <IconButton component={RouterLink} to="/ask" aria-label="Ask your library">
-            <QuestionAnswerOutlinedIcon />
-          </IconButton>
-          <IconButton component={RouterLink} to="/notes" aria-label="Notes">
-            <NoteAltOutlinedIcon />
-          </IconButton>
-          <IconButton component={RouterLink} to="/translations" aria-label="Translations">
-            <TranslateIcon />
-          </IconButton>
-          <IconButton component={RouterLink} to="/settings" aria-label="Settings" edge="end">
-            <SettingsOutlinedIcon />
-          </IconButton>
+          <ToolLinks />
         </Toolbar>
+        {reading && (
+          <Button component={RouterLink} to={`/read/${encodeURIComponent(reading.id)}`} color="inherit" size="small"
+            startIcon={<MenuBookOutlinedIcon />}
+            sx={{ justifyContent: 'flex-start', px: { xs: 2, sm: 3 }, py: 0.75, borderRadius: 0, borderTop: 1,
+              borderColor: 'divider', fontSize: { xs: 14, sm: 16 }, textTransform: 'none' }}>
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Continue reading: {reading.title}
+            </Box>
+          </Button>
+        )}
       </AppBar>
       <Box component="main" sx={{ px: { xs: 2, sm: 3 }, py: 3, maxWidth: 1200, mx: 'auto' }}>{children}</Box>
     </Box>

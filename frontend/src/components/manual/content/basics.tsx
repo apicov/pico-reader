@@ -96,7 +96,10 @@ export const findingYourWay: ManualChapter = {
       title: 'The top bar',
       body: (
         <>
-          <p>Every page except the book itself has the same bar. Tap <strong>Library</strong> on its left to come back home.</p>
+          <p>Every page has these tools at the top; tap <strong>Library</strong> on the left to come back home. In a book
+            they're in a row under the book's own bar (in the same row on a wide screen), so the chat, your notes and
+            translations are one tap away while you read. After leaving a book, <em>Continue reading: …</em> under the top
+            bar takes you back to it, at your place.</p>
           <Screenshot name="topbar" caption="The top bar on a tablet" device="tablet" />
           <Controls rows={[
             { icon: <AddIcon />, label: 'Add books', text: <>Upload PDFs, EPUBs and Markdown to the shared library (<ManualLink to="adding">Adding books</ManualLink>).</> },

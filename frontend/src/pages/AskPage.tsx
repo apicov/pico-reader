@@ -13,7 +13,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Markdown } from '@/components/Markdown';
 import { ModelNote } from '@/components/ModelNote';
 import { useLibrary } from '@/hooks/useLibrary';
@@ -175,7 +175,9 @@ export default function AskPage() {
   const [drawer, setDrawer] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [scope, setScope] = useState<string[] | null>(null); // for a chat not created yet
+  // for a chat not created yet; opened from a book, it asks about that book
+  const startBook = (useLocation().state as { bookId?: string } | null)?.bookId;
+  const [scope, setScope] = useState<string[] | null>(startBook ? [startBook] : null);
   const [scopeMenu, setScopeMenu] = useState<HTMLElement | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
