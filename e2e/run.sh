@@ -4,6 +4,7 @@
 #
 #   e2e/run.sh                  # every journey
 #   e2e/run.sh -k notes         # pytest options pass through
+#   E2E_TESTS=tests/manual_capture.py e2e/run.sh   # the user manual's screenshots (frontend/public/manual)
 set -euo pipefail
 cd "$(dirname "$0")"
 E2E=$(pwd); ROOT=$(dirname "$E2E"); BACKEND=$ROOT/backend; FRONTEND=$ROOT/frontend
@@ -55,4 +56,4 @@ echo "▶ seed"
 
 echo "▶ tests"
 E2E_WEB=http://localhost:$WEB E2E_API=http://localhost:$API E2E_AI=http://localhost:$AI E2E_API_LOG=$WORK/api.log \
-  .venv/bin/python -m pytest -q tests -p no:cacheprovider "$@"
+  .venv/bin/python -m pytest -q "${E2E_TESTS:-tests}" -p no:cacheprovider "$@"

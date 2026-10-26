@@ -50,6 +50,7 @@
     "ts-fsrs": "^5.4.2"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/katex": "^0.16.8",

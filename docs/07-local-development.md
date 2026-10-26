@@ -64,3 +64,24 @@ The offline queues (highlights, review cards, the shelf, reading events) share o
 (`frontend/src/services/syncQueue.ts`): an item the server refuses for good (a 4xx other than 401, 408, 429) is
 dropped from the queue with a warning, so it can't block the changes after it; network errors and 5xx keep it
 for the next try.
+
+## The user manual
+
+The app's manual (Settings → *User manual*, `/manual`) explains every feature to readers.
+- **Content:** data in `frontend/src/components/manual/`: one file per area in `content/`, the order in
+  `chapters.ts`.
+- **What it does:** the page (`src/pages/ManualPage.tsx`) lists the contents, searches the text and links to
+  sections (`/manual?s=reading.pages`).
+- **When to update it:** when a feature's buttons or behaviour change. `ManualPage.test.tsx` checks that every
+  cross-reference leads to a section and every picture exists.
+
+**The pictures** (`frontend/public/manual/*.webp`) are real screens, taken in the end-to-end setup:
+
+```bash
+E2E_TESTS=tests/manual_capture.py e2e/run.sh
+```
+
+`e2e/tests/manual_capture.py` adds books, a collection, projects, notes, reading time and a review through the
+API, then takes each picture in a fresh browser (phone size; the top bar at tablet size). A picture's name must
+match the manual's `<Screenshot name="…">`. The pictures aren't precached by the service worker; each is kept
+once it has been seen.

@@ -1,12 +1,14 @@
 """A stand-in for Groq's OpenAI-compatible API, for the end-to-end tests. Tests queue the agent's next replies
 (POST /script: a list of assistant messages, e.g. tool calls); requests with tools take them in order, then
-answer with plain text. JSON requests (chat titles, query translations) get a fixed reply."""
+answer with plain text. JSON requests (translations, chat titles, query translations) take the replies queued
+with POST /script-json in order, then get a fixed reply."""
 
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 script: list[dict] = []
+json_script: list[dict] = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -26,8 +28,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/script":
             script[:] = body
             return self._reply({"queued": len(script)})
+        if self.path == "/script-json":
+            json_script[:] = body
+            return self._reply({"queued": len(json_script)})
         if "tools" in body:
             message = script.pop(0) if script else {"role": "assistant", "content": "Done."}
+        elif json_script:
+            message = {"role": "assistant", "content": json.dumps(json_script.pop(0))}
         else:
             message = {"role": "assistant", "content": json.dumps({"title": "E2E chat", "translations": {},
                                                                    "detected_language": "en"})}

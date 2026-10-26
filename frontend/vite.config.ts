@@ -91,6 +91,9 @@ export default defineConfig({
           // the diagram chunks left out of the precache: kept once fetched (hashed names never change)
           { urlPattern: /\/assets\/.*\.js$/, handler: 'CacheFirst',
             options: { cacheName: 'diagrams', expiration: { maxEntries: 150 } } },
+          // the user manual's pictures: not precached (most never get looked at), kept once seen; the same name is
+          // retaken after a change, so a newer one replaces it on the next visit
+          { urlPattern: /\/manual\/.*\.webp$/, handler: 'StaleWhileRevalidate', options: { cacheName: 'manual' } },
         ],
       },
     }),

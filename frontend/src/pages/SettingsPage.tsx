@@ -1,3 +1,4 @@
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { Box, Button, Divider, FormControl, FormControlLabel, Switch, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Select, Stack, Typography } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useBookCache } from '@/hooks/useBookCache';
@@ -31,6 +32,9 @@ export default function SettingsPage() {
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 520 }}>
+      <Box>
+        <Button component={RouterLink} to="/manual" variant="outlined" startIcon={<MenuBookOutlinedIcon />}>User manual</Button>
+      </Box>
       <Box>
         <Typography variant="h6" sx={{ mb: 1.5 }}>Theme</Typography>
         <Stack direction="row" spacing={1.5}>
