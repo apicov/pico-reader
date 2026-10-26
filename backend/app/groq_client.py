@@ -1,21 +1,65 @@
-"""Groq chat completions in JSON mode, from tsp-publisher (app/describe.py call_groq): the reply's shape is
-spelled out in the prompt, and an unusable reply is asked for once more."""
+"""The AI's chat completions, in JSON mode or with tools, from tsp-publisher (app/describe.py call_groq): the reply's
+shape is spelled out in the prompt, and an unusable reply is asked for once more.
+
+LLM_PROVIDER picks the AI:
+- groq (the default) and gemini speak the same OpenAI-compatible API, here. Gemini thinks before answering, and
+  its thinking counts against max_tokens, so its calls get room for it.
+- anthropic: Claude through the official SDK (app/anthropic_llm.py), in and out in the same shapes."""
 
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 from sqlalchemy import text
 
+from app import anthropic_llm
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class Provider:
+    """An OpenAI-compatible provider (Groq or Gemini)."""
+    name: str
+    base_url: str
+    api_key: str
+    key_setting: str  # the setting to put the key in, for the error message
+    model: str
+    agent_model: str
+    extra: dict[str, Any] = field(default_factory=dict)  # sent with every request
+    thinking_room: int = 0  # added to max_tokens
+
+
+def _anthropic() -> bool:
+    return get_settings().llm_provider.lower() == "anthropic"
+
+
+def provider() -> Provider:
+    s = get_settings()
+    if s.llm_provider.lower() == "gemini":
+        return Provider("Gemini", s.gemini_base_url.rstrip("/"), s.gemini_api_key, "GEMINI_API_KEY", s.gemini_model,
+                        s.gemini_agent_model or s.gemini_model,
+                        {"reasoning_effort": s.gemini_reasoning_effort} if s.gemini_reasoning_effort else {}, 2048)
+    extra: dict[str, Any] = {}
+    if s.groq_reasoning_format and "qwen" in s.groq_model:
+        extra["reasoning_format"] = s.groq_reasoning_format
+    if "gpt-oss" in s.groq_model:
+        extra["reasoning_effort"] = "low"
+    return Provider("Groq", s.groq_base_url.rstrip("/"), s.groq_api_key, "GROQ_API_KEY", s.groq_model,
+                    s.groq_agent_model or s.groq_model, extra)
+
+
+def model() -> str:
+    """The model that writes translations and definitions (stored with them)."""
+    return get_settings().anthropic_model if _anthropic() else provider().model
+
+
 class GroqError(Exception):
-    """Groq couldn't be used: no key, unreachable, an error answer. `status` is what the API passes on."""
+    """The AI couldn't be used: no key, unreachable, an error answer. `status` is what the API passes on."""
 
     def __init__(self, message: str, status: int = 502):
         super().__init__(message)
@@ -53,65 +97,80 @@ def chat_json(system: str, user: str, max_tokens: int = 1500, who: Who = None) -
         try:
             reply = _call(system, user, max_tokens)
             _record(who, reply)
-            return _parse(reply), get_settings().groq_model
+            return _parse(reply), model()
         except UnusableReply as e:
             if attempt == 2:
                 raise GroqError(f"The model's answer wasn't usable: {e}") from e
-            logger.warning("Unusable Groq reply, asking again: %s", e)
+            logger.warning("Unusable AI reply, asking again: %s", e)
     raise AssertionError("unreachable")
 
 
-def _payload(messages: list[dict[str, str]], max_tokens: int) -> dict[str, Any]:
-    settings = get_settings()
-    if not settings.groq_api_key:
-        raise GroqError("GROQ_API_KEY is not set on the server", 503)
-    payload: dict[str, Any] = {"model": settings.groq_model, "messages": messages, "max_tokens": max_tokens,
-                               "temperature": 0.2}
-    if settings.groq_reasoning_format and "qwen" in settings.groq_model:
-        payload["reasoning_format"] = settings.groq_reasoning_format
-    if "gpt-oss" in settings.groq_model:
-        payload["reasoning_effort"] = "low"
-    return payload
+def _payload(p: Provider, messages: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
+    if not p.api_key:
+        raise GroqError(f"{p.key_setting} is not set on the server", 503)
+    # keys starting with _ are the app's own (another provider's raw blocks): not for this API
+    plain = [{k: v for k, v in m.items() if not k.startswith("_")} for m in messages]
+    return {"model": p.model, "messages": plain, "max_tokens": max_tokens + p.thinking_room, "temperature": 0.2,
+            **p.extra}
+
+
+def _post(p: Provider, payload: dict[str, Any], timeout: float) -> httpx.Response:
+    try:
+        return httpx.post(f"{p.base_url}/chat/completions", json=payload, timeout=timeout,
+                          headers={"Authorization": f"Bearer {p.api_key}"})
+    except httpx.HTTPError as e:
+        raise GroqError(f"Could not reach {p.name}: {e}") from e
+
+
+def _failed(p: Provider, res: httpx.Response) -> GroqError:
+    logger.error("%s error %s: %s", p.name, res.status_code, res.text[:500])
+    return GroqError(f"{p.name} answered {res.status_code}: {_error_message(res)}", 429 if res.status_code == 429 else 502)
 
 
 def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1500,
                who: Who = None) -> dict[str, Any]:
-    """One step of the agent: the model's message, with `tool_calls` when it wants tools run."""
-    settings = get_settings()
-    payload = {**_payload(messages, max_tokens), "tools": tools, "tool_choice": "auto",
-               "model": settings.groq_agent_model or settings.groq_model}
-    try:
-        res = httpx.post(f"{settings.groq_base_url}/chat/completions", json=payload, timeout=90,
-                         headers={"Authorization": f"Bearer {settings.groq_api_key}"})
-    except httpx.HTTPError as e:
-        raise GroqError(f"Could not reach Groq: {e}") from e
+    """One step of the agent: the model's message, with `tool_calls` when it wants tools run. The caller passes it
+    back with the next step as it came (Gemini's tool calls carry thought signatures, Claude's `_raw` its thinking)."""
+    if _anthropic():
+        try:
+            message, usage = anthropic_llm.chat_tools(messages, tools, max_tokens)
+        except anthropic_llm.ClaudeError as e:
+            raise GroqError(str(e), e.status) from e
+        _record(who, usage)
+        return message
+    p = provider()
+    payload = {**_payload(p, messages, max_tokens), "tools": tools, "tool_choice": "auto", "model": p.agent_model}
+    res = _post(p, payload, 90)
     if res.status_code != 200:
-        logger.error("Groq error %s: %s", res.status_code, res.text[:500])
-        raise GroqError(f"Groq answered {res.status_code}: {_error_message(res)}", 429 if res.status_code == 429 else 502)
+        raise _failed(p, res)
     try:
         body = res.json()
         message = body["choices"][0]["message"]
     except (KeyError, IndexError, ValueError) as e:
-        raise GroqError("Groq sent no message") from e
+        raise GroqError(f"{p.name} sent no message") from e
     _record(who, body)
     return message
 
 
 def _call(system: str, user: str, max_tokens: int) -> dict[str, Any]:
-    settings = get_settings()
-    payload = {**_payload([{"role": "system", "content": system}, {"role": "user", "content": user}], max_tokens),
+    if _anthropic():
+        try:
+            return anthropic_llm.chat_json(system, user, max_tokens)
+        except anthropic_llm.ClaudeError as e:
+            raise GroqError(str(e), e.status) from e
+    p = provider()
+    payload = {**_payload(p, [{"role": "system", "content": system}, {"role": "user", "content": user}], max_tokens),
                "response_format": {"type": "json_object"}}
-    try:
-        res = httpx.post(f"{settings.groq_base_url}/chat/completions", json=payload, timeout=60,
-                         headers={"Authorization": f"Bearer {settings.groq_api_key}"})
-    except httpx.HTTPError as e:
-        raise GroqError(f"Could not reach Groq: {e}") from e
+    res = _post(p, payload, 60)
+    if res.status_code == 400 and "response_format" in res.text:
+        # a provider without JSON mode: the prompt spells out the shape, _parse finds the object in the text
+        payload.pop("response_format")
+        res = _post(p, payload, 60)
     if res.status_code != 200:
-        logger.error("Groq error %s: %s", res.status_code, res.text[:500])
         if "json_validate_failed" in res.text:
+            logger.error("%s error %s: %s", p.name, res.status_code, res.text[:500])
             raise UnusableReply(_error_message(res))
-        raise GroqError(f"Groq answered {res.status_code}: {_error_message(res)}",
-                        429 if res.status_code == 429 else 502)
+        raise _failed(p, res)
     return res.json()
 
 
@@ -135,6 +194,8 @@ def _parse(reply: dict[str, Any]) -> dict[str, Any]:
 
 def _error_message(res: httpx.Response) -> str:
     try:
-        return res.json()["error"]["message"]
+        body = res.json()
+        body = body[0] if isinstance(body, list) else body  # Gemini sometimes answers with a list
+        return body["error"]["message"]
     except Exception:
         return res.text[:200]

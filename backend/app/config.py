@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     # The chat agent (tool calling); empty = groq_model. qwen3.8 calls several tools at once and answers well.
     groq_agent_model: str = ""
+    # Which AI the app uses: "groq" (above), "gemini" (Google's OpenAI-compatible endpoint, a free tier for Flash) or
+    # "anthropic" (Claude, through the official SDK, app/anthropic_llm.py)
+    llm_provider: str = "groq"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_agent_model: str = ""  # empty = gemini_model
+    # Gemini 3 always thinks; "minimal"/"low" keep it short (2.5 models also take "none"); empty = the model's default
+    gemini_reasoning_effort: str = "low"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-opus-5-5"
+    anthropic_agent_model: str = ""  # empty = anthropic_model
+    anthropic_effort: str = ""  # low | medium | high | xhigh | max; empty = the model's default
 
     @property
     def is_production(self) -> bool:

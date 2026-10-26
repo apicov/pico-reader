@@ -282,7 +282,8 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                 if not calls:
                     answer = (reply.get("content") or "").strip()
                     break
-                messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls})
+                messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls,
+                                 **({"_raw": reply["_raw"]} if "_raw" in reply else {})})
                 for call in calls:
                     name = call["function"]["name"]
                     raw = call["function"].get("arguments") or "{}"

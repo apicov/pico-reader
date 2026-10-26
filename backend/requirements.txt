@@ -7,6 +7,7 @@ alembic==1.14.0
 pydantic[email]==2.10.3
 pydantic-settings==2.6.1
 httpx==0.28.1
+anthropic==2.3.0  # LLM_PROVIDER=anthropic (app/anthropic_llm.py)
 requests==2.32.3
 boto3==1.35.99
 # question embeddings for search (app/embed.py)

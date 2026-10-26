@@ -77,6 +77,33 @@ make them part of the value):
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` (follows the JSON reply format reliably and translates well; `openai/gpt-oss-120b` also works) |
 | `GROQ_AGENT_MODEL` | the chat agent's model (tool calling); empty = `GROQ_MODEL`. Qwen 3.8 calls several tools at once and answers well |
 
+**The AI: Groq, Gemini or Claude.** `LLM_PROVIDER` picks the provider for translations, definitions, the chat,
+search and categories (`backend/app/groq_client.py`):
+
+| `LLM_PROVIDER` | Settings | Notes |
+|---|---|---|
+| `groq` (default) | `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_AGENT_MODEL` (above) | OpenAI-compatible API |
+| `gemini` | `GEMINI_API_KEY` (aistudio.google.com → Get API key), `GEMINI_MODEL` (default `gemini-3.8-flash`), `GEMINI_AGENT_MODEL` (empty = `GEMINI_MODEL`), `GEMINI_REASONING_EFFORT` (default `low`) | See below |
+| `anthropic` | `ANTHROPIC_API_KEY` (platform.claude.com → API keys), `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_AGENT_MODEL` (empty = `ANTHROPIC_MODEL`), `ANTHROPIC_EFFORT` (`low` … `max`; empty = the model's default) | See below |
+
+- **Gemini:** Google's OpenAI-compatible endpoint, so it runs the same code as Groq.
+  - Gemini 3 always thinks. `low` keeps that short, and calls get room in `max_tokens` for it.
+  - If the endpoint refuses JSON mode, the request is sent again without it; the app reads the JSON object from the
+    answer text.
+  - The free tier has small per-minute and per-day limits (see AI Studio). Going over them gives 429, which the app
+    shows as "too many requests".
+- **Claude:** the official `anthropic` SDK (`backend/app/anthropic_llm.py`). It converts the chat's messages and
+  tools to the Messages API and back.
+  - **Thinking:** Claude thinks before answering; calls get room in `max_tokens` for it. In a chat step, its blocks
+    (thinking included) are passed back unchanged.
+  - **Refusals:** a request the safety classifiers decline is retried on Anthropic's recommended fallback model
+    (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). If that declines too, the reader sees
+    "Claude declined to answer this".
+
+Switching providers: set the variables in `reader.env` and restart both services. Translations made before keep
+the model that wrote them; asking again for the same passage translates it anew with the new model. AI usage on
+the statistics page lists the model of each call.
+
 Optional: `TOKEN_DAYS` (sign-in lifetime, default 365: the app reads offline and shouldn't log you out),
 `DOWNLOAD_URL_SECONDS` / `UPLOAD_URL_SECONDS` (signed link lifetime, default 3600),
 `EMAIL_FROM_NAME` (default `Pico Reader`), `EMAIL_FALLBACK_PROVIDER=brevo` with `BREVO_API_KEY`,

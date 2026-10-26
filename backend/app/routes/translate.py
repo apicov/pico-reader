@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from app import groq_client
 from app.auth import Reader, get_current_reader
-from app.config import get_settings
 from app.db import get_db
 
 router = APIRouter(prefix="/api", tags=["translate"])
@@ -106,7 +105,7 @@ def _row(r, cached: bool = False) -> Translation:
 
 @router.post("/translate", response_model=Translation)
 def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
-    model = get_settings().groq_model
+    model = groq_client.model()
     key = _cache_key(body, model)
     stored = db.execute(text(f"SELECT {_COLUMNS} FROM translations WHERE reader_email = :e AND cache_key = :k "
                              "ORDER BY id DESC LIMIT 1"), {"e": reader.email, "k": key}).fetchone()

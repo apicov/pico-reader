@@ -24,7 +24,7 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Frontend** (`frontend/`): React + MUI + Vite, wrapped by Capacitor for Android. The same build is the web
   app (installable PWA). Downloaded books stay on the device for offline reading.
 - **Email**: sign-in codes go out through Cloudflare Email Sending.
-- **Groq**: translates selected passages (stored per reader in `translations`) and answers questions about
+- **The AI** (Groq by default; Gemini or Claude with `LLM_PROVIDER`, [04](04-backend.md)): translates selected passages (stored per reader in `translations`) and answers questions about
   the library from its passages (`/api/ask`).
 - **Highlights and bookmarks** (`annotations`): made offline on each device with its own ids, pushed and
   pulled when online; the newest edit wins and deletions are kept as tombstones so every device learns of them.
