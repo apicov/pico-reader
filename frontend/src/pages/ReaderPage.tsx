@@ -271,11 +271,14 @@ export default function ReaderPage() {
     <Box sx={{ height: '100vh', '@supports (height: 100dvh)': { height: '100dvh' }, display: 'flex',
       flexDirection: 'column', bgcolor: colors.background }}>
       <AppBar position="static" sx={{ pt: 'env(safe-area-inset-top)' }}>
-        <Toolbar variant="dense">
+        {/* thumb-sized buttons, bigger and further apart on a tablet */}
+        <Toolbar variant="dense" sx={{ minHeight: { xs: 52, sm: 64 }, gap: { xs: 0.5, sm: 2 },
+          '& .MuiIconButton-root': { p: { xs: 1.25, sm: 1.5 } }, '& .MuiSvgIcon-root': { fontSize: { xs: 24, sm: 30 } } }}>
           <IconButton edge="start" aria-label="Back to the library" onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
-          <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: 15 }}>{title}</Typography>
+          <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: { xs: 15, sm: 18 } }}>{title}</Typography>
           {formats.length > 1 && (
-            <Button size="small" color="inherit" startIcon={<SwapHorizIcon />} aria-label="Switch format"
+            <Button color="inherit" startIcon={<SwapHorizIcon />} aria-label="Switch format"
+              sx={{ minHeight: 44, px: { xs: 1, sm: 2 }, fontSize: { xs: 14, sm: 16 } }}
               onClick={(e) => setFormatAnchor(e.currentTarget)}>{format && LABEL[format]}</Button>
           )}
           {phase.kind === 'ready' && (
