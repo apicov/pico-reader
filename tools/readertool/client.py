@@ -56,13 +56,16 @@ class Api:
         return _check(self.session.get(self.server + path, timeout=60, **kw)).json()
 
     def post(self, path: str, body: dict | None = None):
-        return _check(self.session.post(self.server + path, json=body, timeout=60)).json()
+        return _json(_check(self.session.post(self.server + path, json=body, timeout=60)))
+
+    def put(self, path: str, body: dict):
+        return _json(_check(self.session.put(self.server + path, json=body, timeout=60)))
 
     def post_list(self, path: str, body: list):
         return _check(self.session.post(self.server + path, json=body, timeout=120)).json()
 
     def patch(self, path: str, body: dict):
-        return _check(self.session.patch(self.server + path, json=body, timeout=60)).json()
+        return _json(_check(self.session.patch(self.server + path, json=body, timeout=60)))
 
     def delete(self, path: str) -> None:
         _check(self.session.delete(self.server + path, timeout=60))
@@ -104,6 +107,11 @@ def file_info(path: Path, content_type: str) -> dict:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             digest.update(chunk)
     return {"size": path.stat().st_size, "sha256": digest.hexdigest(), "content_type": content_type}
+
+
+def _json(r: requests.Response):
+    """The answer's JSON; None for an empty one (204)."""
+    return r.json() if r.content else None
 
 
 def _check(r: requests.Response) -> requests.Response:

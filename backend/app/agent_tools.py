@@ -336,13 +336,31 @@ def _find_note(ctx: Context, note: str) -> notes_routes.Note | None:
     return next((n for n in mine if n.id == note), None) or next((n for n in mine if wanted in _plain(n.title)), None)
 
 
-def list_notes(ctx: Context, book: str | None = None) -> dict:
+def _project(ctx: Context, name: str | None) -> tuple[str | None, dict | None]:
+    """(project id, error) for a project on the study computer named (in part) `name`; (None, None) for none."""
+    if not name:
+        return None, None
+    projects = computer_routes.list_projects(ctx.db, ctx.reader.email)
+    wanted = _plain(name)
+    found = next((p for p in projects if _plain(p.name) == wanted), None) or \
+        next((p for p in projects if wanted in _plain(p.name)), None)
+    if found is None:
+        return None, {"error": f"No project {name!r}. The reader's projects: {[p.name for p in projects] or 'none yet'}"}
+    return found.id, None
+
+
+def list_notes(ctx: Context, book: str | None = None, project: str | None = None) -> dict:
     found, error = _book_or_error(ctx, book)
     if error:
         return error
-    return {"notes": [{"id": n.id, "title": n.title, "book": n.book_title, "updated": n.updated_at[:10],
-                       "characters": len(n.markdown), "made_in": n.origin}
-                      for n in notes_routes.list_notes(ctx.db, ctx.reader.email, found["id"] if found else None)]}
+    project_id, error = _project(ctx, project)
+    if error:
+        return error
+    notes = notes_routes.list_notes(ctx.db, ctx.reader.email, found["id"] if found else None)
+    return {"notes": [{"id": n.id, "title": n.title, "book": n.book_title, "project": n.project,
+                       "updated": n.updated_at[:10], "characters": len(n.markdown), "made_in": n.origin}
+                      for n in notes if not project_id or n.project_id == project_id],
+            "projects": [p.name for p in computer_routes.list_projects(ctx.db, ctx.reader.email)]}
 
 
 def read_note(ctx: Context, note: str) -> dict:
@@ -350,7 +368,7 @@ def read_note(ctx: Context, note: str) -> dict:
     if found is None:
         return {"error": f"No note {note!r}; list_notes shows them"}
     # its [n] belong to the note's own sources, not to this answer's: left out so they aren't cited by mistake
-    return {"id": found.id, "title": found.title, "book": found.book_title, "made_in": found.origin,
+    return {"id": found.id, "title": found.title, "book": found.book_title, "project": found.project, "made_in": found.origin,
             "markdown": re.sub(r"\s?\[\d+\]", "", found.markdown)}
 
 
@@ -372,23 +390,31 @@ def _cited(markdown: str, sources: list[dict], first: int = 1) -> tuple[str, lis
     return out, [sources[n - 1] for n in numbers]
 
 
-def save_note(ctx: Context, title: str, markdown: str, book: str | None = None,
+def save_note(ctx: Context, title: str, markdown: str, book: str | None = None, project: str | None = None,
               _sources: list[dict] | None = None) -> dict:
     found, error = _book_or_error(ctx, book)
     if error:
         return error
+    project_id, error = _project(ctx, project)
+    if error:
+        return error
     markdown, sources = _cited(markdown, _sources or [])
     try:
-        n = notes_routes.create_note(ctx.db, ctx.reader.email, title, markdown, found["id"] if found else None, sources)
+        n = notes_routes.create_note(ctx.db, ctx.reader.email, title, markdown, found["id"] if found else None, sources,
+                                     project_id=project_id)
     except notes_routes.NoteLimit as e:
         return {"error": str(e)}
     return {"saved": n.title, "id": n.id}
 
 
-def send_to_computer(ctx: Context, title: str, text: str, kind: str = "text", language: str = "") -> dict:
-    """Into the reader's study computer's inbox folder (the desktop tool writes it as a file)."""
+def send_to_computer(ctx: Context, title: str, text: str, kind: str = "text", language: str = "",
+                     project: str | None = None) -> dict:
+    """Into the reader's study computer's inbox folder, or a project's (the desktop tool writes it as a file)."""
+    project_id, error = _project(ctx, project)
+    if error:
+        return error
     drop = computer_routes.DropIn(kind=kind if kind in ("text", "snippet", "note") else "text", title=title[:200],
-                                  language=language[:30], body=text)
+                                  language=language[:30], body=text, project_id=project_id)
     return {"sent": title, "id": computer_routes.create_drop(ctx.db, ctx.reader.email, drop)}
 
 
@@ -458,6 +484,7 @@ def add_review_cards(ctx: Context, language: str, words: list[str] | None = None
 BOOK = {"type": "string", "description": "a book's id or (part of) its title"}
 PERIOD = {"type": "string", "enum": ["week", "month", "year", "all"]}
 LANGUAGE = {"type": "string", "description": "ISO 639-1 code, e.g. de"}
+PROJECT = {"type": "string", "description": "the name of one of the reader's projects on their study computer"}
 
 
 def _obj(props: dict, required: list[str] | None = None) -> dict:
@@ -523,21 +550,26 @@ TOOLS = {t.name: t for t in [
     Tool("read_post", "One community post in full with its quotes and comments. `post`: an id from community_posts or "
          "(part of) its title.", _obj({"post": {"type": "string"}}, ["post"]), read_post),
     Tool("my_reviews", "The reader's own reviews (book, score 0–10, recommend, text).", _obj({}), my_reviews),
-    Tool("list_notes", "The reader's notes (id, title, book, last change, length), newest first; `book` filters.",
-         _obj({"book": BOOK}), list_notes),
+    Tool("list_notes", "The reader's notes (id, title, book, project, last change, length), newest first, and the "
+         "names of their projects (folders on their study computer). `book` or `project` filters.",
+         _obj({"book": BOOK, "project": PROJECT}), list_notes),
     Tool("read_note", "One of the reader's notes in full (Markdown). `note`: its id or (part of) its title.",
          _obj({"note": {"type": "string"}}, ["note"]), read_note),
     Tool("save_note", "Save a new note for the reader: a summary, outline, study sheet or diagram they asked to "
          "keep. `markdown`: the whole note (## headings, lists, [n] citations of search_passages sources, diagrams "
-         "as ```mermaid blocks). `book`: the book it is about, if one. Runs after the reader confirms.",
-         _obj({"title": {"type": "string"}, "markdown": {"type": "string"}, "book": BOOK}, ["title", "markdown"]),
+         "as ```mermaid blocks). `book`: the book it is about, if one. `project`: one of the reader's projects, when "
+         "the note belongs to it (its file then lives in that project's folder). Runs after the reader confirms.",
+         _obj({"title": {"type": "string"}, "markdown": {"type": "string"}, "book": BOOK, "project": PROJECT},
+              ["title", "markdown"]),
          save_note, changes=True, label=lambda a: f"Save note: {a.get('title', '')}"),
     Tool("send_to_computer", "Send text to the reader's study computer: it arrives as a file in their inbox folder "
          "(Markdown, or a source file for code). `kind`: 'snippet' for code (give `language`, e.g. python), 'note' or "
-         "'text'. Only when the reader asks. Runs after the reader confirms.",
+         "'text'. `project`: into that project's inbox instead (list_notes names the projects). Only when the reader "
+         "asks. Runs after the reader confirms.",
          _obj({"title": {"type": "string"}, "text": {"type": "string"}, "kind": {"type": "string", "enum": ["text", "snippet", "note"]},
-               "language": {"type": "string"}}, ["title", "text"]),
-         send_to_computer, changes=True, label=lambda a: f"Send to your computer: {a.get('title', '')}"),
+               "language": {"type": "string"}, "project": PROJECT}, ["title", "text"]),
+         send_to_computer, changes=True,
+         label=lambda a: f"Send to your computer{' (' + a['project'] + ')' if a.get('project') else ''}: {a.get('title', '')}"),
     Tool("append_to_note", "Add a section to the end of one of the reader's notes (find it with list_notes). "
          "`markdown`: only the new part. Runs after the reader confirms.",
          _obj({"note": {"type": "string"}, "markdown": {"type": "string"}}, ["note", "markdown"]),

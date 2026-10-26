@@ -41,3 +41,11 @@ describe('send to computer', () => {
     expect(net.posted[0].body.length).toBe(200_000);
   });
 });
+
+describe('send to a project', () => {
+  it("carries the project, so it lands in that project's inbox", async () => {
+    net.online = true;
+    await sendToComputer({ kind: 'snippet', language: 'rust', body: 'fn main() {}', project_id: 'proj-00000001' });
+    expect(net.posted[0]).toMatchObject({ project_id: 'proj-00000001', body: 'fn main() {}' });
+  });
+});

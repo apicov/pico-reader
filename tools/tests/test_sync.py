@@ -21,26 +21,37 @@ class FakeApi:
 
     def __init__(self):
         self.drops, self.notes, self.delivered, self.down = [], {}, [], False
-        self.clock, self.patch_fails = 0, None
+        self.clock, self.patch_fails, self.projects, self.calls = 0, None, {}, []
 
     def _tick(self) -> str:
         self.clock += 1
         return f"2026-10-25T10:00:{self.clock:02d}+00:00"
 
-    def add_note(self, title, markdown, sources=()):
+    def add_note(self, title, markdown, sources=(), project_id=None):
         note_id = f"note-{len(self.notes) + 1}"
         self.notes[note_id] = {"id": note_id, "title": title, "markdown": markdown, "book_title": "Die Wolke",
-                               "sources": list(sources), "updated_at": self._tick(), "origin": "app"}
+                               "sources": list(sources), "updated_at": self._tick(), "origin": "app",
+                               "project_id": project_id, "project": self.projects.get(project_id)}
         return self.notes[note_id]
 
+    def move(self, note_id, project_id):
+        self.notes[note_id].update(project_id=project_id, project=self.projects.get(project_id), updated_at=self._tick())
+
     def get(self, path):
+        self.calls.append(path)
         return copy.deepcopy(self._get(path))  # like a server: later changes don't reach what was read
 
     def _get(self, path):
         if self.down:
             raise requests.ConnectionError("network is down")
+        if path == "/api/computer/poll":
+            stamp = f"{len(self.notes)}:{max((n['updated_at'] for n in self.notes.values()), default='')}"
+            return {"drops": self._get("/api/drops"), "projects": self._get("/api/projects"), "notes_stamp": stamp}
         if path == "/api/drops":
             return [d for d in self.drops if d["id"] not in self.delivered]
+        if path == "/api/projects":
+            return [{"id": i, "name": n, "notes": sum(x["project_id"] == i for x in self.notes.values())}
+                    for i, n in self.projects.items()]
         if path == "/api/notes":
             return list(self.notes.values())
         return self.notes[path.rsplit("/", 1)[1]]
@@ -50,10 +61,22 @@ class FakeApi:
             raise requests.ConnectionError("network is down")
         if path.endswith("/delivered"):
             self.delivered.append(path.split("/")[3])
-            return {}
-        note = self.add_note(body["title"], body["markdown"])
+            return None
+        note = self.add_note(body["title"], body["markdown"], project_id=body.get("project_id"))
         note["origin"] = body.get("origin", "app")
         return note
+
+    def put(self, path, body):
+        pid = path.rsplit("/", 1)[1]
+        self.projects[pid] = body["name"]
+        return next(p for p in self._get("/api/projects") if p["id"] == pid)
+
+    def delete(self, path):
+        pid = path.rsplit("/", 1)[1]
+        del self.projects[pid]
+        for n in self.notes.values():
+            if n["project_id"] == pid:
+                n.update(project_id=None, project=None, updated_at=self._tick())
 
     def patch(self, path, body):
         note = self.notes[path.rsplit("/", 1)[1]]
@@ -61,8 +84,10 @@ class FakeApi:
             raise self.patch_fails
         if body.get("updated_at_was") and body["updated_at_was"] != note["updated_at"]:
             raise ToolError("HTTP 409: The note changed meanwhile", 409)
-        note.update(title=body["title"], markdown=body["markdown"], updated_at=self._tick())
-        return note
+        if "project_id" in body:
+            note.update(project_id=body["project_id"], project=self.projects.get(body["project_id"]))
+        note.update({k: body[k] for k in ("title", "markdown") if k in body}, updated_at=self._tick())
+        return copy.deepcopy(note)
 
 
 @pytest.fixture
@@ -70,7 +95,8 @@ def env(tmp_path):
     api = FakeApi()
     now = [T0]
     log: list[str] = []
-    sync = Sync(api, tmp_path / "pico", tmp_path / "state.json", log=log.append, clock=lambda: now[0])
+    sync = Sync(api, tmp_path / "pico", tmp_path / "state.json", log=log.append, clock=lambda: now[0],
+                projects_path=tmp_path / "projects.json")
     return api, sync, tmp_path / "pico", now, log
 
 
@@ -278,7 +304,8 @@ def test_the_state_survives_a_restart(env, tmp_path):
     api, sync, folder, now, _ = env
     api.add_note("Figuren", "Text")
     sync.run_once()
-    again = Sync(api, folder, tmp_path / "state.json", log=lambda _: None, clock=lambda: now[0])
+    again = Sync(api, folder, tmp_path / "state.json", log=lambda _: None, clock=lambda: now[0],
+                 projects_path=tmp_path / "projects.json")
     assert again.run_once()["notes"] == 0
 
 
@@ -290,14 +317,135 @@ def test_install_writes_a_user_service_and_uninstall_removes_it(tmp_path, monkey
     unit = tmp_path / "systemd" / "user" / "pico-reader-sync.service"
     text = unit.read_text()
     assert f"sync --folder {Path.home() / 'pico'} --interval 15" in text and "Restart=on-failure" in text
+    assert "PYTHONUNBUFFERED=1" in text  # the log reaches journalctl as it happens
     assert ["systemctl", "--user", "enable", "--now", "pico-reader-sync.service"] in calls
     sync_module.uninstall()
     assert not unit.exists() and ["systemctl", "--user", "disable", "--now", "pico-reader-sync.service"] in calls
 
 
 def test_run_once_does_one_round(tmp_path, monkeypatch):
-    monkeypatch.setattr(sync_module, "Sync", lambda api, folder: Sync(api, folder, tmp_path / "state.json"))
+    monkeypatch.setattr(sync_module, "Sync", lambda api, folder: Sync(api, folder, tmp_path / "state.json",
+                                                                     projects_path=tmp_path / "projects.json"))
     api = FakeApi()
     api.drops = [drop(1, "text", "hello")]
     sync_module.run(api, tmp_path / "pico", 15, once=True)
     assert api.delivered == ["drop-1"]
+
+
+# --- projects ---
+
+@pytest.fixture
+def project(env, tmp_path):
+    api, sync, *_ = env
+    folder = tmp_path / "code" / "rust-book"
+    folder.mkdir(parents=True)
+    p = sync_module.project_add(api, folder, projects_path=tmp_path / "projects.json")
+    return p["id"], folder
+
+
+def test_adding_a_project_links_the_folder_and_reuses_the_apps_project(env, tmp_path, project):
+    api, *_ = env
+    pid, folder = project
+    assert api.projects == {pid: "rust-book"} and (folder / "notes").is_dir() and (folder / "inbox").is_dir()
+    again = sync_module.project_add(api, folder, name="Rust Book", projects_path=tmp_path / "projects.json")
+    assert again["id"] == pid and api.projects == {pid: "Rust Book"}  # the same folder: renamed
+    other = tmp_path / "laptop-copy"
+    other.mkdir()
+    assert sync_module.project_add(api, other, name="rust book", projects_path=tmp_path / "projects.json")["id"] == pid
+    listed = sync_module.project_list(api, tmp_path / "projects.json")
+    assert listed == [{"id": pid, "name": "Rust Book", "notes": 0, "path": str(other.resolve())}]
+    with pytest.raises(ToolError):
+        sync_module.project_add(api, tmp_path / "nowhere", projects_path=tmp_path / "projects.json")
+
+
+def test_a_projects_notes_and_sent_items_live_in_its_folder(env, project):
+    api, sync, folder, _, _ = env
+    pid, proj = project
+    api.add_note("Ownership", "Moves.", project_id=pid)
+    api.add_note("Allgemein", "Text")
+    api.drops = [drop(1, "snippet", "fn main() {}", language="rust", title="Hello") | {"project_id": pid},
+                 drop(2, "text", "anything") | {"project_id": "proj-not-here"}]
+    sync.run_once()
+    assert "Moves." in (proj / "notes" / "Ownership.md").read_text()
+    assert (folder / "notes" / "Allgemein.md").exists() and not (folder / "notes" / "Ownership.md").exists()
+    [snippet] = (proj / "inbox").iterdir()
+    assert snippet.suffix == ".rs"
+    assert len(list((folder / "inbox").iterdir())) == 1  # a project not on this computer: the general inbox
+    new = proj / "notes" / "Borrowing.md"
+    new.write_text("# Borrowing\n\n&x\n")
+    age(new, 5)
+    sync.run_once()
+    assert next(n for n in api.notes.values() if n["title"] == "Borrowing")["project_id"] == pid
+
+
+def test_moving_a_note_in_the_app_moves_its_file_and_moving_the_file_moves_the_note(env, project):
+    api, sync, folder, _, log = env
+    pid, proj = project
+    note = api.add_note("Ownership", "Moves.")
+    sync.run_once()
+    api.move(note["id"], pid)
+    sync.run_once()
+    assert (proj / "notes" / "Ownership.md").exists() and not (folder / "notes" / "Ownership.md").exists()
+    (proj / "notes" / "Ownership.md").rename(folder / "notes" / "Ownership.md")  # e.g. with mv, or in the file manager
+    sync.run_once()
+    assert api.notes[note["id"]]["project_id"] is None
+    assert any("project (none)" in line for line in log)
+    assert sync.run_once()["notes"] == 0  # settled
+
+
+def test_removing_a_project_brings_its_notes_back_to_the_general_folder(env, tmp_path, project):
+    api, sync, folder, _, _ = env
+    pid, proj = project
+    api.add_note("Ownership", "Moves.", project_id=pid)
+    sync.run_once()
+    sync_module.project_remove(api, proj, delete=True, projects_path=tmp_path / "projects.json")
+    assert api.projects == {} and api.notes["note-1"]["project_id"] is None
+    sync.run_once()
+    assert (folder / "notes" / "Ownership.md").exists()
+    with pytest.raises(ToolError):
+        sync_module.project_remove(api, proj, projects_path=tmp_path / "projects.json")
+
+
+def test_notes_are_fetched_only_when_something_changed(env):
+    api, sync, folder, _, _ = env
+    api.add_note("Figuren", "Text")
+    sync.run_once()
+    api.calls.clear()
+    sync.run_once()
+    sync.run_once()
+    assert api.calls == ["/api/computer/poll", "/api/computer/poll"]  # nothing new: one small question each
+    api.notes["note-1"].update(markdown="Neu", updated_at=api._tick())
+    sync.run_once()
+    assert "/api/notes" in api.calls and "Neu" in (folder / "notes" / "Figuren.md").read_text()
+
+
+def test_a_file_saved_here_starts_a_round_within_seconds(tmp_path, monkeypatch):
+    """The service's loop: a round every `interval`, and one right after a file here changes and settles."""
+    api = FakeApi()
+    monkeypatch.setattr(sync_module, "Sync", lambda api, folder: Sync(api, folder, tmp_path / "state.json",
+                                                                     log=lambda _: None, projects_path=tmp_path / "projects.json"))
+    now = [1_900_000_000.0]
+    ticks = []
+
+    class Clock:
+        @staticmethod
+        def time():
+            return now[0]
+
+        @staticmethod
+        def sleep(seconds):
+            now[0] += seconds
+            ticks.append(now[0])
+            if len(ticks) == 3:  # a note saved in vim, 3 s into a 60 s interval
+                path = tmp_path / "pico" / "notes" / "Neu.md"
+                path.write_text("# Neu\n\nText\n")
+                os.utime(path, (now[0], now[0]))
+            if len(ticks) == 12:
+                raise KeyboardInterrupt
+
+    monkeypatch.setattr(sync_module, "time", Clock)
+    monkeypatch.setattr(sync_module, "STABLE_SECONDS", 2)
+    monkeypatch.setattr(Sync, "_stable", lambda self, p: now[0] - p.stat().st_mtime >= 2)
+    with pytest.raises(KeyboardInterrupt):
+        sync_module.run(api, tmp_path / "pico", 60, once=False)
+    assert [n["title"] for n in api.notes.values()] == ["Neu"]  # long before the next 60 s round

@@ -131,6 +131,7 @@ Notes as `.md` files, edited on either side. Details: [docs/17](../docs/17-compu
 
 ```bash
 ./reader sync --once            # one round
-./reader sync                   # every 15 s until Ctrl+C (--interval, --folder)
+./reader sync                   # until Ctrl+C: a file saved here goes at once; the server is asked every 5 s
 ./reader sync --install         # as a systemd user service; --uninstall removes it
+./reader project add            # in a project's folder: its own notes/ and inbox/ (list, remove too)
 ```

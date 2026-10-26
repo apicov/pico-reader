@@ -80,3 +80,79 @@ def test_the_agent_sends_to_the_computer_after_confirming(client, admin_headers,
     client.post(f"/api/conversations/{cid}/actions/{action['id']}", headers=admin_headers, json={"approve": True})
     [drop] = client.get("/api/drops", headers=admin_headers).json()
     assert (drop["kind"], drop["language"], drop["body"]) == ("snippet", "python", "prune(model, 0.5)")
+
+
+P1, P2 = "proj-00000000-0001", "proj-00000000-0002"
+
+
+def test_projects_hold_notes_and_sent_items(client, admin_headers, auth_headers):
+    assert client.put(f"/api/projects/{P1}", headers=admin_headers, json={"name": "rust-book"}).json() == \
+        {"id": P1, "name": "rust-book", "notes": 0}
+    client.put(f"/api/projects/{P2}", headers=admin_headers, json={"name": "Thesis"})
+    assert client.put(f"/api/projects/{P2}", headers=admin_headers, json={"name": "RUST-book"}).status_code == 409
+    assert client.put("/api/projects/bad", headers=admin_headers, json={"name": "x"}).status_code == 422
+    assert client.put(f"/api/projects/{P1}", headers=auth_headers, json={"name": "mine"}).status_code == 404  # not theirs
+
+    note = client.post("/api/notes", headers=admin_headers, json={"title": "Ownership", "markdown": "Moves.",
+                                                                  "project_id": P1, "origin": "computer"}).json()
+    assert (note["project_id"], note["project"]) == (P1, "rust-book")
+    assert client.post("/api/notes", headers=auth_headers, json={"title": "x", "markdown": "y", "project_id": P1}).status_code == 404
+    moved = client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"project_id": P2}).json()
+    assert moved["project"] == "Thesis" and moved["markdown"] == "Moves."
+    kept = client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"markdown": "Borrows."}).json()
+    assert kept["project_id"] == P2  # not sent: stays
+    out = client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"project_id": None}).json()
+    assert out["project_id"] is None
+
+    client.post("/api/drops", headers=admin_headers, json={**SNIPPET, "project_id": P1})
+    assert client.post("/api/drops", headers=auth_headers, json={**SNIPPET, "project_id": P1}).status_code == 404
+    assert client.get("/api/drops", headers=admin_headers).json()[0]["project_id"] == P1
+    assert [(p["name"], p["notes"]) for p in client.get("/api/projects", headers=admin_headers).json()] == \
+        [("rust-book", 0), ("Thesis", 0)]
+    assert client.get("/api/projects", headers=auth_headers).json() == []
+
+
+def test_deleting_a_project_keeps_its_notes(client, admin_headers):
+    client.put(f"/api/projects/{P1}", headers=admin_headers, json={"name": "rust-book"})
+    note = client.post("/api/notes", headers=admin_headers, json={"title": "T", "markdown": "M", "project_id": P1}).json()
+    assert client.delete(f"/api/projects/{P1}", headers=admin_headers).status_code == 204
+    after = client.get(f"/api/notes/{note['id']}", headers=admin_headers).json()
+    assert after["project_id"] is None and after["updated_at"] > note["updated_at"]  # the computer moves its file
+    assert client.delete(f"/api/projects/{P1}", headers=admin_headers).status_code == 404
+
+
+def test_the_poll_is_small_and_its_stamp_changes_with_any_note_change(client, admin_headers):
+    first = client.get("/api/computer/poll", headers=admin_headers).json()
+    assert first == {"drops": [], "projects": [], "notes_stamp": "0:"}
+    assert client.get("/api/computer", headers=admin_headers).json()["seen_at"] is not None
+    note = client.post("/api/notes", headers=admin_headers, json={"title": "T", "markdown": "M"}).json()
+    stamps = [client.get("/api/computer/poll", headers=admin_headers).json()["notes_stamp"]]
+    client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"markdown": "N"})
+    stamps.append(client.get("/api/computer/poll", headers=admin_headers).json()["notes_stamp"])
+    client.put(f"/api/projects/{P1}", headers=admin_headers, json={"name": "p"})
+    client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"project_id": P1})
+    stamps.append(client.get("/api/computer/poll", headers=admin_headers).json()["notes_stamp"])
+    client.delete(f"/api/notes/{note['id']}", headers=admin_headers)
+    stamps.append(client.get("/api/computer/poll", headers=admin_headers).json()["notes_stamp"])
+    assert len(set(stamps)) == 4 and stamps[-1] == "0:"
+    assert client.get("/api/computer/poll", headers=admin_headers).json()["projects"] == [{"id": P1, "name": "p", "notes": 0}]
+
+
+def test_the_agent_saves_and_sends_into_a_project(client, admin_headers, indexed_book, groq):
+    client.put(f"/api/projects/{P1}", headers=admin_headers, json={"name": "rust-book"})
+    groq.steps += [call("send_to_computer", {"title": "Borrowing", "text": "fn main() {}", "kind": "snippet",
+                                             "language": "rust", "project": "rust"}),
+                   call("save_note", {"title": "Lifetimes", "markdown": "## Lifetimes", "project": "Rust-Book"}, "c2"),
+                   call("list_notes", {"project": "nope"}, "c3"), say("Proposed.")]
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "Send this to my rust project and keep a note there")
+    actions = [d for n, d in evs if n == "action"]
+    assert actions[0]["label"] == "Send to your computer (rust): Borrowing"
+    for a in actions:
+        assert client.post(f"/api/conversations/{cid}/actions/{a['id']}", headers=admin_headers,
+                           json={"approve": True}).json()["content"].startswith("Done")
+    assert client.get("/api/drops", headers=admin_headers).json()[0]["project_id"] == P1
+    [note] = client.get("/api/notes", headers=admin_headers).json()
+    assert note["project"] == "rust-book"
+    listed = [m for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"][-1]["content"]
+    assert "No project 'nope'" in listed and "rust-book" in listed

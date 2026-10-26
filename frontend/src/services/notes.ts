@@ -4,7 +4,7 @@
  * connection.
  */
 import Dexie, { type Table } from 'dexie';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import type { Passage } from '@/services/chat';
 
@@ -15,6 +15,8 @@ export interface Note {
   book_id: string | null;
   book_title: string | null;
   sources: Passage[]; // what the note's [n] citations point to
+  project_id?: string | null; // a project on the study computer: the note's file is in its notes/ folder
+  project?: string | null; // its name
   created_at: string;
   updated_at: string;
 }
@@ -70,8 +72,24 @@ export async function getNote(id: string): Promise<Note | undefined> {
   return db.notes.get(id);
 }
 
-export async function changeNote(id: string, patch: { title?: string; markdown?: string }): Promise<Note> {
-  const note = await api<Note>(`/api/notes/${encodeURIComponent(id)}`, { method: 'PATCH', body: patch });
+/** The note changed elsewhere (e.g. its file on the computer) since this edit began: `current` is that version. */
+export class NoteConflict extends Error {
+  constructor(public current: Note) {
+    super('This note changed meanwhile');
+  }
+}
+
+/** `editedFrom`: the note's updated_at when the edit began; a newer version on the server is a NoteConflict. */
+export async function changeNote(id: string, patch: { title?: string; markdown?: string; project_id?: string | null },
+                                 editedFrom?: string): Promise<Note> {
+  let note: Note;
+  try {
+    note = await api<Note>(`/api/notes/${encodeURIComponent(id)}`, { method: 'PATCH',
+      body: editedFrom ? { ...patch, updated_at_was: editedFrom } : patch });
+  } catch (e) {
+    const current = e instanceof ApiError && e.status === 409 ? await getNote(id) : undefined;
+    throw current ? new NoteConflict(current) : e;
+  }
   await db.notes.put(note);
   changed();
   return note;

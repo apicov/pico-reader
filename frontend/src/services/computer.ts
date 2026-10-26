@@ -11,6 +11,7 @@ export interface Drop {
   language?: string; // a snippet's programming language
   body: string;
   meta?: { book_id?: string; book_title?: string; heading?: string; location?: string; progress?: number };
+  project_id?: string | null; // into that project's inbox/ instead of ~/pico/inbox
 }
 
 export interface ComputerStatus {

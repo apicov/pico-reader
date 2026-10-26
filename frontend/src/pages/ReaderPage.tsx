@@ -30,7 +30,7 @@ import { setShelfStatus } from '@/services/shelf';
 import { offlineSearchEnabled } from '@/search/offlineSearch';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
-import { sendToComputer, type Drop } from '@/services/computer';
+import { useSendToComputer } from '@/components/SendToComputer';
 
 // Best reading experience first: text that reflows, then EPUB, then fixed PDF pages
 const PREFERENCE: BookFormat[] = ['reflow', 'epub', 'pdf'];
@@ -176,9 +176,7 @@ export default function ReaderPage() {
   };
 
   // Sending to the study computer: code as a snippet (its language kept), anything else as a highlight
-  const [sentNote, setSentNote] = useState('');
-  const send = (d: Drop) => void sendToComputer(d).then((r) =>
-    setSentNote(r === 'sent' ? 'Sent to your computer' : 'Queued: it goes to your computer when online'));
+  const { send, ui: sendUi } = useSendToComputer();
   const meta = (place?: { location: string; progress: number }) => ({ book_id: book?.id, book_title: book?.title,
     heading: toc.find((t) => t.id === currentToc)?.label ?? '', location: place?.location, progress: place?.progress });
   const sendSelection = () => {
@@ -331,7 +329,7 @@ export default function ReaderPage() {
         onSend={(a) => send({ kind: 'highlight', body: a.text, meta: { ...meta(a), heading: '' } })}
         words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
         onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
-      <Snackbar open={!!sentNote} autoHideDuration={3_000} onClose={() => setSentNote('')} message={sentNote} />
+      {sendUi}
       <Snackbar open={ratePrompt} autoHideDuration={12_000} onClose={() => setRatePrompt(false)}
         message="Finished! Tell the others what you thought?"
         action={<Button color="primary" size="small" onClick={() => book && navigate(`/book/${encodeURIComponent(book.id)}`)}>Rate it</Button>} />
