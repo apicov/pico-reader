@@ -27,6 +27,8 @@ export interface ViewProps {
   highlights: Highlight[];
   /** Words looked up before, to underline (null: off) */
   seenWords: Set<string> | null;
+  /** A picture in the book was tapped: show it large */
+  onImage?: (image: { src: string; alt: string }) => void;
 }
 
 export interface Highlight {

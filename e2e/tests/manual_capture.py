@@ -69,11 +69,13 @@ def cover(title: str, author: str, colour: tuple[int, int, int]) -> bytes:
     return out.getvalue()
 
 
-def epub(title: str, author: str, language: str, chapters: list[tuple[str, str]]) -> bytes:
+def epub(title: str, author: str, language: str, chapters: list[tuple[str, str]],
+         images: dict[str, bytes] | None = None) -> bytes:
     page = lambda heading, body: f"""<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="{language}"><head><title>{heading}</title></head><body>
 <h1>{heading}</h1>{body}</body></html>"""
     items = "".join(f'<item id="c{i}" href="c{i}.xhtml" media-type="application/xhtml+xml"/>' for i in range(len(chapters)))
+    items += "".join(f'<item id="img{i}" href="{name}" media-type="image/png"/>' for i, name in enumerate(images or {}))
     spine = "".join(f'<itemref idref="c{i}"/>' for i in range(len(chapters)))
     toc = "".join(f'<li><a href="c{i}.xhtml">{h}</a></li>' for i, (h, _) in enumerate(chapters))
     files = {
@@ -90,6 +92,7 @@ def epub(title: str, author: str, language: str, chapters: list[tuple[str, str]]
 xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>{toc}</ol></nav></body></html>""",
         **{f"OEBPS/c{i}.xhtml": page(h, b) for i, (h, b) in enumerate(chapters)},
     }
+    files.update({f"OEBPS/{name}": data for name, data in (images or {}).items()})
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w") as z:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip")
@@ -98,8 +101,8 @@ xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><b
     return out.getvalue()
 
 
-def add_book(api: httpx.Client, title: str, author: str, language: str, colour, chapters) -> str:
-    blobs = {"epub": (epub(title, author, language, chapters), "application/epub+zip"),
+def add_book(api: httpx.Client, title: str, author: str, language: str, colour, chapters, images=None) -> str:
+    blobs = {"epub": (epub(title, author, language, chapters, images), "application/epub+zip"),
              "cover": (cover(title, author, colour), "image/png")}
     files = {k: {"size": len(b), "sha256": hashlib.sha256(b).hexdigest(), "content_type": t} for k, (b, t) in blobs.items()}
     book = api.post("/api/books", json={"title": title, "author": author, "language": language, "files": files}).json()

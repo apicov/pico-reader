@@ -6,6 +6,7 @@ import './reflow.css';
 import { resolvePath, type ReflowBundle } from './bundle';
 import { watchSelection, type TextSelection } from '../selection';
 import { markHighlights } from '../highlightText';
+import { tappedImage } from '../images';
 import { markSeenWords } from '@/services/words';
 
 export interface ReflowTarget {
@@ -21,6 +22,7 @@ interface Props {
   /** Called while reading: chapter, fraction down the chapter */
   onScroll: (chapter: number, fraction: number) => void;
   onSelection: (selection: TextSelection | null) => void;
+  onImage?: (image: { src: string; alt: string }) => void;
   /** Highlights of this chapter; fraction = where in the chapter it was made */
   highlights: { id: string; text: string; fraction: number; color: string }[];
   seenWords: Set<string> | null;
@@ -55,7 +57,7 @@ function useBookStyles(bundle: ReflowBundle, dark: boolean) {
   }, [bundle, dark]);
 }
 
-export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection, highlights, seenWords, style, justify, dark }: Props) {
+export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection, onImage, highlights, seenWords, style, justify, dark }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const chapters = bundle.meta.chapters;
@@ -120,8 +122,14 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
     onSelection(sel);
   }, () => contentRef.current), [onSelection, target.chapter, chapters.length]);
 
-  // Links: same-chapter anchors, other chapters, the web
+  // Pictures open large; links: same-chapter anchors, other chapters, the web
   const onClick = (e: React.MouseEvent) => {
+    const image = tappedImage(e.target);
+    if (image && onImage && !window.getSelection()?.toString()) {
+      e.preventDefault();
+      onImage(image);
+      return;
+    }
     const a = (e.target as HTMLElement).closest('a');
     if (!a) return;
     const href = a.getAttribute('href') ?? '';

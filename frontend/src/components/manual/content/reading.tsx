@@ -68,6 +68,22 @@ export const reading: ManualChapter = {
       ),
     },
     {
+      id: 'pictures',
+      title: 'Pictures',
+      body: (
+        <>
+          <p>Tap a picture in an EPUB or Text book to see it full screen:</p>
+          <ul>
+            <li><strong>Zoom</strong>: pinch with two fingers, or double-tap where you want to look closer (double-tap again
+              to see all of it). With a mouse: the wheel.</li>
+            <li><strong>Move</strong> around a zoomed picture by dragging it.</li>
+            <li><strong>Close</strong>: ✕ at the top, or the phone's back button.</li>
+          </ul>
+          <p>PDF pages zoom with two fingers right on the page.</p>
+        </>
+      ),
+    },
+    {
       id: 'contents',
       title: 'Contents, highlights and words',
       body: (

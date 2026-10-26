@@ -4,6 +4,7 @@ import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
 import { Overlayer } from 'foliate-js/overlayer.js';
 import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
+import { tappedImage } from '../images';
 import type { Settings } from '@/contexts/SettingsContext';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
 import { watchSelection } from '../selection';
@@ -68,11 +69,11 @@ function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] 
 
 /** EPUB in pages (foliate-js). Location: the EPUB CFI. */
 export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; language: string }>(function EpubView(
-  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, settings, highlights, seenWords }, ref) {
+  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, onImage, settings, highlights, seenWords }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
-  const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection });
-  callbacks.current = { onLocation, onToc, onCurrentToc, onSelection };
+  const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection, onImage });
+  callbacks.current = { onLocation, onToc, onCurrentToc, onSelection, onImage };
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const highlightsRef = useRef(highlights);
@@ -105,6 +106,10 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
       if (!doc.documentElement.lang) doc.documentElement.lang = language;
       doc.addEventListener('keydown', onKey);
+      doc.addEventListener('click', (ev) => {
+        const src = tappedImage(ev.target);
+        if (src && !doc.getSelection()?.toString()) callbacks.current.onImage?.(src);
+      });
       if (seenRef.current) markSeenWords(doc.body, seenRef.current);
       // the selection, with its CFI (for highlights)
       watchSelection(doc, (sel) => {

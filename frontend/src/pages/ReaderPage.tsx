@@ -30,6 +30,7 @@ import { setShelfStatus } from '@/services/shelf';
 import { offlineSearchEnabled } from '@/search/offlineSearch';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
+import { ImageViewer, type ViewedImage } from '@/components/ImageViewer';
 import { useSendToComputer } from '@/components/SendToComputer';
 
 // Best reading experience first: text that reflows, then EPUB, then fixed PDF pages
@@ -261,9 +262,11 @@ export default function ReaderPage() {
   };
 
   const colors = READING_THEMES[settings.theme];
+  // a picture tapped in the book, shown large
+  const [picture, setPicture] = useState<ViewedImage | null>(null);
   const viewProps = {
     ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
-    vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords,
+    vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords, onImage: setPicture,
   };
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
 
@@ -333,6 +336,7 @@ export default function ReaderPage() {
         words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
         onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
       {sendUi}
+      <ImageViewer image={picture} onClose={() => setPicture(null)} />
       <Snackbar open={ratePrompt} autoHideDuration={12_000} onClose={() => setRatePrompt(false)}
         message="Finished! Tell the others what you thought?"
         action={<Button color="primary" size="small" onClick={() => book && navigate(`/book/${encodeURIComponent(book.id)}`)}>Rate it</Button>} />
