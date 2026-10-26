@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { ContinueReading, TopBar } from '@/components/TopBar';
 import {
   Alert, AppBar, Box, Button, Card, CardActionArea, CardContent, CircularProgress, Collapse, Dialog, DialogActions,
   DialogContent, DialogTitle, Drawer, IconButton, InputAdornment, List, ListItemButton, Link, ListItemText, Menu, MenuItem,
   Chip, Stack, TextField, Toolbar, Tooltip, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
@@ -293,9 +293,11 @@ export default function AskPage() {
     <Box sx={{ height: '100vh', '@supports (height: 100dvh)': { height: '100dvh' }, display: 'flex', flexDirection: 'column',
       bgcolor: 'background.default' }}>
       <AppBar position="static" sx={{ pt: 'env(safe-area-inset-top)' }}>
-        <Toolbar variant="dense">
-          <IconButton edge="start" aria-label="Back to the library" onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
-          {!wide && <IconButton aria-label="Chats" onClick={() => setDrawer(true)}><MenuIcon /></IconButton>}
+        <TopBar />
+        <ContinueReading />
+        {/* the chat's own bar */}
+        <Toolbar variant="dense" sx={{ borderTop: 1, borderColor: 'divider' }}>
+          {!wide && <IconButton edge="start" aria-label="Chats" onClick={() => setDrawer(true)}><MenuIcon /></IconButton>}
           <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: 15 }}>{conversation?.title || 'Ask your library'}</Typography>
           <Tooltip title="Which books to search">
             <Button size="small" color="inherit" startIcon={<LibraryBooksOutlinedIcon />} onClick={(e) => setScopeMenu(e.currentTarget)}

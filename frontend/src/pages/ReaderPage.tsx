@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppBar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, LinearProgress, ListItemText, Menu, MenuItem, Snackbar, TextField, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { Alert, AppBar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, ListItemText, Menu, MenuItem, Snackbar, TextField, Toolbar, Typography } from '@mui/material';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import { annotationsFor, deleteAnnotation, saveAnnotation, subscribeAnnotations, syncAnnotations, updateAnnotation, type Annotation } from '@/services/annotations';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FormatSizeIcon from '@mui/icons-material/FormatSize';
 import TocIcon from '@mui/icons-material/Toc';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
@@ -32,7 +31,7 @@ import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
 import { ImageViewer, type ViewedImage } from '@/components/ImageViewer';
 import { useSendToComputer } from '@/components/SendToComputer';
-import { ToolLinks } from '@/components/ToolLinks';
+import { TopBar } from '@/components/TopBar';
 import { setReadingNow } from '@/reader/readingNow';
 
 // Best reading experience first: text that reflows, then EPUB, then fixed PDF pages
@@ -272,18 +271,16 @@ export default function ReaderPage() {
     ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
     vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords, onImage: setPicture,
   };
-  const theme = useTheme();
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
-  const wideBar = useMediaQuery(theme.breakpoints.up('md'));
 
   return (
     <Box sx={{ height: '100vh', '@supports (height: 100dvh)': { height: '100dvh' }, display: 'flex',
       flexDirection: 'column', bgcolor: colors.background }}>
       <AppBar position="static" sx={{ pt: 'env(safe-area-inset-top)' }}>
-        {/* thumb-sized buttons, bigger and further apart on a tablet */}
-        <Toolbar variant="dense" sx={{ minHeight: { xs: 52, sm: 72 }, gap: { xs: 0.5, sm: 2.5 },
+        <TopBar bookId={book?.id} />
+        {/* the book's own bar: thumb-sized buttons, bigger and further apart on a tablet */}
+        <Toolbar variant="dense" sx={{ minHeight: { xs: 48, sm: 60 }, gap: { xs: 0.5, sm: 2.5 }, borderTop: 1, borderColor: 'divider',
           '& .MuiIconButton-root': { p: { xs: 1.25, sm: 1.75 } }, '& .MuiSvgIcon-root': { fontSize: { xs: 24, sm: 34 } } }}>
-          <IconButton edge="start" aria-label="Back to the library" onClick={() => navigate('/')}><ArrowBackIcon /></IconButton>
           <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: { xs: 15, sm: 20 } }}>{title}</Typography>
           {formats.length > 1 && (
             <Button color="inherit" startIcon={<SwapHorizIcon />} aria-label="Switch format"
@@ -299,20 +296,10 @@ export default function ReaderPage() {
           {phase.kind === 'ready' && (
             <IconButton aria-label="Contents" onClick={openToc}><TocIcon /></IconButton>
           )}
-          <IconButton edge={wideBar ? false : 'end'} aria-label="Text settings" onClick={(e) => setSettingsAnchor(e.currentTarget)}>
+          <IconButton edge="end" aria-label="Text settings" onClick={(e) => setSettingsAnchor(e.currentTarget)}>
             <FormatSizeIcon />
           </IconButton>
-          {/* the app's tools, without leaving for the library: in this row when it's wide enough, else in their own */}
-          {wideBar && <Divider orientation="vertical" flexItem sx={{ my: 1.5 }} />}
-          {wideBar && <ToolLinks bookId={book?.id} />}
         </Toolbar>
-        {!wideBar && (
-          <Toolbar variant="dense" sx={{ minHeight: { xs: 44, sm: 56 }, justifyContent: 'space-around', px: { xs: 0.5, sm: 2 },
-            borderTop: 1, borderColor: 'divider', '& .MuiIconButton-root': { p: { xs: 1, sm: 1.5 } },
-            '& .MuiSvgIcon-root': { fontSize: { xs: 22, sm: 30 } } }}>
-            <ToolLinks bookId={book?.id} />
-          </Toolbar>
-        )}
       </AppBar>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {!book && library && <Alert severity="warning" sx={{ m: 2 }}>This book is no longer in the library.</Alert>}

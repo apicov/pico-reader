@@ -18,15 +18,12 @@ const TOOLS = [
   { to: '/settings', label: 'Settings', icon: <SettingsOutlinedIcon /> },
 ] as const;
 
-// in a book, what's used while studying comes first
-const IN_BOOK = ['/ask', '/notes', '/translations', '/stats', '/community', '/settings'];
-
-/** The app's tools as icon buttons: in the top bar, and in the book (without "Add a book"; a chat started from the
- *  book asks about that book). Back from a tool returns to the book at its place. */
+/** The app's tools as icon buttons, the same on every page (TopBar); in a book, a chat started from it asks about
+ *  that book. */
 export function ToolLinks({ bookId }: { bookId?: string }) {
   return (
     <>
-      {(bookId ? IN_BOOK.map((to) => TOOLS.find((t) => t.to === to)!) : TOOLS).map((t) => (
+      {TOOLS.map((t) => (
         <Tooltip key={t.to} title={t.label}>
           <IconButton component={RouterLink} to={t.to} aria-label={t.label}
             state={bookId && t.to === '/ask' ? { bookId } : undefined}>

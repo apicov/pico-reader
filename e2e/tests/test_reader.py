@@ -77,11 +77,11 @@ def test_night_theme_taps_flash_amber_not_blue(page, book_id):
         assert b == 0 and r > g > 0, colour
 
 
-def test_the_tools_are_one_tap_away_in_the_book_and_back(page, book_id):
+def test_the_app_bar_is_on_top_in_the_book_and_leads_back(page, book_id):
     open_book(page, book_id)
     page.get_by_label("Ask your library").click()  # from the book's tool row
     page.get_by_text("One book").wait_for()  # a chat started from the book asks about it
-    page.get_by_label("Back to the library").click()
+    page.get_by_role("link", name="Library", exact=True).click()  # the app bar, on top of the chat too
     page.get_by_role("link", name=re.compile("Continue reading: Die Wolke")).click()
     until(lambda: next((f for f in page.frames if f.locator(f"text={FIRST}").count()), None), timeout=30, what="the book again")
     assert "/read/" in page.url

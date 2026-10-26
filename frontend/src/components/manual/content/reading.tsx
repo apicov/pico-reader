@@ -2,7 +2,6 @@
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import FormatSizeIcon from '@mui/icons-material/FormatSize';
 import HighlightAltIcon from '@mui/icons-material/HighlightAlt';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import TocIcon from '@mui/icons-material/Toc';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
@@ -58,15 +57,14 @@ export const reading: ManualChapter = {
       body: (
         <>
           <Controls rows={[
-            { icon: <ArrowBackIcon />, label: 'Back', text: 'To the library.' },
             { icon: <SwapHorizIcon />, label: 'Format', text: 'Another format of the book (only when it has several).' },
             { icon: <BookmarkBorderIcon />, label: 'Bookmark', text: 'Bookmark this place, or remove the bookmark that\'s here.' },
             { icon: <TocIcon />, label: 'Contents', text: 'The chapters, your highlights and bookmarks, and the words you looked up (next section).' },
             { icon: <FormatSizeIcon />, label: 'Text settings', text: <>Theme, text size, spacing, margins (<ManualLink to="themes">Text and themes</ManualLink>).</> },
           ]} />
-          <p>Under it (or in the same row on a wide screen) are the app's tools: Ask, Notes, Translations, Statistics,
-            Community and Settings. A chat started from a book asks about that book. Come back with the back button, or
-            <em> Continue reading</em> on any page (<ManualLink to="around.topbar">The top bar</ManualLink>).</p>
+          <p>Above it is the app's bar, as on every page: <strong>Library</strong> and the tools
+            (<ManualLink to="around.topbar">The top bar</ManualLink>). A chat started from a book asks about that book.
+            Come back with the back button, or <em>Continue reading</em> on any page.</p>
         </>
       ),
     },
