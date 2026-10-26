@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ContinueReading, TopBar } from '@/components/TopBar';
+import { TopBar } from '@/components/TopBar';
 import {
   Alert, AppBar, Box, Button, Card, CardActionArea, CardContent, CircularProgress, Collapse, Dialog, DialogActions,
   DialogContent, DialogTitle, Drawer, IconButton, InputAdornment, List, ListItemButton, Link, ListItemText, Menu, MenuItem,
@@ -294,7 +294,6 @@ export default function AskPage() {
       bgcolor: 'background.default' }}>
       <AppBar position="static" sx={{ pt: 'env(safe-area-inset-top)' }}>
         <TopBar />
-        <ContinueReading />
         {/* the chat's own bar */}
         <Toolbar variant="dense" sx={{ borderTop: 1, borderColor: 'divider' }}>
           {!wide && <IconButton edge="start" aria-label="Chats" onClick={() => setDrawer(true)}><MenuIcon /></IconButton>}

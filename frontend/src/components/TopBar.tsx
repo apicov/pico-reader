@@ -1,4 +1,4 @@
-import { Box, Button, Toolbar, Tooltip, Typography } from '@mui/material';
+import { IconButton, Toolbar, Tooltip, Typography } from '@mui/material';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import { Link as RouterLink } from 'react-router-dom';
@@ -8,13 +8,14 @@ import { READING_FONT } from '@/theme/readingThemes';
 import { ToolLinks } from './ToolLinks';
 
 /** The app's bar, the same at the top of every page (Library and the tools); a page's own bar goes under it.
- *  `bookId`: the book open now (a chat started from it asks about it). */
+ *  `bookId`: in the book (a chat started from it asks about it). On the other pages, the open book is one tap away. */
 export function TopBar({ bookId }: { bookId?: string }) {
   const online = useOnlineStatus();
+  const open = bookId ? null : readingNow();
   return (
     // on a tablet: bigger icons, further apart (a phone has no room to spare for seven of them)
-    <Toolbar sx={{ minHeight: { sm: 72 }, gap: { xs: 0, sm: 1.5 },
-      '& .MuiIconButton-root': { p: { sm: 1.5 } }, '& .MuiIconButton-root .MuiSvgIcon-root': { fontSize: { sm: 32 } } }}>
+    <Toolbar sx={{ minHeight: { sm: 72 }, gap: { xs: 0, sm: 1.5 }, px: { xs: 1.5, sm: 3 },
+      '& .MuiIconButton-root': { p: { xs: 0.75, sm: 1.5 } }, '& .MuiIconButton-root .MuiSvgIcon-root': { fontSize: { sm: 32 } } }}>
       <Typography component={RouterLink} to="/" variant="h6"
         sx={{ flexGrow: 1, fontFamily: READING_FONT, fontSize: { sm: 24 }, color: 'inherit', textDecoration: 'none' }}>
         Library
@@ -24,23 +25,16 @@ export function TopBar({ bookId }: { bookId?: string }) {
           <CloudOffOutlinedIcon fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />
         </Tooltip>
       )}
+      {open && (
+        <Tooltip title={`Back to the book: ${open.title}`}>
+          <IconButton component={RouterLink} to={`/read/${encodeURIComponent(open.id)}`} aria-label="Back to the book"
+            color="primary">
+            <MenuBookOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+      )}
       <ToolLinks bookId={bookId} />
     </Toolbar>
   );
 }
 
-/** "Continue reading: …" under the top bar, back to the book left last (this session) at its place */
-export function ContinueReading() {
-  const reading = readingNow();
-  if (!reading) return null;
-  return (
-    <Button component={RouterLink} to={`/read/${encodeURIComponent(reading.id)}`} color="inherit" size="small"
-      startIcon={<MenuBookOutlinedIcon />}
-      sx={{ justifyContent: 'flex-start', px: { xs: 2, sm: 3 }, py: 0.75, borderRadius: 0, borderTop: 1,
-        borderColor: 'divider', fontSize: { xs: 14, sm: 16 }, textTransform: 'none' }}>
-      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        Continue reading: {reading.title}
-      </Box>
-    </Button>
-  );
-}

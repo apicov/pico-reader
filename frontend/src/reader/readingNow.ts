@@ -1,5 +1,5 @@
-/** The book open last in this session, for the "Continue reading" line on the other pages (session storage: it's
- *  about the way back to the book, not a reading position, which position.ts keeps). */
+/** The book open last in this session, for the top bar's "Back to the book" button on the other pages (session
+ *  storage: it's about the way back to the book, not a reading position, which position.ts keeps). */
 const KEY = 'reading_now';
 
 export function setReadingNow(book: { id: string; title: string }): void {

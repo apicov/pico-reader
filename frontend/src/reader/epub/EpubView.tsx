@@ -69,7 +69,10 @@ function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] 
 
 /** EPUB in pages (foliate-js). Location: the EPUB CFI. */
 export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; language: string }>(function EpubView(
-  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, onImage, settings, highlights, seenWords }, ref) {
+  { blob, language, initial, onLocation, onToc, onCurrentToc, onSelection, onImage, settings, highlights, seenWords,
+    active = true }, ref) {
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
   const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection, onImage });
@@ -167,6 +170,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
   }, [settings]);
 
   const onKey = (e: KeyboardEvent) => {
+    if (!activeRef.current) return;
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') void viewRef.current?.goLeft();
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') void viewRef.current?.goRight();
   };

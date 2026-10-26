@@ -2,6 +2,7 @@
 import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 import ExploreOutlinedIcon from '@mui/icons-material/ExploreOutlined';
 import AddIcon from '@mui/icons-material/Add';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
@@ -97,10 +98,12 @@ export const findingYourWay: ManualChapter = {
       body: (
         <>
           <p>This bar is at the top of every page, the book included, always in the same place: tap <strong>Library</strong>
-            on the left to come back home, or a tool. A page's own bar (the book's, the chat's) is under it. After
-            leaving a book, <em>Continue reading: …</em> under the bar takes you back to it, at your place.</p>
+            on the left to come back home, or a tool. A page's own bar (the book's, the chat's) is under it.</p>
+          <p>The book you're reading stays open while you look at the other pages: the book button takes you back to it,
+            instantly and at the same place.</p>
           <Screenshot name="topbar" caption="The top bar on a tablet" device="tablet" />
           <Controls rows={[
+            { icon: <MenuBookOutlinedIcon />, label: 'Back to the book', text: 'Shown when a book is open and you\'re on another page: back to it, as you left it.' },
             { icon: <AddIcon />, label: 'Add books', text: <>Upload PDFs, EPUBs and Markdown to the shared library (<ManualLink to="adding">Adding books</ManualLink>).</> },
             { icon: <InsightsOutlinedIcon />, label: 'Statistics', text: <>Reading time, streaks, your goal, words you look up (<ManualLink to="stats">Statistics</ManualLink>).</> },
             { icon: <PeopleAltOutlinedIcon />, label: 'Community', text: <>Posts, reviews and lists of the other readers (<ManualLink to="community">Community</ManualLink>).</> },

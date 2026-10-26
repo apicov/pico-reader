@@ -6,7 +6,7 @@ import { annotationsFor, deleteAnnotation, saveAnnotation, subscribeAnnotations,
 import FormatSizeIcon from '@mui/icons-material/FormatSize';
 import TocIcon from '@mui/icons-material/Toc';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -53,8 +53,8 @@ async function openFormat(book: Book, format: BookFormat, online: boolean,
   return format === 'reflow' ? { format, bundle: await ReflowBundle.open(blob) } : { format, blob };
 }
 
-export default function ReaderPage() {
-  const { bookId = '' } = useParams();
+/** `active`: shown; when another page is, the book stays open behind it (ReaderHost) and comes back as it was */
+export default function ReaderPage({ bookId, active }: { bookId: string; active: boolean }) {
   // ?format=&location=&progress= opens the book at a place (a search result); used once, then dropped
   const [params, setParams] = useSearchParams();
   const jump = useRef<{ format: BookFormat | null; location: string; progress: number } | null>(
@@ -132,6 +132,31 @@ export default function ReaderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book?.id, format]);
 
+  // Hidden behind another page: what floats over the book closes (menus and panels would show over that page)
+  useEffect(() => {
+    if (active) return;
+    setSelection(null);
+    setTocOpen(false);
+    setSettingsAnchor(null);
+    setFormatAnchor(null);
+    setPicture(null);
+  }, [active]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Opened again at a place (a citation, a quote, a search result) while it was open behind another page
+  const target = active ? params.get('location') ?? params.get('progress') : null;
+  useEffect(() => {
+    if (!target || phase.kind !== 'ready' || jump.current) return;
+    const to = { format: (params.get('format') || null) as BookFormat | null, location: params.get('location') ?? '',
+      progress: Number(params.get('progress') ?? 0) };
+    setParams({}, { replace: true });
+    if (to.format && to.format !== format && book?.formats[to.format]) {
+      jump.current = to;  // the other format opens there
+      setFormat(to.format);
+    } else {
+      viewRef.current?.goTo(to.location, to.progress);
+    }
+  }, [target, phase.kind]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   // Opening a book puts it on the reader's "Currently reading" list (unless finished or removed before)
   useEffect(() => {
     if (book) void setShelfStatus(book.id, 'reading', true);
@@ -205,17 +230,17 @@ export default function ReaderPage() {
     }
   };
 
-  // Reading time for the statistics: a session per stretch of reading, saved as it grows
+  // Reading time for the statistics: a session per stretch of reading, saved as it grows (only while shown)
   const tracker = useRef<SessionTracker | null>(null);
   useEffect(() => {
-    if (!book || !format) return;
+    if (!book || !format || !active) return;
     const t = new SessionTracker(book.id, format);
     tracker.current = t;
     const finish = () => { const s = t.end(); if (s) void saveSession(s).then(() => flushEvents().catch(() => undefined)); };
     const onVisibility = () => { if (document.hidden) finish(); };
     document.addEventListener('visibilitychange', onVisibility);
     return () => { document.removeEventListener('visibilitychange', onVisibility); finish(); tracker.current = null; };
-  }, [book?.id, format]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [book?.id, format, active]);  // eslint-disable-line react-hooks/exhaustive-deps
   const lastSessionSave = useRef(0);
   const readingActivity = useCallback((progress?: number) => {
     const s = tracker.current?.activity(progress);
@@ -269,7 +294,7 @@ export default function ReaderPage() {
   const [picture, setPicture] = useState<ViewedImage | null>(null);
   const viewProps = {
     ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
-    vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords, onImage: setPicture,
+    vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords, onImage: setPicture, active,
   };
   const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
 

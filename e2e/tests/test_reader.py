@@ -77,11 +77,19 @@ def test_night_theme_taps_flash_amber_not_blue(page, book_id):
         assert b == 0 and r > g > 0, colour
 
 
-def test_the_app_bar_is_on_top_in_the_book_and_leads_back(page, book_id):
-    open_book(page, book_id)
-    page.get_by_label("Ask your library").click()  # from the book's tool row
+def test_the_book_stays_open_behind_the_other_pages(page, book_id):
+    frame = open_book(page, book_id)
+    keep = "document.querySelector('foliate-view')"
+    page.evaluate(f"{keep}.stillHere = true")  # gone if the book were opened again
+    page.get_by_role("link", name="Ask your library").click()
     page.get_by_text("One book").wait_for()  # a chat started from the book asks about it
-    page.get_by_role("link", name="Library", exact=True).click()  # the app bar, on top of the chat too
-    page.get_by_role("link", name=re.compile("Continue reading: Die Wolke")).click()
-    until(lambda: next((f for f in page.frames if f.locator(f"text={FIRST}").count()), None), timeout=30, what="the book again")
-    assert "/read/" in page.url
+    page.get_by_role("link", name="Notes").click()
+    page.get_by_role("link", name="Back to the book").click()  # the top bar, on every page
+    page.get_by_text("Kapitel 1").first.wait_for()
+    assert page.evaluate(f"{keep}.stillHere") is True  # the same book, not loaded again
+
+    # a link to a place in the book (a citation, a quote) moves the open book there
+    page.get_by_role("link", name="Notes").click()
+    page.evaluate(f"location.hash = '#/read/{book_id}?format=epub&progress=0.9'")
+    until(lambda: page.get_by_text("Kapitel 2").count() > 0, timeout=15, what="the book at 90%: chapter 2")
+    assert "progress" not in page.url and page.evaluate(f"{keep}.stillHere") is True

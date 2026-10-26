@@ -64,7 +64,8 @@ export const reading: ManualChapter = {
           ]} />
           <p>Above it is the app's bar, as on every page: <strong>Library</strong> and the tools
             (<ManualLink to="around.topbar">The top bar</ManualLink>). A chat started from a book asks about that book.
-            Come back with the back button, or <em>Continue reading</em> on any page.</p>
+            The book stays open while you're on the other pages: the book button in the top bar (or the back button)
+            brings it back instantly, at the same place.</p>
         </>
       ),
     },

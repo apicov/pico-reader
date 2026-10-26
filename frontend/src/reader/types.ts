@@ -29,6 +29,8 @@ export interface ViewProps {
   seenWords: Set<string> | null;
   /** A picture in the book was tapped: show it large */
   onImage?: (image: { src: string; alt: string }) => void;
+  /** false while another page is shown over the open book: keys mustn't turn its pages */
+  active?: boolean;
 }
 
 export interface Highlight {

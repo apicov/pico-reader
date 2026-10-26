@@ -6,6 +6,7 @@ import { subscribeOnline } from '@/services/connectivity';
 import { Box, CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/AppShell';
+import { ReaderHost } from '@/components/ReaderHost';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import LibraryPage from '@/pages/LibraryPage';
@@ -19,8 +20,6 @@ import ReviewPage from '@/pages/ReviewPage';
 import { createAppTheme, READING_THEMES } from '@/theme/readingThemes';
 import { NightFilter } from '@/theme/NightFilter';
 
-// The readers (pdf.js, foliate, KaTeX) load only when a book is opened
-const ReaderPage = lazy(() => import('@/pages/ReaderPage'));
 const UploadPage = lazy(() => import('@/pages/UploadPage'));
 const NotesPage = lazy(() => import('@/pages/NotesPage'));
 const NotePage = lazy(() => import('@/pages/NotesPage').then((m) => ({ default: m.NotePage })));
@@ -55,9 +54,11 @@ function Routed() {
   if (loading) return spinner;
   if (!reader) return <LoginPage />;
   return (
+    <>
+    <ReaderHost />
     <Routes>
-      {/* The reader is full screen; everything else has the library's top bar */}
-      <Route path="/read/:bookId" element={<Suspense fallback={spinner}><ReaderPage /></Suspense>} />
+      {/* the book is shown by ReaderHost, which keeps it open while the other pages are shown */}
+      <Route path="/read/:bookId" element={null} />
       <Route path="/" element={<AppShell><LibraryPage /></AppShell>} />
       <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
       <Route path="/dictionaries" element={<AppShell><DictionariesPage /></AppShell>} />
@@ -90,6 +91,7 @@ function Routed() {
       <Route path="/ask/:conversationId" element={<AskPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }
 
