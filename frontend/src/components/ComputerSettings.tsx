@@ -25,7 +25,8 @@ export function ComputerSettings() {
       <Typography variant="h6">Computer</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         What you send to your computer (the computer button on selected text or a highlight, or a note's menu) arrives
-        as files in <b>~/pico/inbox</b>, code as source files; files you
+        in <b>~/pico/inbox</b>: added to the running file <b>journal.md</b>, or as a file of its own (code as a
+        source file); files you
         save in <b>~/pico/outbox</b> become notes here; your notes are kept in <b>~/pico/notes</b> as .md files, both
         ways, within seconds.
       </Typography>

@@ -408,13 +408,13 @@ def save_note(ctx: Context, title: str, markdown: str, book: str | None = None, 
 
 
 def send_to_computer(ctx: Context, title: str, text: str, kind: str = "text", language: str = "",
-                     project: str | None = None) -> dict:
+                     project: str | None = None, append: bool = False) -> dict:
     """Into the reader's study computer's inbox folder, or a project's (the desktop tool writes it as a file)."""
     project_id, error = _project(ctx, project)
     if error:
         return error
     drop = computer_routes.DropIn(kind=kind if kind in ("text", "snippet", "note") else "text", title=title[:200],
-                                  language=language[:30], body=text, project_id=project_id)
+                                  language=language[:30], body=text, project_id=project_id, append=bool(append))
     return {"sent": title, "id": computer_routes.create_drop(ctx.db, ctx.reader.email, drop)}
 
 
@@ -564,10 +564,11 @@ TOOLS = {t.name: t for t in [
          save_note, changes=True, label=lambda a: f"Save note: {a.get('title', '')}"),
     Tool("send_to_computer", "Send text to the reader's study computer: it arrives as a file in their inbox folder "
          "(Markdown, or a source file for code). `kind`: 'snippet' for code (give `language`, e.g. python), 'note' or "
-         "'text'. `project`: into that project's inbox instead (list_notes names the projects). Only when the reader "
-         "asks. Runs after the reader confirms.",
+         "'text'. `project`: into that project's inbox instead (list_notes names the projects). `append`: added to the "
+         "end of the inbox's running file (journal.md) instead of a new file, when the reader asks for that. Only when "
+         "the reader asks. Runs after the reader confirms.",
          _obj({"title": {"type": "string"}, "text": {"type": "string"}, "kind": {"type": "string", "enum": ["text", "snippet", "note"]},
-               "language": {"type": "string"}, "project": PROJECT}, ["title", "text"]),
+               "language": {"type": "string"}, "project": PROJECT, "append": {"type": "boolean"}}, ["title", "text"]),
          send_to_computer, changes=True,
          label=lambda a: f"Send to your computer{' (' + a['project'] + ')' if a.get('project') else ''}: {a.get('title', '')}"),
     Tool("append_to_note", "Add a section to the end of one of the reader's notes (find it with list_notes). "

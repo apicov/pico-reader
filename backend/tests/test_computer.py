@@ -156,3 +156,9 @@ def test_the_agent_saves_and_sends_into_a_project(client, admin_headers, indexed
     assert note["project"] == "rust-book"
     listed = [m for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"][-1]["content"]
     assert "No project 'nope'" in listed and "rust-book" in listed
+
+
+def test_a_drop_can_go_to_the_running_file(client, admin_headers):
+    client.post("/api/drops", headers=admin_headers, json={**SNIPPET, "append": True})
+    client.post("/api/drops", headers=admin_headers, json={"kind": "text", "body": "a file of its own"})
+    assert [d["append"] for d in client.get("/api/computer/poll", headers=admin_headers).json()["drops"]] == [True, False]

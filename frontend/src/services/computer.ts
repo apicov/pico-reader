@@ -12,6 +12,7 @@ export interface Drop {
   body: string;
   meta?: { book_id?: string; book_title?: string; heading?: string; location?: string; progress?: number };
   project_id?: string | null; // into that project's inbox/ instead of ~/pico/inbox
+  append?: boolean; // added to the end of the inbox's running file (journal.md) instead of a file of its own
 }
 
 export interface ComputerStatus {

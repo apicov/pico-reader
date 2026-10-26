@@ -1,7 +1,8 @@
 """`reader sync`: the reader's study computer and the app, through plain files in one folder (default ~/pico),
 and in each project folder (`reader project add`: its own notes/ and inbox/).
 
-  inbox/    what the app (or the chat agent) sends: highlights and notes as Markdown, code as source files
+  inbox/    what the app (or the chat agent) sends: highlights and notes as Markdown, code as source files; or,
+            sent "to the running file", added to the end of inbox/journal.md
   outbox/   a .md or .txt saved here becomes a note in the app, then moves to outbox/sent/
   notes/    the reader's Notes as .md files, edited here or in the app. A new file becomes a note; deleting a
             file doesn't delete the note (it comes back: notes are deleted in the app); a note deleted in the app
@@ -117,6 +118,26 @@ def drop_file(drop: dict) -> tuple[str, str, str]:
     return stem, ".md", f"{head}\n{title}{body}\n"
 
 
+JOURNAL = "journal.md"  # the inbox's running file: what's sent "to the running file" is added at its end
+
+
+def journal_entry(drop: dict) -> str:
+    """One item for the running file: a heading line (when, from where, what), then the text; code fenced."""
+    meta = drop.get("meta") or {}
+    sent = datetime.fromisoformat(drop["created_at"]).astimezone()
+    kind = {"snippet": "code", "highlight": "highlight", "note": "note", "text": "text"}[drop["kind"]]
+    if drop["kind"] == "snippet" and drop.get("language"):
+        kind += f" ({drop['language']})"
+    head = " · ".join(p for p in (f"{sent:%Y-%m-%d %H:%M}", meta.get("book_title"), _where(meta), drop.get("title"), kind) if p)
+    body = drop["body"].strip("\n")
+    if drop["kind"] == "snippet":
+        fence = "````" if "```" in body else "```"
+        body = f"{fence}{drop.get('language', '')}\n{body}\n{fence}"
+    elif drop["kind"] == "highlight":
+        body = "\n".join(f"> {line}" if line else ">" for line in body.splitlines())
+    return f"\n---\n\n## {head}\n\n{body}\n"
+
+
 def note_file(note: dict) -> str:
     sources = note.get("sources") or []
     listed = "".join(f"\n[{i}] {s.get('title', '')}{', ' + s['heading'] if s.get('heading') else ''}: "
@@ -214,9 +235,16 @@ class Sync:
             project = projects.get(drop.get("project_id") or "")
             folder = Path(project["path"]) / "inbox" if project and Path(project["path"]).is_dir() else self.folder / "inbox"
             folder.mkdir(parents=True, exist_ok=True)
-            stem, suffix, content = drop_file(drop)
-            path = unique_path(folder, stem, suffix)
-            path.write_text(content, encoding="utf-8")
+            if drop.get("append"):
+                path = folder / JOURNAL
+                if not path.exists():
+                    path.write_text("# Journal\n\nWhat you send to the running file, the newest at the end.\n", encoding="utf-8")
+                with path.open("a", encoding="utf-8") as f:
+                    f.write(journal_entry(drop))
+            else:
+                stem, suffix, content = drop_file(drop)
+                path = unique_path(folder, stem, suffix)
+                path.write_text(content, encoding="utf-8")
             self.api.post(f"/api/drops/{drop['id']}/delivered")
             self.log(f"inbox: {path}")
             n += 1

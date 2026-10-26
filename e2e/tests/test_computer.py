@@ -30,7 +30,9 @@ def test_a_selection_sent_from_the_book_arrives_in_the_inbox_and_an_outbox_file_
     frame = open_book(page, book_id)
     select_first_paragraph(frame)
     page.get_by_label("Send to computer").click()
-    page.get_by_text("Sent to your computer").wait_for()
+    page.get_by_role("button", name="New file").click()
+    page.get_by_role("button", name=re.compile("^Inbox")).click()
+    page.get_by_text("Sent to your computer (inbox)").wait_for()
     token = api.headers["Authorization"].removeprefix("Bearer ")
     folder = tmp_path / "pico"
     sync_once(tmp_path, token, folder)
@@ -76,12 +78,16 @@ def test_a_project_folder_keeps_its_notes_live_and_gets_what_is_sent_to_it(page,
     sync_once(tmp_path, token, folder)
     page.get_by_text("exactly one owner (edited in vim)").wait_for(timeout=10_000)
 
-    # sent from the book into the project
+    # sent from the book into the project's running file, twice: one file, both in order
     frame = open_book(page, book_id)
-    select_first_paragraph(frame)
-    page.get_by_label("Send to computer").click()
-    page.get_by_role("button", name=re.compile("^rust-book")).click()
-    page.get_by_text("Sent to your computer (rust-book)").wait_for()
+    for _ in range(2):
+        select_first_paragraph(frame)
+        page.get_by_label("Send to computer").click()
+        page.get_by_role("button", name="Running file").click()
+        page.get_by_role("button", name=re.compile("^rust-book")).click()
+        page.get_by_text("Sent to your computer (rust-book, journal.md)").wait_for()
+        page.get_by_text("Sent to your computer (rust-book, journal.md)").wait_for(state="hidden")
     sync_once(tmp_path, token, folder)
-    [arrived] = list((project / "inbox").glob("*highlight.md"))
-    assert "> Der Alarm kam am Vormittag" in arrived.read_text()
+    assert [p.name for p in (project / "inbox").iterdir()] == ["journal.md"]
+    journal = (project / "inbox" / "journal.md").read_text()
+    assert journal.count("> Der Alarm kam am Vormittag") == 2 and journal.count("· highlight") == 2

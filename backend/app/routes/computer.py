@@ -40,6 +40,7 @@ class DropIn(BaseModel):
     body: str = Field(min_length=1, max_length=200_000)
     meta: DropMeta = DropMeta()
     project_id: str | None = None  # lands in that project's inbox/
+    append: bool = False  # added to the end of the inbox's running file (journal.md) instead of a file of its own
 
 
 class Drop(DropIn):
@@ -62,10 +63,10 @@ def create_drop(db: Session, email: str, body: DropIn) -> str:
     owner = db.execute(text("SELECT reader_email FROM drops WHERE id = :id"), {"id": drop_id}).scalar()
     if owner and owner != email:
         raise HTTPException(409, "That id is taken")
-    db.execute(text("""INSERT INTO drops (id, reader_email, kind, title, language, body, meta, project_id)
-                       VALUES (:id, :e, :k, :t, :l, :b, CAST(:m AS jsonb), :p) ON CONFLICT (id) DO NOTHING"""),
+    db.execute(text("""INSERT INTO drops (id, reader_email, kind, title, language, body, meta, project_id, append)
+                       VALUES (:id, :e, :k, :t, :l, :b, CAST(:m AS jsonb), :p, :a) ON CONFLICT (id) DO NOTHING"""),
                {"id": drop_id, "e": email, "k": body.kind, "t": body.title.strip(), "l": body.language.strip().lower(),
-                "b": body.body, "m": json.dumps(meta), "p": body.project_id})
+                "b": body.body, "m": json.dumps(meta), "p": body.project_id, "a": body.append})
     db.commit()
     return drop_id
 
@@ -80,12 +81,12 @@ def _pending(db: Session, email: str) -> list[Drop]:
                        ON CONFLICT (reader_email) DO UPDATE SET seen_at = now()"""), {"e": email})
     db.execute(text(f"""DELETE FROM drops WHERE reader_email = :e
                         AND delivered_at < now() - interval '{KEEP_DELIVERED_DAYS} days'"""), {"e": email})
-    rows = db.execute(text("""SELECT id, kind, title, language, body, meta, project_id, created_at FROM drops
+    rows = db.execute(text("""SELECT id, kind, title, language, body, meta, project_id, append, created_at FROM drops
                               WHERE reader_email = :e AND delivered_at IS NULL ORDER BY created_at LIMIT 100"""),
                       {"e": email}).fetchall()
     db.commit()
     return [Drop(id=r.id, kind=r.kind, title=r.title, language=r.language, body=r.body, meta=DropMeta(**r.meta),
-                 project_id=r.project_id, created_at=r.created_at.isoformat()) for r in rows]
+                 project_id=r.project_id, append=r.append, created_at=r.created_at.isoformat()) for r in rows]
 
 
 @router.get("/drops", response_model=list[Drop])

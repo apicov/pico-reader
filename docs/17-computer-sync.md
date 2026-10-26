@@ -56,7 +56,7 @@ reader project remove [--delete]   # stop syncing this folder (its files stay); 
 
 | Folder | Direction | What |
 |---|---|---|
-| `inbox/` | app → computer | What you send: highlights and notes as Markdown with front matter (`book`, `where`: chapter and %, `sent`); **code** as a source file (`.py`, `.rs`, … from the code block's language, `.txt` when it doesn't say) with a comment header naming the book and place. Names: `2026-10-25 1412 <book> – highlight.md`; never overwritten |
+| `inbox/` | app → computer | What you send: highlights and notes as Markdown with front matter (`book`, `where`: chapter and %, `sent`); **code** as a source file (`.py`, `.rs`, … from the code block's language, `.txt` when it doesn't say) with a comment header naming the book and place. Names: `2026-10-25 1412 <book> – highlight.md`; never overwritten. Or, sent to the **running file**: added to the end of `inbox/journal.md` |
 | `outbox/` | computer → app | A `.md` / `.txt` saved here becomes a note (title: the file name, or `title:` in front matter), then moves to `outbox/sent/`. Files younger than 2 s wait for the next round (still being written) |
 | `notes/` | both | Your Notes that are in no project, as `<title>.md`: front matter `id`, `title`, `book`, `updated`, then the Markdown. Edit freely; the title comes from `title:` |
 
@@ -75,6 +75,19 @@ edited, it shows the new version ("Updated just now"). If you save an edit in th
 meanwhile, the app says so and lets you choose: *Take theirs*, or *Save mine* over it.
 
 ## Sending from the app
+
+*Send to computer* opens a small dialog with two choices, both remembered:
+- **How:**
+  - **Running file**: the item is added to the end of that inbox's `journal.md`. Keep that one file open in the
+    editor and everything you send arrives there, in order, the newest at the end. Each item gets a heading
+    line (`## 2026-10-26 14:12 · Fluent Python · 2 Lists · code (python)`), then the text: a highlight as a
+    quote, code fenced with its language.
+  - **New file**: a file of its own, as below.
+- **Where:** the inbox, or one of your projects.
+
+Editors reload a file changed on disk when you come back to it. In Vim/LazyVim that's `autoread` (on in
+LazyVim), or `:checktime` to reload now. Don't keep unsaved edits in `journal.md`: saving them would overwrite
+what arrived meanwhile (Vim warns about it first).
 
 - **Selected text** → the computer button: code (selected inside a code block) goes as a snippet with its
   language; anything else as a highlight with the book, chapter and place.

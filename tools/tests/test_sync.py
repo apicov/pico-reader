@@ -449,3 +449,22 @@ def test_a_file_saved_here_starts_a_round_within_seconds(tmp_path, monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         sync_module.run(api, tmp_path / "pico", 60, once=False)
     assert [n["title"] for n in api.notes.values()] == ["Neu"]  # long before the next 60 s round
+
+
+def test_items_sent_to_the_running_file_are_added_at_its_end(env, project):
+    api, sync, folder, _, _ = env
+    pid, proj = project
+    api.drops = [drop(1, "highlight", "Der Alarm kam.", meta={"book_title": "Die Wolke", "heading": "Kapitel 1"}) | {"append": True},
+                 drop(2, "snippet", "print('```')", language="python", title="Fences") | {"append": True}]
+    sync.run_once()
+    api.drops += [drop(3, "text", "Noch eins") | {"append": True}, drop(4, "text", "own file")]
+    sync.run_once()
+    journal = (folder / "inbox" / "journal.md").read_text()
+    assert journal.startswith("# Journal\n")
+    assert journal.index("Der Alarm") < journal.index("print(") < journal.index("Noch eins")  # newest at the end
+    assert "## " in journal and "Die Wolke · Kapitel 1 · highlight" in journal and "> Der Alarm kam." in journal
+    assert "````python\nprint('```')\n````" in journal  # code fenced, even code with fences in it
+    assert [p.name for p in (folder / "inbox").iterdir() if p.name != "journal.md"][0].endswith("text.md")
+    api.drops += [drop(5, "text", "for the project") | {"append": True, "project_id": pid}]
+    sync.run_once()
+    assert "for the project" in (proj / "inbox" / "journal.md").read_text()
