@@ -1,16 +1,25 @@
 """The AI's chat completions, in JSON mode or with tools, from tsp-publisher (app/describe.py call_groq): the reply's
 shape is spelled out in the prompt, and an unusable reply is asked for once more.
 
-LLM_PROVIDER picks the AI:
+LLM_PROVIDER picks the AI, LLM_FALLBACK_PROVIDER an optional second one (any of them, or the same one with another
+key or model) for when the first is unavailable:
 - groq (the default) and gemini speak the same OpenAI-compatible API, here. Gemini thinks before answering, and
   its thinking counts against max_tokens, so its calls get room for it.
-- anthropic: Claude through the official SDK (app/anthropic_llm.py), in and out in the same shapes."""
+- anthropic: Claude through the official SDK (app/anthropic_llm.py), in and out in the same shapes.
+
+Unavailable means a limit (429), a server error (5xx), a timeout or no connection, a missing key, or a key or model
+the provider doesn't accept (401/403/404). Then the call goes to the fallback, and the first one rests (as long as
+it asked, or a minute after a limit, half a minute otherwise). A bad request or a refusal isn't retried elsewhere.
+In the chat an answer can change provider between steps: each message keeps which route wrote it (`_route`), so a
+provider gets the others' tool calls in a form it takes (Gemini needs a thought signature on every tool call, and
+accepts Google's placeholder for calls it didn't make)."""
 
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import httpx
 from sqlalchemy import text
@@ -20,54 +29,106 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+GEMINI_PLACEHOLDER_SIGNATURE = "skip_thought_signature_validator"
+UNAVAILABLE = {401, 403, 404, 408, 409, 429}  # and every 5xx
+
 
 @dataclass
-class Provider:
-    """An OpenAI-compatible provider (Groq or Gemini)."""
-    name: str
-    base_url: str
+class Route:
+    """One provider with its key and models: the primary, or the fallback."""
+    kind: str  # groq | gemini | anthropic
     api_key: str
-    key_setting: str  # the setting to put the key in, for the error message
+    key_setting: str  # where the key goes, for the error message
     model: str
     agent_model: str
-    extra: dict[str, Any] = field(default_factory=dict)  # sent with every request
+    base_url: str = ""
+    extra: dict[str, Any] = field(default_factory=dict)  # sent with every request (OpenAI-compatible ones)
     thinking_room: int = 0  # added to max_tokens
 
+    @property
+    def name(self) -> str:
+        return {"groq": "Groq", "gemini": "Gemini", "anthropic": "Anthropic"}[self.kind]
 
-def _anthropic() -> bool:
-    return get_settings().llm_provider.lower() == "anthropic"
+    @property
+    def id(self) -> str:
+        return f"{self.kind}:{self.model}:{self.api_key[-6:]}"
 
 
-def provider() -> Provider:
+def _route(kind: str, api_key: str | None = None, key_setting: str = "", model_name: str = "",
+           agent_model: str = "") -> Route:
     s = get_settings()
-    if s.llm_provider.lower() == "gemini":
-        return Provider("Gemini", s.gemini_base_url.rstrip("/"), s.gemini_api_key, "GEMINI_API_KEY", s.gemini_model,
-                        s.gemini_agent_model or s.gemini_model,
-                        {"reasoning_effort": s.gemini_reasoning_effort} if s.gemini_reasoning_effort else {}, 2048)
+    kind = kind.lower()
+    if kind == "gemini":
+        model_name = model_name or s.gemini_model
+        return Route("gemini", s.gemini_api_key if api_key is None else api_key, key_setting or "GEMINI_API_KEY",
+                     model_name, agent_model or s.gemini_agent_model or model_name, s.gemini_base_url.rstrip("/"),
+                     {"reasoning_effort": s.gemini_reasoning_effort} if s.gemini_reasoning_effort else {}, 2048)
+    if kind == "anthropic":
+        model_name = model_name or s.anthropic_model
+        return Route("anthropic", s.anthropic_api_key if api_key is None else api_key, key_setting or "ANTHROPIC_API_KEY",
+                     model_name, agent_model or s.anthropic_agent_model or model_name)
+    if kind != "groq":
+        raise GroqError(f"Unknown AI provider {kind!r} (groq, gemini or anthropic)", 503)
+    model_name = model_name or s.groq_model
     extra: dict[str, Any] = {}
-    if s.groq_reasoning_format and "qwen" in s.groq_model:
+    if s.groq_reasoning_format and "qwen" in model_name:
         extra["reasoning_format"] = s.groq_reasoning_format
-    if "gpt-oss" in s.groq_model:
+    if "gpt-oss" in model_name:
         extra["reasoning_effort"] = "low"
-    return Provider("Groq", s.groq_base_url.rstrip("/"), s.groq_api_key, "GROQ_API_KEY", s.groq_model,
-                    s.groq_agent_model or s.groq_model, extra)
+    return Route("groq", s.groq_api_key if api_key is None else api_key, key_setting or "GROQ_API_KEY", model_name,
+                 agent_model or s.groq_agent_model or model_name, s.groq_base_url.rstrip("/"), extra)
+
+
+def routes() -> list[Route]:
+    """The primary, and the fallback when there is one."""
+    s = get_settings()
+    out = [_route(s.llm_provider)]
+    if s.llm_fallback_provider:
+        out.append(_route(s.llm_fallback_provider, s.llm_fallback_api_key or None,
+                          "LLM_FALLBACK_API_KEY" if s.llm_fallback_api_key else "", s.llm_fallback_model,
+                          s.llm_fallback_agent_model))
+    return out
 
 
 def model() -> str:
-    """The model that writes translations and definitions (stored with them)."""
-    return get_settings().anthropic_model if _anthropic() else provider().model
+    """The primary's model (what translations and definitions are normally written by)."""
+    return routes()[0].model
 
 
 class GroqError(Exception):
-    """The AI couldn't be used: no key, unreachable, an error answer. `status` is what the API passes on."""
+    """The AI couldn't be used: no key, unreachable, an error answer. `status` is what the API passes on;
+    `unavailable`: worth trying the fallback."""
 
-    def __init__(self, message: str, status: int = 502):
+    def __init__(self, message: str, status: int = 502, unavailable: bool = False, retry_after: float | None = None):
         super().__init__(message)
         self.status = status
+        self.unavailable = unavailable
+        self.retry_after = retry_after
 
 
 class UnusableReply(Exception):
     pass
+
+
+_resting: dict[str, float] = {}  # route id → until when it's left out
+
+
+def _with_fallback(call: Callable[[Route], T]) -> T:
+    """`call` on the primary, or on the fallback when the primary is unavailable (or resting)."""
+    all_routes = routes()
+    now = time.monotonic()
+    ready = [r for r in all_routes if _resting.get(r.id, 0) <= now] or all_routes  # all resting: try them anyway
+    for i, route in enumerate(ready):
+        try:
+            return call(route)
+        except GroqError as e:
+            if not e.unavailable or i == len(ready) - 1:
+                raise
+            rest = e.retry_after or (60 if e.status == 429 else 30)
+            _resting[route.id] = time.monotonic() + rest
+            logger.warning("%s unavailable (%s); using %s, and leaving it out for %.0f s", route.name, e, ready[i + 1].name, rest)
+    raise AssertionError("unreachable")
 
 
 # Who a call is for and why: (reader email, purpose). Every call with one is recorded in llm_usage.
@@ -93,84 +154,119 @@ def _record(who: Who, reply: dict[str, Any]) -> None:
 
 def chat_json(system: str, user: str, max_tokens: int = 1500, who: Who = None) -> tuple[dict[str, Any], str]:
     """(the reply's JSON object, the model that wrote it); one retry when the JSON is unusable."""
-    for attempt in (1, 2):
-        try:
-            reply = _call(system, user, max_tokens)
-            _record(who, reply)
-            return _parse(reply), model()
-        except UnusableReply as e:
-            if attempt == 2:
-                raise GroqError(f"The model's answer wasn't usable: {e}") from e
-            logger.warning("Unusable AI reply, asking again: %s", e)
-    raise AssertionError("unreachable")
-
-
-def _payload(p: Provider, messages: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
-    if not p.api_key:
-        raise GroqError(f"{p.key_setting} is not set on the server", 503)
-    # keys starting with _ are the app's own (another provider's raw blocks): not for this API
-    plain = [{k: v for k, v in m.items() if not k.startswith("_")} for m in messages]
-    return {"model": p.model, "messages": plain, "max_tokens": max_tokens + p.thinking_room, "temperature": 0.2,
-            **p.extra}
-
-
-def _post(p: Provider, payload: dict[str, Any], timeout: float) -> httpx.Response:
-    try:
-        return httpx.post(f"{p.base_url}/chat/completions", json=payload, timeout=timeout,
-                          headers={"Authorization": f"Bearer {p.api_key}"})
-    except httpx.HTTPError as e:
-        raise GroqError(f"Could not reach {p.name}: {e}") from e
-
-
-def _failed(p: Provider, res: httpx.Response) -> GroqError:
-    logger.error("%s error %s: %s", p.name, res.status_code, res.text[:500])
-    return GroqError(f"{p.name} answered {res.status_code}: {_error_message(res)}", 429 if res.status_code == 429 else 502)
+    def ask(route: Route) -> tuple[dict[str, Any], str]:
+        for attempt in (1, 2):
+            try:
+                reply = _call(route, system, user, max_tokens)
+                _record(who, reply)
+                return _parse(reply), route.model
+            except UnusableReply as e:
+                if attempt == 2:
+                    raise GroqError(f"The model's answer wasn't usable: {e}") from e
+                logger.warning("Unusable AI reply, asking again: %s", e)
+        raise AssertionError("unreachable")
+    return _with_fallback(ask)
 
 
 def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1500,
                who: Who = None) -> dict[str, Any]:
     """One step of the agent: the model's message, with `tool_calls` when it wants tools run. The caller passes it
-    back with the next step as it came (Gemini's tool calls carry thought signatures, Claude's `_raw` its thinking)."""
-    if _anthropic():
+    back with the next step as it came, its `_` keys included: `_route` (who wrote it), Claude's `_raw` blocks."""
+    def step(route: Route) -> dict[str, Any]:
+        if route.kind == "anthropic":
+            message, usage = _claude(route, lambda: anthropic_llm.chat_tools(messages, tools, max_tokens, route.api_key,
+                                                                           route.agent_model, _timeout()))
+            _record(who, usage)
+            return {**message, "_route": route.id}
+        payload = {**_payload(route, _for_openai(route, messages), max_tokens), "tools": tools, "tool_choice": "auto",
+                   "model": route.agent_model}
+        res = _post(route, payload)
+        if res.status_code != 200:
+            raise _failed(route, res)
         try:
-            message, usage = anthropic_llm.chat_tools(messages, tools, max_tokens)
-        except anthropic_llm.ClaudeError as e:
-            raise GroqError(str(e), e.status) from e
-        _record(who, usage)
-        return message
-    p = provider()
-    payload = {**_payload(p, messages, max_tokens), "tools": tools, "tool_choice": "auto", "model": p.agent_model}
-    res = _post(p, payload, 90)
-    if res.status_code != 200:
-        raise _failed(p, res)
+            body = res.json()
+            message = body["choices"][0]["message"]
+        except (KeyError, IndexError, ValueError) as e:
+            raise GroqError(f"{route.name} sent no message", unavailable=True) from e
+        _record(who, body)
+        return {**message, "_route": route.id}
+    return _with_fallback(step)
+
+
+def _for_openai(route: Route, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The messages as this OpenAI-compatible provider takes them: without the app's `_` keys, and the tool calls of
+    other routes with a placeholder thought signature (Gemini) or without Google's extra fields (Groq)."""
+    out = []
+    for m in messages:
+        plain = {k: v for k, v in m.items() if not k.startswith("_")}
+        if plain.get("tool_calls") and m.get("_route") != route.id:
+            calls = []
+            for c in plain["tool_calls"]:
+                c = {k: v for k, v in c.items() if k != "extra_content"}
+                if route.kind == "gemini":
+                    c["extra_content"] = {"google": {"thought_signature": GEMINI_PLACEHOLDER_SIGNATURE}}
+                calls.append(c)
+            plain["tool_calls"] = calls
+        out.append(plain)
+    return out
+
+
+def _timeout() -> float:
+    return get_settings().llm_timeout
+
+
+def _payload(route: Route, messages: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
+    if not route.api_key:
+        raise GroqError(f"{route.key_setting} is not set on the server", 503, unavailable=True)
+    return {"model": route.model, "messages": messages, "max_tokens": max_tokens + route.thinking_room,
+            "temperature": 0.2, **route.extra}
+
+
+def _post(route: Route, payload: dict[str, Any]) -> httpx.Response:
     try:
-        body = res.json()
-        message = body["choices"][0]["message"]
-    except (KeyError, IndexError, ValueError) as e:
-        raise GroqError(f"{p.name} sent no message") from e
-    _record(who, body)
-    return message
+        return httpx.post(f"{route.base_url}/chat/completions", json=payload, timeout=_timeout(),
+                          headers={"Authorization": f"Bearer {route.api_key}"})
+    except httpx.HTTPError as e:
+        raise GroqError(f"Could not reach {route.name}: {e}", unavailable=True) from e
 
 
-def _call(system: str, user: str, max_tokens: int) -> dict[str, Any]:
-    if _anthropic():
-        try:
-            return anthropic_llm.chat_json(system, user, max_tokens)
-        except anthropic_llm.ClaudeError as e:
-            raise GroqError(str(e), e.status) from e
-    p = provider()
-    payload = {**_payload(p, [{"role": "system", "content": system}, {"role": "user", "content": user}], max_tokens),
+def _failed(route: Route, res: httpx.Response) -> GroqError:
+    logger.error("%s error %s: %s", route.name, res.status_code, res.text[:500])
+    try:
+        retry_after = float(res.headers.get("retry-after", ""))
+    except ValueError:
+        retry_after = None
+    return GroqError(f"{route.name} answered {res.status_code}: {_error_message(res)}",
+                     429 if res.status_code == 429 else 502,
+                     unavailable=res.status_code in UNAVAILABLE or res.status_code >= 500, retry_after=retry_after)
+
+
+def _claude(route: Route, call: Callable[[], T]) -> T:
+    if not route.api_key:
+        raise GroqError(f"{route.key_setting} is not set on the server", 503, unavailable=True)
+    try:
+        return call()
+    except anthropic_llm.ClaudeError as e:
+        raise GroqError(str(e), 429 if e.status == 429 else 422 if e.status == 422 else 502,
+                        unavailable=e.status == 0 or e.status in UNAVAILABLE or e.status >= 500) from e
+
+
+def _call(route: Route, system: str, user: str, max_tokens: int) -> dict[str, Any]:
+    if route.kind == "anthropic":
+        return _claude(route, lambda: anthropic_llm.chat_json(system, user, max_tokens, route.api_key, route.model,
+                                                             _timeout()))
+    payload = {**_payload(route, [{"role": "system", "content": system}, {"role": "user", "content": user}], max_tokens),
                "response_format": {"type": "json_object"}}
-    res = _post(p, payload, 60)
+    res = _post(route, payload)
     if res.status_code == 400 and "response_format" in res.text:
-        # a provider without JSON mode: the prompt spells out the shape, _parse finds the object in the text
+        # no JSON mode: the prompt spells out the shape, and _parse finds the object in the text
         payload.pop("response_format")
-        res = _post(p, payload, 60)
+        res = _post(route, payload)
     if res.status_code != 200:
         if "json_validate_failed" in res.text:
-            logger.error("%s error %s: %s", p.name, res.status_code, res.text[:500])
+            logger.error("%s error %s: %s", route.name, res.status_code, res.text[:500])
             raise UnusableReply(_error_message(res))
-        raise _failed(p, res)
+        raise _failed(route, res)
     return res.json()
 
 

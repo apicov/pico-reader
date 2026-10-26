@@ -83,7 +83,7 @@ search and categories (`backend/app/groq_client.py`):
 | `LLM_PROVIDER` | Settings | Notes |
 |---|---|---|
 | `groq` (default) | `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_AGENT_MODEL` (above) | OpenAI-compatible API |
-| `gemini` | `GEMINI_API_KEY` (aistudio.google.com → Get API key), `GEMINI_MODEL` (default `gemini-3.8-flash`), `GEMINI_AGENT_MODEL` (empty = `GEMINI_MODEL`), `GEMINI_REASONING_EFFORT` (default `low`) | See below |
+| `gemini` | `GEMINI_API_KEY` (aistudio.google.com → Get API key), `GEMINI_MODEL` (default `gemini-3.5-flash`), `GEMINI_AGENT_MODEL` (empty = `GEMINI_MODEL`), `GEMINI_REASONING_EFFORT` (default `low`) | See below |
 | `anthropic` | `ANTHROPIC_API_KEY` (platform.claude.com → API keys), `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_AGENT_MODEL` (empty = `ANTHROPIC_MODEL`), `ANTHROPIC_EFFORT` (`low` … `max`; empty = the model's default) | See below |
 
 - **Gemini:** Google's OpenAI-compatible endpoint, so it runs the same code as Groq.
@@ -99,6 +99,25 @@ search and categories (`backend/app/groq_client.py`):
   - **Refusals:** a request the safety classifiers decline is retried on Anthropic's recommended fallback model
     (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). If that declines too, the reader sees
     "Claude declined to answer this".
+
+**A fallback for when the first is unavailable.** `LLM_FALLBACK_PROVIDER` (`groq`, `gemini` or `anthropic`) names a
+second AI. It can be another provider, or the same one with another key or model:
+- **Its own settings:** `LLM_FALLBACK_API_KEY`, `LLM_FALLBACK_MODEL` and `LLM_FALLBACK_AGENT_MODEL`. Empty ones take
+  that provider's own settings. Example: two Gemini free-tier keys, the second as the fallback:
+  `LLM_PROVIDER=gemini`, `GEMINI_API_KEY=<first>`, `LLM_FALLBACK_PROVIDER=gemini`, `LLM_FALLBACK_API_KEY=<second>`.
+- **When it's used:** the first is unavailable. That means a limit (429), overload or a server error (5xx), a call
+  longer than `LLM_TIMEOUT` (default 45 s), no connection, a missing key, or a key or model the provider no longer
+  accepts (401/403/404). A bad request or a refusal isn't retried elsewhere.
+- **Resting:** after a failure the first provider is left out as long as it asked to be (`retry-after`), or a minute
+  after a limit, half a minute otherwise. Then it's tried first again.
+- **In the chat:** an answer can continue on the fallback between two steps.
+  - Each step keeps which route wrote it (`_route`), so each provider gets the others' tool calls in a form it
+    takes.
+  - Gemini needs a thought signature on every earlier tool call. For calls it didn't make, it gets Google's
+    placeholder (`skip_thought_signature_validator`).
+  - Claude gets the calls without Gemini's extra fields; Groq gets them without Claude's blocks.
+- **Where to see it:** the log says when and why the fallback was used. AI usage on the statistics page lists the
+  model of each call.
 
 Switching providers: set the variables in `reader.env` and restart both services. Translations made before keep
 the model that wrote them; asking again for the same passage translates it anew with the new model. AI usage on

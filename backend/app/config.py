@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # "anthropic" (Claude, through the official SDK, app/anthropic_llm.py)
     llm_provider: str = "groq"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.8-flash"
+    gemini_model: str = "gemini-3.5-flash"
     gemini_agent_model: str = ""  # empty = gemini_model
     # Gemini 3 always thinks; "minimal"/"low" keep it short (2.5 models also take "none"); empty = the model's default
     gemini_reasoning_effort: str = "low"
@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-opus-5-5"
     anthropic_agent_model: str = ""  # empty = anthropic_model
     anthropic_effort: str = ""  # low | medium | high | xhigh | max; empty = the model's default
+    # A second AI for when the first is unavailable (limits, overload, errors): any provider, or the same one with
+    # another key or model. Empty settings take that provider's own (e.g. GEMINI_MODEL).
+    llm_fallback_provider: str = ""
+    llm_fallback_api_key: str = ""
+    llm_fallback_model: str = ""
+    llm_fallback_agent_model: str = ""
+    llm_timeout: float = 45  # seconds a call may take before the fallback gets it
 
     @property
     def is_production(self) -> bool:

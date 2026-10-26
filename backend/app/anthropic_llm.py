@@ -22,14 +22,16 @@ THINKING_ROOM = 4000
 
 
 class ClaudeError(Exception):
+    """`status`: the API's HTTP status; 0 when it couldn't be reached, 422 for a refusal."""
+
     def __init__(self, message: str, status: int = 502):
         super().__init__(message)
         self.status = status
 
 
 @lru_cache
-def _client(api_key: str) -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=api_key, timeout=90.0)
+def _client(api_key: str, timeout: float) -> anthropic.Anthropic:
+    return anthropic.Anthropic(api_key=api_key, timeout=timeout)
 
 
 def _convert(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
@@ -64,11 +66,9 @@ def _tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
              "input_schema": t["function"].get("parameters") or {"type": "object", "properties": {}}} for t in tools]
 
 
-def _create(model: str, max_tokens: int, system: str, messages: list[dict[str, Any]],
+def _create(api_key: str, model: str, timeout: float, max_tokens: int, system: str, messages: list[dict[str, Any]],
             tools: list[dict[str, Any]] | None = None):
     s = get_settings()
-    if not s.anthropic_api_key:
-        raise ClaudeError("ANTHROPIC_API_KEY is not set on the server", 503)
     kwargs: dict[str, Any] = {"model": model, "max_tokens": max_tokens + THINKING_ROOM, "messages": messages,
                               "betas": [FALLBACK_BETA], "fallbacks": "default"}
     if system:
@@ -78,13 +78,13 @@ def _create(model: str, max_tokens: int, system: str, messages: list[dict[str, A
     if s.anthropic_effort:
         kwargs["output_config"] = {"effort": s.anthropic_effort}
     try:
-        response = _client(s.anthropic_api_key).beta.messages.create(**kwargs)
+        response = _client(api_key, timeout).beta.messages.create(**kwargs)
     except anthropic.RateLimitError as e:
         raise ClaudeError(f"Anthropic answered 429: {e.message}", 429) from e
     except anthropic.APIStatusError as e:
-        raise ClaudeError(f"Anthropic answered {e.status_code}: {e.message}") from e
-    except anthropic.APIConnectionError as e:
-        raise ClaudeError(f"Could not reach Anthropic: {e}") from e
+        raise ClaudeError(f"Anthropic answered {e.status_code}: {e.message}", e.status_code) from e
+    except anthropic.APIConnectionError as e:  # timeouts too
+        raise ClaudeError(f"Could not reach Anthropic: {e}", 0) from e
     if response.stop_reason == "refusal":
         raise ClaudeError("Claude declined to answer this", 422)
     return response
@@ -100,17 +100,17 @@ def _text(response) -> str:
     return "".join(b.text for b in response.content if b.type == "text")
 
 
-def chat_json(system: str, user: str, max_tokens: int) -> dict[str, Any]:
+def chat_json(system: str, user: str, max_tokens: int, api_key: str, model: str, timeout: float) -> dict[str, Any]:
     """A completion whose text is the JSON object the prompt describes, in the chat-completions shape."""
-    response = _create(get_settings().anthropic_model, max_tokens, system, [{"role": "user", "content": user}])
+    response = _create(api_key, model, timeout, max_tokens, system, [{"role": "user", "content": user}])
     return {**_usage(response), "choices": [{"message": {"role": "assistant", "content": _text(response)}}]}
 
 
-def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int) -> tuple[dict[str, Any], dict[str, Any]]:
+def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int, api_key: str, model: str,
+               timeout: float) -> tuple[dict[str, Any], dict[str, Any]]:
     """(the model's message with `tool_calls` and `_raw`, the usage to record) for one agent step."""
-    s = get_settings()
     system, converted = _convert(messages)
-    response = _create(s.anthropic_agent_model or s.anthropic_model, max_tokens, system, converted, _tools(tools))
+    response = _create(api_key, model, timeout, max_tokens, system, converted, _tools(tools))
     calls = [{"id": b.id, "type": "function", "function": {"name": b.name, "arguments": json.dumps(b.input)}}
              for b in response.content if b.type == "tool_use"]
     message: dict[str, Any] = {"role": "assistant", "content": _text(response),

@@ -282,8 +282,9 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                 if not calls:
                     answer = (reply.get("content") or "").strip()
                     break
+                # the app's own keys (_route: who wrote it, _raw: Claude's blocks) go along to the next step
                 messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls,
-                                 **({"_raw": reply["_raw"]} if "_raw" in reply else {})})
+                                 **{k: v for k, v in reply.items() if k.startswith("_")}})
                 for call in calls:
                     name = call["function"]["name"]
                     raw = call["function"].get("arguments") or "{}"
