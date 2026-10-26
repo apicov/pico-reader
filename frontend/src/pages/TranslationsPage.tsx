@@ -86,6 +86,7 @@ export default function TranslationsPage() {
                   )}
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                     {titles.get(t.book_id ?? '') ?? t.book_id ?? ''} · {new Date(t.created_at).toLocaleDateString()}
+                    {t.model ? ` · ${t.model}` : ''}
                   </Typography>
                 </Box>
                 <IconButton size="small" aria-label="Delete" disabled={!online} onClick={() => void deleteTranslation(t.id)}>

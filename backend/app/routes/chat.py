@@ -273,11 +273,15 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                 messages.append({"role": m.role, "content": m.content + _action_notes(m)})
             messages.append({"role": "user", "content": content})
             schemas = [t.schema() for t in agent_tools.TOOLS.values()]
-            extras: dict = {"tools": [], "links": [], "actions": []}
+            extras: dict = {"tools": [], "links": [], "actions": [], "models": []}  # models: the AIs that answered
             answer = ""
             for _round in range(MAX_ROUNDS):
                 # room for a whole note in a save_note call
                 reply = groq_client.chat_tools(messages, schemas, max_tokens=4000, who=(reader.email, "chat"))
+                if reply.get("_model"):  # shown under the answer; more than one when the fallback took over midway
+                    who_answered = reply["_model"] + (" · fallback" if reply.get("_via") == "fallback" else "")
+                    if who_answered not in extras["models"]:
+                        extras["models"].append(who_answered)
                 calls = reply.get("tool_calls") or []
                 if not calls:
                     answer = (reply.get("content") or "").strip()
@@ -340,7 +344,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                                  {"t": title, "id": conversation_id})
                 conn.execute(text("UPDATE conversations SET updated_at = now() WHERE id = :id"), {"id": conversation_id})
             yield _event("done", {"user_message_id": user_id, "assistant_message_id": assistant_id,
-                                  "title": title or convo.title})
+                                  "title": title or convo.title, "models": extras["models"]})
         except groq_client.GroqError as e:
             yield _event("error", {"message": str(e), "user_message_id": user_id})
         except Exception:  # never a stream that just stops: the app shows the error and keeps the question

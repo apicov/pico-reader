@@ -51,6 +51,7 @@ class Translation(BaseModel):
     model: str
     created_at: datetime
     cached: bool = False
+    via: str = ""  # main or fallback, for a translation made just now (not stored)
 
 
 def prompt(source_lang: str, target_lang: str) -> str:
@@ -113,8 +114,8 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
         return _row(stored, cached=True)
     user = f"CONTEXT:\n{body.context or body.text}\n\nPASSAGE:\n{body.text}"
     try:
-        data, model = groq_client.chat_json(prompt(body.source_lang, body.target_lang), user,
-                                            who=(reader.email, "translate"))
+        data, model, via = groq_client.chat_json_via(prompt(body.source_lang, body.target_lang), user,
+                                                     who=(reader.email, "translate"))
         result = _clean(data)
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))
@@ -127,7 +128,7 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
            "s": body.source_lang or result["detected_language"], "tl": body.target_lang, "m": model,
            "pv": PROMPT_VERSION, "k": key, "r": json.dumps(result, ensure_ascii=False)}).fetchone()
     db.commit()
-    return _row(row)
+    return _row(row).model_copy(update={"via": via})
 
 
 @router.get("/translations", response_model=list[Translation])
@@ -164,6 +165,8 @@ class Definition(BaseModel):
     part_of_speech: str
     meaning: str
     notes: str
+    model: str = ""  # the AI that wrote it
+    via: str = ""  # main or fallback
 
 
 def define_prompt(language: str, target: str) -> str:
@@ -180,9 +183,9 @@ Reply with one JSON object and nothing else with exactly those four keys."""
 @router.post("/define", response_model=Definition)
 def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
     try:
-        data, _model = groq_client.chat_json(define_prompt(body.language, body.target_lang),
-                                             f"WORD: {body.word}\nSENTENCE: {body.context or body.word}", max_tokens=300,
-                                             who=(reader.email, "define"))
+        data, model, via = groq_client.chat_json_via(define_prompt(body.language, body.target_lang),
+                                                     f"WORD: {body.word}\nSENTENCE: {body.context or body.word}",
+                                                     max_tokens=300, who=(reader.email, "define"))
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))
     meaning = str(data.get("meaning") or "").strip()
@@ -190,4 +193,4 @@ def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
         raise HTTPException(502, "The model returned no meaning")
     return Definition(word=body.word, lemma=str(data.get("lemma") or body.word).strip(),
                       part_of_speech=str(data.get("part_of_speech") or "").strip(), meaning=meaning,
-                      notes=str(data.get("notes") or "").strip())
+                      notes=str(data.get("notes") or "").strip(), model=model, via=via)

@@ -15,6 +15,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { Markdown } from '@/components/Markdown';
+import { ModelNote } from '@/components/ModelNote';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import {
@@ -361,6 +362,7 @@ export default function AskPage() {
                         ))}
                       </Stack>
                     ) : null}
+                    {m.content && <ModelNote models={m.extras?.models} />}
                     {m.extras?.links?.length ? (
                       <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
                         {m.extras.links.map((l, j) => (

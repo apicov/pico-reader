@@ -20,6 +20,7 @@ export const ask: ManualChapter = {
             <li>The answer cites passages as <strong>[1]</strong>, <strong>[2]</strong>…: tap one to open the book right there.</li>
             <li><Ui>All books</Ui> at the top picks which books to search, e.g. only the one you're studying.</li>
             <li>Ask follow-ups: the chat remembers the conversation.</li>
+            <li>A grey line under each answer says which AI model wrote it (two, when a second one took over halfway).</li>
           </ul>
           <Screenshot name="ask" caption="An answer with the passages it comes from" />
           <p>The list of chats (the button at the top left on a phone) keeps every conversation: <Ui>New chat</Ui>, search

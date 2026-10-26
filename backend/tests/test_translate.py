@@ -106,5 +106,6 @@ def test_define_a_word_missing_from_the_dictionaries(client, auth_headers, groq)
     r = client.post("/api/define", headers=auth_headers, json={
         "word": "Strahlenschutzgesetzes", "context": "Nach dem Strahlenschutzgesetzes…", "language": "de", "target_lang": "es"})
     assert r.status_code == 200 and r.json()["lemma"] == "das Strahlenschutzgesetz"
+    assert r.json()["model"] == "qwen/qwen3.8-27b"  # shown under the definition
     assert "German–Spanish dictionary" in calls[0]["messages"][0]["content"]
     assert "SENTENCE: Nach dem" in calls[0]["messages"][1]["content"]

@@ -197,7 +197,8 @@ export const selecting: ManualChapter = {
       body: (
         <>
           <p>More than one word shows <Ui>Translate into …</Ui>. The translation comes with notes and the passage's
-            vocabulary; tap a word of the vocabulary to look it up, or add it to your review cards.</p>
+            vocabulary; tap a word of the vocabulary to look it up, or add it to your review cards. A grey line under it
+            says which AI model translated it (also under a word the AI explained).</p>
           <p>Translations are kept: the same passage translates at once the next time, and every translation is on the
             <ManualLink to="words.translations"> Translations</ManualLink> page. The language you translate into is in Settings.</p>
         </>

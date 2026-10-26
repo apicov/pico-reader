@@ -45,6 +45,7 @@ class Route:
     base_url: str = ""
     extra: dict[str, Any] = field(default_factory=dict)  # sent with every request (OpenAI-compatible ones)
     thinking_room: int = 0  # added to max_tokens
+    role: str = "main"  # or "fallback": shown with what it wrote
 
     @property
     def name(self) -> str:
@@ -85,9 +86,11 @@ def routes() -> list[Route]:
     s = get_settings()
     out = [_route(s.llm_provider)]
     if s.llm_fallback_provider:
-        out.append(_route(s.llm_fallback_provider, s.llm_fallback_api_key or None,
+        fallback = _route(s.llm_fallback_provider, s.llm_fallback_api_key or None,
                           "LLM_FALLBACK_API_KEY" if s.llm_fallback_api_key else "", s.llm_fallback_model,
-                          s.llm_fallback_agent_model))
+                          s.llm_fallback_agent_model)
+        fallback.role = "fallback"
+        out.append(fallback)
     return out
 
 
@@ -154,12 +157,18 @@ def _record(who: Who, reply: dict[str, Any]) -> None:
 
 def chat_json(system: str, user: str, max_tokens: int = 1500, who: Who = None) -> tuple[dict[str, Any], str]:
     """(the reply's JSON object, the model that wrote it); one retry when the JSON is unusable."""
-    def ask(route: Route) -> tuple[dict[str, Any], str]:
+    data, model_name, _role = chat_json_via(system, user, max_tokens, who)
+    return data, model_name
+
+
+def chat_json_via(system: str, user: str, max_tokens: int = 1500, who: Who = None) -> tuple[dict[str, Any], str, str]:
+    """chat_json, and which route answered: "main" or "fallback"."""
+    def ask(route: Route) -> tuple[dict[str, Any], str, str]:
         for attempt in (1, 2):
             try:
                 reply = _call(route, system, user, max_tokens)
                 _record(who, reply)
-                return _parse(reply), route.model
+                return _parse(reply), route.model, route.role
             except UnusableReply as e:
                 if attempt == 2:
                     raise GroqError(f"The model's answer wasn't usable: {e}") from e
@@ -171,13 +180,14 @@ def chat_json(system: str, user: str, max_tokens: int = 1500, who: Who = None) -
 def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1500,
                who: Who = None) -> dict[str, Any]:
     """One step of the agent: the model's message, with `tool_calls` when it wants tools run. The caller passes it
-    back with the next step as it came, its `_` keys included: `_route` (who wrote it), Claude's `_raw` blocks."""
+    back with the next step as it came, its `_` keys included: `_route` (who wrote it), `_model` (the model that did),
+    `_via` (main or fallback), Claude's `_raw` blocks."""
     def step(route: Route) -> dict[str, Any]:
         if route.kind == "anthropic":
             message, usage = _claude(route, lambda: anthropic_llm.chat_tools(messages, tools, max_tokens, route.api_key,
                                                                            route.agent_model, _timeout()))
             _record(who, usage)
-            return {**message, "_route": route.id}
+            return {**message, "_route": route.id, "_model": usage.get("model") or route.agent_model, "_via": route.role}
         payload = {**_payload(route, _for_openai(route, messages), max_tokens), "tools": tools, "tool_choice": "auto",
                    "model": route.agent_model}
         res = _post(route, payload)
@@ -189,7 +199,7 @@ def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_
         except (KeyError, IndexError, ValueError) as e:
             raise GroqError(f"{route.name} sent no message", unavailable=True) from e
         _record(who, body)
-        return {**message, "_route": route.id}
+        return {**message, "_route": route.id, "_model": route.agent_model, "_via": route.role}
     return _with_fallback(step)
 
 

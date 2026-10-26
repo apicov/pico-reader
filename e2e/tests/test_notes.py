@@ -17,6 +17,7 @@ def test_the_chat_proposes_a_note_and_after_confirming_it_is_on_the_notes_page(p
     page.get_by_placeholder("Ask about your books…").fill("Make me a note of the characters")
     page.get_by_label("Send").click()
     page.get_by_text("Save note: Die Wolke: Figuren").wait_for(timeout=20_000)
+    page.get_by_text("by qwen/qwen3.8-27b").wait_for()  # which model answered
     page.get_by_role("button", name="Show the note").click()
     page.locator(".diagram svg").first.wait_for(timeout=20_000)  # the preview draws the diagram
     mine = lambda: [n for n in api.get("/api/notes").json() if n["title"].startswith("Die Wolke: Figuren")]

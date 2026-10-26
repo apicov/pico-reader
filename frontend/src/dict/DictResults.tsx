@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ModelNote } from '@/components/ModelNote';
 import { Box, Button, Chip, CircularProgress, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
@@ -63,7 +64,7 @@ export function DictResults({ word, language, dark, record }: {
   const { settings } = useSettings();
   const online = useOnlineStatus();
   const [known, setKnown] = useState(false);
-  const [ai, setAi] = useState<{ lemma: string; part_of_speech: string; meaning: string; notes: string } | 'asking' | 'failed' | null>(null);
+  const [ai, setAi] = useState<{ lemma: string; part_of_speech: string; meaning: string; notes: string; model?: string; via?: string } | 'asking' | 'failed' | null>(null);
   const [carded, setCarded] = useState(false);
   const recorded = useRef('');
   const [current, setCurrent] = useState(word);
@@ -86,7 +87,7 @@ export function DictResults({ word, language, dark, record }: {
         // no dictionary has it: ask the model, with the sentence for context
         if (!r.results.length && online) {
           setAi('asking');
-          void api<{ lemma: string; part_of_speech: string; meaning: string; notes: string }>('/api/define', {
+          void api<{ lemma: string; part_of_speech: string; meaning: string; notes: string; model?: string; via?: string }>('/api/define', {
             method: 'POST', body: { word: r.word, context: record.context.slice(0, 1500), language, target_lang: settings.targetLanguage },
           }).then((d) => {
             setAi(d);
@@ -119,6 +120,7 @@ export function DictResults({ word, language, dark, record }: {
           </Typography>
           <Typography className="dict-def">{ai.meaning}</Typography>
           {ai.notes && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{ai.notes}</Typography>}
+          <ModelNote models={ai.model} via={ai.via} sx={{ mt: 0.5 }} />
         </>
       )}
     </Box>

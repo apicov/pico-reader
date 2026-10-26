@@ -283,3 +283,13 @@ def test_a_chat_answer_moves_from_gemini_to_claude(claude, use, wire):
     assert groq_client.chat_tools(messages, TOOLS)["content"] == "40 minutes."
     assert claude.sent[0]["messages"][1] == {"role": "assistant", "content": [
         {"type": "tool_use", "id": "c1", "name": "reading_stats", "input": {}}]}
+
+
+def test_what_answered_says_main_or_fallback(use, wire):
+    use(LLM_PROVIDER="groq", GROQ_API_KEY="first", LLM_FALLBACK_PROVIDER="groq", LLM_FALLBACK_API_KEY="second")
+    sent, replies = wire
+    assert groq_client.chat_json_via("s", "u")[1:] == ("qwen/qwen3.8-27b", "main")
+    replies += [httpx.Response(429, json={"error": {"message": "limit"}}), ok()]
+    assert groq_client.chat_json_via("s", "u")[2] == "fallback"
+    replies.append({"choices": [{"message": {"role": "assistant", "content": "hi"}}]})
+    assert groq_client.chat_tools([{"role": "user", "content": "hi"}], TOOLS)["_via"] == "fallback"  # the first rests

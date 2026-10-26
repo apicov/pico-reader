@@ -5,6 +5,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { languageName } from '@/services/languages';
 import { findLocal, translate, type Translation } from '@/services/translations';
+import { ModelNote } from '@/components/ModelNote';
 import { READING_FONT } from '@/theme/readingThemes';
 import { addCard } from '@/services/review';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
@@ -80,6 +81,7 @@ export function TranslationCard({ text, context, language, bookId, location, onT
           {added === null ? 'Add words to review' : `${added} added to review`}
         </Button>
       )}
+      <ModelNote models={result.model} via={result.via} />
     </Box>
   );
 }

@@ -48,6 +48,7 @@ export interface MessageExtras {
   tools?: string[];
   links?: ChatLink[];
   actions?: ChatAction[];
+  models?: string[]; // the AIs that wrote the answer (two when the fallback took over midway)
 }
 
 export interface Message {

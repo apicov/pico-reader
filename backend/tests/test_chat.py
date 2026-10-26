@@ -280,3 +280,28 @@ def test_the_agent_reads_my_shelf_posts_and_reviews(client, admin_headers, auth_
                                          "date": r["call_4"]["reviews"][0]["date"]}
     stored = client.get(f"/api/conversations/{cid}", headers=admin_headers).json()["messages"][1]
     assert set(stored["extras"]["tools"]) == {"My shelf", "community", "reviews"}
+
+
+def test_an_answer_says_which_model_wrote_it(client, admin_headers, indexed_book, groq):
+    groq.steps += [call("reading_stats", {"period": "week"}), say("You read 15 minutes.")]
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "How much did I read?")
+    assert evs[-1][1]["models"] == ["qwen/qwen3.8-27b"]
+    stored = client.get(f"/api/conversations/{cid}", headers=admin_headers).json()["messages"][1]
+    assert stored["extras"]["models"] == ["qwen/qwen3.8-27b"]
+
+
+def test_an_answer_finished_by_the_fallback_says_so(client, admin_headers, indexed_book, groq, monkeypatch):
+    import httpx
+    from app import groq_client
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "groq")
+    monkeypatch.setenv("LLM_FALLBACK_API_KEY", "second-key")
+    get_settings.cache_clear()
+    groq_client._resting.clear()
+    groq.steps += [call("reading_stats", {"period": "week"}),
+                   httpx.Response(429, json={"error": {"message": "Rate limit reached"}}),  # the first key, step 2
+                   say("You read 15 minutes.")]
+    cid = new(client, admin_headers)
+    evs = ask(client, admin_headers, cid, "How much did I read?")
+    assert evs[-1][1]["models"] == ["qwen/qwen3.8-27b", "qwen/qwen3.8-27b · fallback"]
+    groq_client._resting.clear()

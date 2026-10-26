@@ -17,6 +17,7 @@ export interface Translation {
   notes: string;
   vocabulary: { term: string; meaning: string }[];
   model: string;
+  via?: string; // main or fallback: which AI translated it just now (not kept)
   created_at: string;
   cached?: boolean;
 }
