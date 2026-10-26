@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Alert, Box, Button, Card, CardActionArea, CardContent, Chip, Dialog, DialogTitle, IconButton, Link, List,
   ListItemButton, ListItemText, Menu, MenuItem, Snackbar, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Markdown } from '@/components/Markdown';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import type { Passage } from '@/services/chat';
 import { exportText } from '@/services/download';
 import { useSendToComputer } from '@/components/SendToComputer';
-import { cachedNotes, changeNote, deleteNote, getNote, loadNotes, NoteConflict, subscribeNotes, type Note } from '@/services/notes';
+import { cachedNotes, changeNote, createNote, deleteNote, getNote, loadNotes, NoteConflict, subscribeNotes,
+  type Note } from '@/services/notes';
 import { getPref, setPref } from '@/services/prefs';
 import { cachedProjects, loadProjects, type Project } from '@/services/projects';
 import { READING_FONT } from '@/theme/readingThemes';
@@ -79,6 +81,7 @@ function useProjects(): Project[] {
 
 export default function NotesPage() {
   const notes = useNotes();
+  const online = useOnlineStatus();
   const projects = useProjects();
   const [project, setProject] = useState<string>('all'); // 'all', 'none' or a project's id
   useEffect(() => { void getPref<string>('notes_project').then((p) => p && setProject(p)); }, []);
@@ -91,10 +94,17 @@ export default function NotesPage() {
   );
   return (
     <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-      <Typography variant="h5" sx={{ fontFamily: READING_FONT, mb: 0.5 }}>Notes</Typography>
+      <Stack direction="row" sx={{ alignItems: 'center', mb: 0.5 }}>
+        <Typography variant="h5" sx={{ fontFamily: READING_FONT, flex: 1 }}>Notes</Typography>
+        <Button variant="outlined" startIcon={<AddIcon />} component={RouterLink} disabled={!online}
+          to="/notes/new" state={{ project: shown !== 'all' && shown !== 'none' ? shown : null }}>
+          New note
+        </Button>
+      </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Summaries, outlines and diagrams you keep. Ask for one in the <Link component={RouterLink} to="/ask">chat</Link>, e.g.
-        “summarise chapter 3 of … as a note, with a map of the characters”.
+        Summaries, outlines and diagrams you keep. Write one yourself (Markdown), or ask for one in
+        the <Link component={RouterLink} to="/ask">chat</Link>, e.g. “summarise chapter 3 of … as a note, with a map of
+        the characters”.
       </Typography>
       {projects.length > 0 && notes && (
         <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', mb: 2 }}>
@@ -119,6 +129,70 @@ function asMarkdown(note: Note): string {
   return `# ${note.title}\n\n${note.markdown.trim()}\n${sources.length ? `\n---\n\n${sources.join('\n\n')}\n` : ''}`;
 }
 
+/** Title and Markdown, with a preview: editing a note, or writing a new one */
+function NoteEditor({ draft, onChange, canSave, onSave, onCancel, onCite, children }: {
+  draft: { title: string; markdown: string }; onChange: (d: { title: string; markdown: string }) => void;
+  canSave: boolean; onSave: () => void; onCancel: () => void; onCite?: (n: number) => void; children?: React.ReactNode;
+}) {
+  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+  return (
+    <Stack spacing={1.5}>
+      <TextField label="Title" value={draft.title} onChange={(e) => onChange({ ...draft, title: e.target.value })} />
+      {children}
+      <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+        <Tab value="edit" label="Markdown" />
+        <Tab value="preview" label="Preview" />
+      </Tabs>
+      {tab === 'edit'
+        ? <TextField multiline minRows={14} value={draft.markdown} onChange={(e) => onChange({ ...draft, markdown: e.target.value })}
+            slotProps={{ input: { sx: { fontFamily: 'ui-monospace, monospace', fontSize: 14 } }, htmlInput: { 'aria-label': 'Markdown' } }} />
+        : <Markdown text={draft.markdown} onCite={onCite ?? (() => undefined)} sx={{ fontFamily: READING_FONT, lineHeight: 1.6 }} />}
+      <Stack direction="row" spacing={1}>
+        <Button variant="contained" disableElevation disabled={!canSave || !draft.title.trim()} onClick={onSave}>Save</Button>
+        <Button onClick={onCancel}>Cancel</Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+/** `/notes/new`: a note written by hand (in a project when the list was showing one) */
+export function NewNotePage() {
+  const navigate = useNavigate();
+  const online = useOnlineStatus();
+  const projects = useProjects();
+  const start = (useLocation().state as { project?: string | null } | null)?.project ?? '';
+  const [draft, setDraft] = useState({ title: '', markdown: '' });
+  const [project, setProject] = useState<string>(start);
+  const [error, setError] = useState('');
+  const save = async () => {
+    setError('');
+    try {
+      const note = await createNote({ ...draft, project_id: project || null });
+      navigate(`/notes/${encodeURIComponent(note.id)}`, { replace: true });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Box sx={{ maxWidth: 760, mx: 'auto' }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <IconButton edge="start" aria-label="Back" onClick={() => navigate(-1)}><ArrowBackIcon /></IconButton>
+        <Typography variant="h6">New note</Typography>
+      </Stack>
+      {!online && <Alert severity="info" sx={{ mb: 2 }}>Saving a note needs a connection.</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      <NoteEditor draft={draft} onChange={setDraft} canSave={online} onSave={() => void save()} onCancel={() => navigate(-1)}>
+        {projects.length > 0 && (
+          <TextField select size="small" label="Project" value={project} onChange={(e) => setProject(e.target.value)}>
+            <MenuItem value="">No project (~/pico/notes)</MenuItem>
+            {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+          </TextField>
+        )}
+      </NoteEditor>
+    </Box>
+  );
+}
+
 export function NotePage() {
   const { noteId = '' } = useParams();
   const navigate = useNavigate();
@@ -126,7 +200,6 @@ export function NotePage() {
   const [note, setNote] = useState<Note | null | undefined>(undefined);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [draft, setDraft] = useState<{ title: string; markdown: string } | null>(null);
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState<Note | null>(null);
   const [updated, setUpdated] = useState(false);
@@ -185,7 +258,7 @@ export function NotePage() {
         {!draft && <IconButton aria-label="Note actions" onClick={(e) => setMenu(e.currentTarget)}><MoreVertIcon /></IconButton>}
       </Stack>
       <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
-        <MenuItem disabled={!online} onClick={() => { setMenu(null); setTab('edit'); setDraft({ title: note.title, markdown: note.markdown }); }}>
+        <MenuItem disabled={!online} onClick={() => { setMenu(null); setDraft({ title: note.title, markdown: note.markdown }); }}>
           Edit
         </MenuItem>
         <MenuItem onClick={() => { setMenu(null); void exportText(asMarkdown(note), `${note.title.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'note'}.md`); }}>
@@ -231,22 +304,9 @@ export function NotePage() {
         </List>
       </Dialog>
       {draft ? (
-        <Stack spacing={1.5}>
-          <TextField label="Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-            <Tab value="edit" label="Markdown" />
-            <Tab value="preview" label="Preview" />
-          </Tabs>
-          {tab === 'edit'
-            ? <TextField multiline minRows={14} value={draft.markdown} onChange={(e) => setDraft({ ...draft, markdown: e.target.value })}
-                slotProps={{ input: { sx: { fontFamily: 'ui-monospace, monospace', fontSize: 14 } } }} />
-            : <Markdown text={draft.markdown} onCite={(n) => note.sources[n - 1] && openPassage(note.sources[n - 1])}
-                sx={{ fontFamily: READING_FONT, lineHeight: 1.6 }} />}
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" disableElevation disabled={!online || !draft.title.trim()} onClick={() => void save()}>Save</Button>
-            <Button onClick={() => { setDraft(null); setError(''); setConflict(null); }}>Cancel</Button>
-          </Stack>
-        </Stack>
+        <NoteEditor draft={draft} onChange={setDraft} canSave={online} onSave={() => void save()}
+          onCancel={() => { setDraft(null); setError(''); setConflict(null); }}
+          onCite={(n) => note.sources[n - 1] && openPassage(note.sources[n - 1])} />
       ) : (
         <>
           <Typography variant="h5" sx={{ fontFamily: READING_FONT, lineHeight: 1.25 }}>{note.title}</Typography>

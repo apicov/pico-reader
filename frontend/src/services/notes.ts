@@ -72,6 +72,14 @@ export async function getNote(id: string): Promise<Note | undefined> {
   return db.notes.get(id);
 }
 
+/** A note written by hand in the app (needs a connection, like changing one). */
+export async function createNote(fields: { title: string; markdown: string; project_id?: string | null }): Promise<Note> {
+  const note = await api<Note>('/api/notes', { method: 'POST', body: { ...fields, origin: 'app' } });
+  await db.notes.put(note);
+  changed();
+  return note;
+}
+
 /** The note changed elsewhere (e.g. its file on the computer) since this edit began: `current` is that version. */
 export class NoteConflict extends Error {
   constructor(public current: Note) {

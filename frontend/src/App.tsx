@@ -24,6 +24,7 @@ const ReaderPage = lazy(() => import('@/pages/ReaderPage'));
 const UploadPage = lazy(() => import('@/pages/UploadPage'));
 const NotesPage = lazy(() => import('@/pages/NotesPage'));
 const NotePage = lazy(() => import('@/pages/NotesPage').then((m) => ({ default: m.NotePage })));
+const NewNotePage = lazy(() => import('@/pages/NotesPage').then((m) => ({ default: m.NewNotePage })));
 const CommunityPage = lazy(() => import('@/pages/CommunityPage'));
 const PostPage = lazy(() => import('@/pages/PostPage'));
 const PostEditorPage = lazy(() => import('@/pages/PostEditorPage'));
@@ -64,6 +65,7 @@ function Routed() {
       <Route path="/review" element={<AppShell><ReviewPage /></AppShell>} />
       <Route path="/upload" element={<AppShell><Suspense fallback={spinner}><UploadPage /></Suspense></AppShell>} />
       <Route path="/notes" element={<AppShell><Suspense fallback={spinner}><NotesPage /></Suspense></AppShell>} />
+      <Route path="/notes/new" element={<AppShell><Suspense fallback={spinner}><NewNotePage /></Suspense></AppShell>} />
       <Route path="/notes/:noteId" element={<AppShell><Suspense fallback={spinner}><NotePage /></Suspense></AppShell>} />
       {/* the community: online pages, loaded on first use */}
       {([

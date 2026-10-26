@@ -5,7 +5,7 @@ else sees them.
 
 ## Making one
 
-Ask in the chat, e.g. "summarise *Die Wolke* chapter by chapter as a note, with a map of the characters". The
+Write one yourself (Notes → **New note**), save a `.md` on the study computer ([17](17-computer-sync.md)), or ask in the chat, e.g. "summarise *Die Wolke* chapter by chapter as a note, with a map of the characters". The
 agent searches the book, writes the note and proposes **Save note: …**. The card has **Show the note** (a preview)
 and **Confirm** / **Cancel**; nothing is saved before confirming. "Add chapter 6 to my *Die Wolke* note" finds
 the note and proposes **Add to note: …**, which appends a section.
@@ -29,7 +29,8 @@ that in the app. The answer limit is 4,000 tokens, so a whole note fits in one c
 
 ## In the app
 
-- **Notes** (top bar, `/notes`): every note, newest first. With projects ([17](17-computer-sync.md#projects)),
+- **Notes** (top bar, `/notes`): every note, newest first. **New note** writes one by hand (`/notes/new`): title
+  and Markdown with a preview, and the project when there are any (it starts with the one the list shows). With projects ([17](17-computer-sync.md#projects)),
   chips filter them: *All · a project (n) … · No project* (remembered).
 - **A note** (`/notes/<id>`), ⋮ menu:
   - **Edit**: title and Markdown, with a preview.

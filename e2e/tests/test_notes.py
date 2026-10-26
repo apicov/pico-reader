@@ -35,3 +35,19 @@ def test_the_chat_proposes_a_note_and_after_confirming_it_is_on_the_notes_page(p
     page.get_by_role("button", name="Save").click()
     page.get_by_role("heading", name="Die Wolke: Figuren und Orte").wait_for()
     assert api.get(f"/api/notes/{note['id']}").json()["title"] == "Die Wolke: Figuren und Orte"
+
+
+def test_a_note_written_by_hand(page, api):
+    page.goto(f"{WEB}/#/notes")
+    page.get_by_role("link", name="New note").click()
+    page.get_by_label("Title").fill("Von Hand")
+    page.get_by_label("Markdown").fill("## Figuren\n\n- Janna-Berta\n- Uli")
+    page.get_by_role("tab", name="Preview").click()
+    page.get_by_role("heading", name="Figuren").wait_for()
+    page.get_by_role("button", name="Save").click()
+    page.get_by_role("heading", name="Von Hand").wait_for()  # the saved note, shown
+    assert "/notes/note-" in page.url
+    note = next(n for n in api.get("/api/notes").json() if n["title"] == "Von Hand")
+    assert note["origin"] == "app" and note["markdown"].startswith("## Figuren")
+    page.get_by_label("Back").click()
+    page.get_by_text("Von Hand").first.wait_for()

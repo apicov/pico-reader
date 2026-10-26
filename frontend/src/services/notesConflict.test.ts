@@ -38,3 +38,12 @@ describe('changing a note', () => {
     expect(calls.map((c) => c.opts?.body)).toEqual([{ project_id: 'proj-00000001' }, { project_id: null }]);
   });
 });
+
+describe('a note written by hand', () => {
+  it('is sent as made in the app, with its project', async () => {
+    const { createNote } = await import('./notes');
+    await createNote({ title: 'Meine Notiz', markdown: '- eins', project_id: 'proj-00000001' });
+    expect(calls.at(-1)).toEqual({ path: '/api/notes', opts: { method: 'POST',
+      body: { title: 'Meine Notiz', markdown: '- eins', project_id: 'proj-00000001', origin: 'app' } } });
+  });
+});
