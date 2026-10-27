@@ -214,3 +214,13 @@ export async function setInCollection(id: string, bookId: string, on: boolean): 
     ...c, book_ids: on ? [bookId, ...c.book_ids.filter((b) => b !== bookId)] : c.book_ids.filter((b) => b !== bookId) })),
   { op: on ? 'add' : 'remove', id, book_id: bookId });
 }
+
+/** My shelf in folders: each collection with its books in shelf order (`shelf`: the shelf's book ids, in order),
+ *  and the books in no collection */
+export function shelfFolders(collections: Collection[], shelf: string[]): { folders: { collection: Collection; books: string[] }[]; loose: string[] } {
+  const inSome = new Set(collections.flatMap((c) => c.book_ids));
+  return {
+    folders: collections.map((c) => { const ids = new Set(c.book_ids); return { collection: c, books: shelf.filter((b) => ids.has(b)) }; }),
+    loose: shelf.filter((b) => !inSome.has(b)),
+  };
+}

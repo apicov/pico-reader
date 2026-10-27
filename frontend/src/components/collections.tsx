@@ -1,16 +1,25 @@
 import { useState } from 'react';
-import { Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItem,
-  ListItemButton, ListItemIcon, ListItemText, Stack, TextField } from '@mui/material';
+import { Box, Button, Card, CardActionArea, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List,
+  ListItem, ListItemButton, ListItemIcon, ListItemText, Stack, TextField, ToggleButton, ToggleButtonGroup,
+  Typography } from '@mui/material';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutlined';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
+import { useCoverUrl } from '@/hooks/useCoverUrl';
+import type { CachedFile } from '@/services/bookCache';
+import type { Book } from '@/services/types';
 import { createCollection, deleteCollection, moveCollection, renameCollection, setInCollection,
   type Collection } from '@/services/shelf';
 
 /** Which books My shelf shows: all, one collection, or those in none */
 export type CollectionFilter = 'all' | 'none' | string;
+
+/** My shelf as folders (one per collection, the rest loose) or every book flat */
+export type ShelfView = 'folders' | 'flat';
 
 const MAX_NAME = 60;
 
@@ -33,6 +42,64 @@ export function CollectionChips({ collections, value, onChange, counts, unsorted
       <ManageCollections open={managing} collections={collections} onClose={() => setManaging(false)}
         onDeleted={(id) => value === id && onChange('all')} />
     </Stack>
+  );
+}
+
+export function ShelfViewToggle({ value, onChange }: { value: ShelfView; onChange: (v: ShelfView) => void }) {
+  return (
+    <ToggleButtonGroup size="small" exclusive value={value} onChange={(_, v: ShelfView | null) => v && onChange(v)}>
+      <ToggleButton value="folders" aria-label="Folders" title="Collections as folders"><FolderOutlinedIcon fontSize="small" /></ToggleButton>
+      <ToggleButton value="flat" aria-label="All books flat" title="All books flat"><ViewModuleIcon fontSize="small" /></ToggleButton>
+    </ToggleButtonGroup>
+  );
+}
+
+const tile = { aspectRatio: '2 / 3', borderRadius: 1, border: 1, borderColor: 'divider' } as const;
+
+/** A collection on My shelf as a folder: up to four of its covers, its name and how many books */
+export function CollectionFolder({ name, books, files, online, onOpen }: {
+  name: string; books: Book[]; files: Record<string, CachedFile>; online: boolean; onOpen: () => void;
+}) {
+  return (
+    <Card sx={{ border: 0, bgcolor: 'transparent' }}>
+      <CardActionArea onClick={onOpen} aria-label={`Open ${name}`} sx={{ p: 0.5, borderRadius: 1 }}>
+        <Box sx={{ ...tile, bgcolor: 'action.hover', p: 0.75, display: 'grid', gap: 0.75,
+          gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr' }}>
+          {books.length ? books.slice(0, 4).map((b) => <MiniCover key={b.id} book={b} files={files} online={online} />)
+            : <FolderOutlinedIcon sx={{ gridArea: '1 / 1 / 3 / 3', placeSelf: 'center', fontSize: 48, color: 'text.secondary' }} />}
+        </Box>
+        <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, lineHeight: 1.3 }} noWrap title={name}>
+          <FolderOutlinedIcon sx={{ fontSize: 14, mr: 0.5, verticalAlign: '-2px' }} />{name}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" component="div">{books.length} book{books.length === 1 ? '' : 's'}</Typography>
+      </CardActionArea>
+    </Card>
+  );
+}
+
+function MiniCover({ book, files, online }: { book: Book; files: Record<string, CachedFile>; online: boolean }) {
+  const src = useCoverUrl(book, files[`${book.id}/cover`], online);
+  return (
+    <Box sx={{ borderRadius: 0.5, overflow: 'hidden', bgcolor: 'background.paper', minHeight: 0, display: 'grid', placeItems: 'center' }}>
+      {src ? <Box component="img" src={src} alt="" loading="lazy" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : <Typography sx={{ fontSize: 9, lineHeight: 1.2, textAlign: 'center', p: 0.5, overflow: 'hidden' }}>{book.title}</Typography>}
+    </Box>
+  );
+}
+
+/** The last tile among the folders: opens the dialog that makes, renames, orders and deletes collections */
+export function ManageCollectionsTile({ collections }: { collections: Collection[] }) {
+  const [managing, setManaging] = useState(false);
+  return (
+    <Card sx={{ border: 0, bgcolor: 'transparent' }}>
+      <CardActionArea onClick={() => setManaging(true)} sx={{ p: 0.5, borderRadius: 1 }}>
+        <Box sx={{ ...tile, borderStyle: 'dashed', display: 'grid', placeItems: 'center', color: 'text.secondary' }}>
+          <CreateNewFolderOutlinedIcon sx={{ fontSize: 40 }} />
+        </Box>
+        <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>Collections…</Typography>
+      </CardActionArea>
+      <ManageCollections open={managing} collections={collections} onClose={() => setManaging(false)} onDeleted={() => undefined} />
+    </Card>
   );
 }
 

@@ -73,11 +73,15 @@ export const library: ManualChapter = {
         <>
           <p><strong>My shelf</strong> is your own pick of books, apart from what you're reading: the ones you want to keep
             at hand. Collections group them, e.g. <em>Uni</em>, <em>Krimis</em>, <em>To read in summer</em>.</p>
-          <Screenshot name="shelf" caption="My shelf, filtered by a collection" />
+          <Screenshot name="shelf" caption="My shelf, its collections as folders" />
           <ul>
-            <li>The chips above the books filter: <Ui>All</Ui>, each collection with its count, and <Ui>Not in a collection</Ui>.</li>
-            <li><Ui>Collections…</Ui> (the last chip) makes, renames, orders and deletes collections. Deleting a
-              collection never removes its books.</li>
+            <li>Each collection is a <strong>folder</strong>: tap it to see its books, tap ← (or Back) to close it. The books in
+              no collection lie loose after the folders.</li>
+            <li>Searching shows every matching book on the shelf; inside a folder, only the ones in it.</li>
+            <li>The two buttons next to the search switch between <Ui>Folders</Ui> and <Ui>All books flat</Ui>. Flat, chips
+              above the books filter: <Ui>All</Ui>, each collection with its count, and <Ui>Not in a collection</Ui>.</li>
+            <li><Ui>Collections…</Ui> (the last tile, or the last chip) makes, renames, orders and deletes collections.
+              Deleting a collection never removes its books.</li>
             <li>A book can be in several collections. Putting it in one also puts it on My shelf; taking it off My shelf
               takes it out of its collections.</li>
           </ul>

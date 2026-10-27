@@ -15,10 +15,18 @@ back, like the status shelf. The chat agent's `list_books` says for each book wh
 
 ## Collections
 
-On My shelf, books can be grouped in **collections** (a book can be in several). Chips above the books filter
-them: *All · <collection> (n) … · Not in a collection*; the last choice is remembered on the device.
-**Collections…** (the last chip) creates, renames, deletes and orders them; a book's ⋮ → **Collections…** ticks
-the ones it's in, or makes a new one for it.
+On My shelf, books can be grouped in **collections** (a book can be in several). My shelf shows them two ways,
+switched next to the search field and remembered on the device (`shelf_view`):
+
+- **Folders** (the default): one folder per collection (up to four covers, name, count), then the books in no
+  collection. Tapping a folder opens it (`#/?folder=<id>`, so Back, Android's too, closes it, and a reload keeps
+  it open); an unknown or deleted folder shows the shelf again. A search lists all matching shelf books flat, or
+  inside an open folder only its books.
+- **All books flat**: chips above the books filter them: *All · <collection> (n) … · Not in a collection*; the
+  last choice is remembered on the device.
+
+**Collections…** (the last tile, or the last chip) creates, renames, deletes and orders them; a book's ⋮ →
+**Collections…** ticks the ones it's in, or makes a new one for it.
 
 - Adding a book to a collection puts it on My shelf; taking it off My shelf takes it out of its collections.
 - Deleting a collection never touches its books (they stay on My shelf).

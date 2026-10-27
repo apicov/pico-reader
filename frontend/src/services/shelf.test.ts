@@ -1,6 +1,6 @@
 import { ApiError } from '@/services/api';
 import { cachedCollections, cachedMyShelf, createCollection, deleteCollection, loadCollections, loadMyShelf, loadShelf,
-  moveCollection, renameCollection, setInCollection, setOnMyShelf, setShelfStatus } from './shelf';
+  moveCollection, renameCollection, setInCollection, setOnMyShelf, setShelfStatus, shelfFolders } from './shelf';
 
 const net = vi.hoisted(() => ({ online: false, gone: new Set<string>(), calls: [] as string[],
   shelf: [] as object[], mine: [] as object[], collections: [] as object[] }));
@@ -83,5 +83,14 @@ describe('collections', () => {
     net.calls.length = 0;
     await loadCollections();
     expect(net.calls).toEqual([]);
+  });
+});
+
+describe('shelfFolders', () => {
+  it('puts each collection\'s books in shelf order and leaves the rest loose', () => {
+    const col = (id: string, book_ids: string[]) => ({ id, name: id, position: 0, book_ids });
+    const { folders, loose } = shelfFolders([col('A', ['b3', 'b1', 'gone']), col('B', ['b1']), col('C', [])], ['b1', 'b2', 'b3', 'b4']);
+    expect(folders.map((f) => [f.collection.id, f.books])).toEqual([['A', ['b1', 'b3']], ['B', ['b1']], ['C', []]]);
+    expect(loose).toEqual(['b2', 'b4']);
   });
 });

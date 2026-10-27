@@ -210,8 +210,8 @@ def test_library_and_menus(world, phone, tablet):
     shot(phone, "book-menu")
     phone.keyboard.press("Escape")
     phone.get_by_role("tab", name=re.compile("My shelf")).click()
-    phone.get_by_role("button", name=re.compile(r"^Novels")).click()
-    phone.wait_for_timeout(800)
+    phone.get_by_role("button", name="Open Novels").wait_for()
+    phone.wait_for_timeout(1200)  # covers
     shot(phone, "shelf")
 
 

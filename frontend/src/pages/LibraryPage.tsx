@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Button, Card, CardActionArea, Chip, IconButton, InputAdornment, LinearProgress, Menu, MenuItem, Stack, Tab, Tabs,
   TextField, Typography } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import { cachedCollections, cachedMyShelf, cachedShelf, loadCollections, loadMyShelf, loadShelf, setOnMyShelf, setShelfStatus,
-  subscribeShelf, type Collection, type MyShelfEntry, type ShelfEntry, type ShelfStatus } from '@/services/shelf';
-import { BookCollections, CollectionChips, type CollectionFilter } from '@/components/collections';
+  shelfFolders, subscribeShelf, type Collection, type MyShelfEntry, type ShelfEntry, type ShelfStatus } from '@/services/shelf';
+import { BookCollections, CollectionChips, CollectionFolder, ManageCollectionsTile, ShelfViewToggle, type CollectionFilter,
+  type ShelfView } from '@/components/collections';
 import { getPref, setPref } from '@/services/prefs';
 import { api } from '@/services/api';
 import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
@@ -19,7 +21,7 @@ import { cachedStats, formatMinutes, getReadingGoal, getStats, type ReadingGoal 
 import SearchIcon from '@mui/icons-material/Search';
 import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import DownloadDoneIcon from '@mui/icons-material/DownloadDone';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { BookCover } from '@/components/BookCover';
 import { useBookCache } from '@/hooks/useBookCache';
 import { useCoverUrl } from '@/hooks/useCoverUrl';
@@ -204,8 +206,20 @@ export default function LibraryPage() {
   useEffect(() => {
     void getPref<LibraryTab>('library_tab').then((saved) => setTab((t) => t ?? saved ?? null));
     void getPref<CollectionFilter>('shelf_collection').then((c) => c && setCollection(c));
+    void getPref<ShelfView>('shelf_view').then((v) => v && setShelfView(v));
   }, []);
   const pickCollection = (c: CollectionFilter) => { setCollection(c); void setPref('shelf_collection', c); };
+  // My shelf as folders: the open one is in the address, so Back (Android's too) closes it
+  const [shelfView, setShelfView] = useState<ShelfView>('folders');
+  const pickShelfView = (v: ShelfView) => { setShelfView(v); void setPref('shelf_view', v); };
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const openFolder = (id: string) => setParams({ folder: id }, { state: { folder: true } });
+  const closeFolder = () => {
+    if ((location.state as { folder?: boolean } | null)?.folder) navigate(-1);
+    else setParams({}, { replace: true });
+  };
   // Categories: browse All books by them (the last choice is remembered)
   const [tree, setTree] = useState<Category[]>([]);
   const [category, setCategory] = useState<CategoryFilter>(null);
@@ -229,18 +243,27 @@ export default function LibraryPage() {
     [c.id, c.book_ids.filter((b) => inLibrary.has(b) && mineIds.has(b)).length])), [collections, inLibrary, mineIds]);
   const inSomeCollection = useMemo(() => new Set(collections.flatMap((c) => c.book_ids)), [collections]);
   const unsorted = mine.filter((e) => inLibrary.has(e.book_id) && !inSomeCollection.has(e.book_id)).length;
-  const pickTab = (t: LibraryTab) => { setTab(t); void setPref('library_tab', t); };
+  const pickTab = (t: LibraryTab) => { setTab(t); void setPref('library_tab', t); if (params.has('folder')) setParams({}, { replace: true }); };
+  const asFolders = current === 'mine' && shelfView === 'folders';
+  const bookById = useMemo(() => new Map((library?.books ?? []).map((b) => [b.id, b])), [library]);
+  const split = useMemo(() => shelfFolders(collections, mine.map((e) => e.book_id).filter((b) => inLibrary.has(b))),
+    [collections, mine, inLibrary]);
+  // a folder deleted (maybe on another device) shows the shelf again
+  const folder = asFolders ? split.folders.find((f) => f.collection.id === params.get('folder')) : undefined;
+  const showFolders = asFolders && !folder && !query.trim();
 
   const books = useMemo(() => {
     const q = query.trim().normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
     const all = (library?.books ?? []).filter((b) => !q || matches(b, q));
     if (current === 'all') return all.filter(inCategory(tree, typeof category === 'number' && !tree.some((c) => c.id === category) ? null : category));
     const order = new Map((current === 'mine' ? mine : shelf.filter((e) => e.status === current)).map((e, i) => [e.book_id, i]));
-    const inShown = current !== 'mine' || shownCollection === 'all' ? () => true
+    const inShown = current !== 'mine' ? () => true
+      : asFolders ? (folder ? (b: Book) => folder.books.includes(b.id) : showFolders ? (b: Book) => !inSomeCollection.has(b.id) : () => true)
+      : shownCollection === 'all' ? () => true
       : shownCollection === 'none' ? (b: Book) => !inSomeCollection.has(b.id)
       : (b: Book) => !!collections.find((c) => c.id === shownCollection)?.book_ids.includes(b.id);
     return all.filter((b) => order.has(b.id) && inShown(b)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }, [library, query, shelf, mine, current, tree, category, collections, shownCollection, inSomeCollection]);
+  }, [library, query, shelf, mine, current, tree, category, collections, shownCollection, inSomeCollection, asFolders, folder, showFolders]);
 
   return (
     <>
@@ -252,10 +275,22 @@ export default function LibraryPage() {
         <Tab value="reading" label={`Reading${reading.length ? ` (${reading.length})` : ''}`} />
         <Tab value="finished" label={`Finished${finished.length ? ` (${finished.length})` : ''}`} />
       </Tabs>
-      <TextField fullWidth size="small" placeholder="Search title or author" value={query}
-        onChange={(e) => setQuery(e.target.value)} sx={{ mb: 3 }}
-        slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
-      {current === 'mine' && mine.length > 0 && (
+      <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
+        <TextField fullWidth size="small" placeholder={folder ? `Search in ${folder.collection.name}` : 'Search title or author'} value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+        {current === 'mine' && mine.length > 0 && <ShelfViewToggle value={shelfView} onChange={pickShelfView} />}
+      </Stack>
+      {folder && (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          <IconButton size="small" aria-label="Back to My shelf" onClick={closeFolder}><ArrowBackIcon fontSize="small" /></IconButton>
+          <Typography variant="subtitle1" sx={{ fontWeight: 500 }} noWrap>{folder.collection.name}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+            · {folder.books.length} book{folder.books.length === 1 ? '' : 's'}
+          </Typography>
+        </Stack>
+      )}
+      {current === 'mine' && !asFolders && mine.length > 0 && (
         <CollectionChips collections={collections} value={shownCollection} onChange={pickCollection}
           counts={collectionCounts} unsorted={unsorted} />
       )}
@@ -266,10 +301,11 @@ export default function LibraryPage() {
       {error && !library && (
         <Alert severity="warning" action={<Button onClick={() => void refresh()}>Retry</Button>}>{error}</Alert>
       )}
-      {library && books.length === 0 && (
+      {library && books.length === 0 && !(showFolders && mine.length) && (
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
           {library.books.length === 0 ? 'No books yet. Add some with the desktop tool.'
             : query ? 'No book matches.'
+            : folder ? 'No book in this collection yet: ⋮ → Collections… on a book.'
             : current === 'mine' && mine.length && shownCollection === 'none' ? 'Every book on your shelf is in a collection.'
             : current === 'mine' && mine.length ? 'No book in this collection yet: ⋮ → Collections… on a book.'
             : current === 'mine' ? 'Nothing on your shelf yet: use ⋮ → Add to My shelf on any book.'
@@ -278,11 +314,16 @@ export default function LibraryPage() {
         </Typography>
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
+        {showFolders && mine.length > 0 && split.folders.map((f) => (
+          <CollectionFolder key={f.collection.id} name={f.collection.name} files={files} online={online}
+            books={f.books.map((b) => bookById.get(b)!)} onOpen={() => openFolder(f.collection.id)} />
+        ))}
         {books.map((book) => <BookCard key={book.id} book={book} files={files} online={online} shelf={byId.get(book.id)}
             mine={mineIds.has(book.id)} collections={collections} badge={current === 'mine' || current === 'all'}
             job={jobs.get(book.id)} rating={ratings[book.id]} canDelete={!!book.can_change}
             category={book.category_id ? leafName.get(book.category_id) : undefined}
             onDeleted={() => void refresh()} onChanged={() => { void refresh(); reloadTree(); }} />)}
+        {showFolders && mine.length > 0 && <ManageCollectionsTile collections={collections} />}
       </Box>
     </>
   );
