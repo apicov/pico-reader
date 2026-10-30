@@ -39,20 +39,21 @@ def test_minutes_streak_speed_density(client, admin_headers, bucket):
                 session(3, b, 2, 300, 0.40, 0.45),   # 2 days ago
                 session(4, b, 5, 900, 0.45, 0.50)]   # 5 days ago (breaks the streak)
     lookups = [lookup(1, b, "Häuser", 0, matched="Haus"), lookup(2, b, "Haus", 1, matched="Haus"),
-               lookup(3, b, "Xyzzy", 1, found=False)]
+               lookup(3, b, "Xyzzy", 1, found=False),
+               lookup(4, None, "Haus", 0, matched="Haus")]  # on the Dictionary page: no book
     client.post("/api/events", headers=admin_headers, json={"sessions": sessions, "lookups": lookups})
     client.put("/api/progress", headers=admin_headers, json={"book_id": b, "format": "epub", "location": "x",
                                                              "progress": 0.5, "updated_at": "2026-10-24T10:00:00Z"})
     s = client.get("/api/stats", headers=admin_headers, params={"period": "week", "tz": TZ}).json()
     assert s["bucket"] == "day" and len(s["buckets"]) == 7
     assert s["buckets"][-1]["seconds"] == 600 and s["today_seconds"] == 600
-    assert s["totals"]["seconds"] == 3000 and s["totals"]["lookups"] == 3
+    assert s["totals"]["seconds"] == 3000 and s["totals"]["lookups"] == 4
     assert s["streak"] == {"current": 3, "best": 3}
     [book] = s["books"]
     assert book["wpm"] == 80  # 1000 + 2000 + 500 + 500 words in 50 min
     assert book["minutes_left"] == 62  # half of 10 000 words left at 80 wpm
-    assert s["density"]["de"]["per_1000"] == 0.75  # 3 lookups in 4000 words
-    assert s["repeated"][0]["word"] == "haus" and s["repeated"][0]["times"] == 2
+    assert s["density"]["de"]["per_1000"] == 0.75  # 3 lookups in 4000 words (not the Dictionary page's)
+    assert s["repeated"][0]["word"] == "haus" and s["repeated"][0]["times"] == 3
     assert s["not_found"][0]["word"] == "Xyzzy"
     assert sum(map(sum, s["heatmap"])) == 3000
     assert s["goal"] is None  # off by default

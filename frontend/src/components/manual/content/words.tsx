@@ -27,6 +27,25 @@ export const words: ManualChapter = {
       ),
     },
     {
+      id: 'dictionary',
+      title: 'The Dictionary page',
+      body: (
+        <>
+          <p>The translate button in the top bar opens the <strong>Dictionary</strong>: look up any word, without a book.
+            Pick the word's language, type (headwords that start the same are offered as you type) and press Enter.</p>
+          <ul>
+            <li>Your installed dictionaries answer first, as in a book, offline too; a word in a definition looks that word up.</li>
+            <li>When none has it, the AI answers twice: <strong>translated</strong> into your language (Settings) and
+              <strong> explained</strong> in the word's own language. Online only.</li>
+            <li>The word is in the address: back and forward go through the words you looked up.</li>
+            <li>The lookups count in your <ManualLink to="stats">Statistics</ManualLink> (not in the lookups per 1000 words
+              read, since you weren't reading).</li>
+          </ul>
+          <Screenshot name="dictionary" caption="A word no dictionary has, translated and explained" />
+        </>
+      ),
+    },
+    {
       id: 'review',
       title: 'Review cards',
       body: (
@@ -61,8 +80,8 @@ export const words: ManualChapter = {
       title: 'Translations and the Anki deck',
       body: (
         <>
-          <p>The translate button in the top bar lists every passage you translated, newest first, with its vocabulary.
-            Search them, or pick one book.</p>
+          <p>The Dictionary page's second tab, <Ui>Translations</Ui>, lists every passage you translated, newest first, with
+            its vocabulary. Search them, or pick one book.</p>
           <Screenshot name="translations" caption="Your translations" />
           <p>The download button exports the vocabulary of your translations as an <strong>Anki deck (.apkg)</strong> or a
             <strong> spreadsheet (.tsv)</strong>, of all books or the one picked.</p>

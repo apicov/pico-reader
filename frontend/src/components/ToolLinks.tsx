@@ -14,7 +14,7 @@ const TOOLS = [
   { to: '/community', label: 'Community', icon: <PeopleAltOutlinedIcon /> },
   { to: '/ask', label: 'Ask your library', icon: <QuestionAnswerOutlinedIcon /> },
   { to: '/notes', label: 'Notes', icon: <NoteAltOutlinedIcon /> },
-  { to: '/translations', label: 'Translations', icon: <TranslateIcon /> },
+  { to: '/dictionary', label: 'Dictionary and translations', icon: <TranslateIcon /> },
   { to: '/settings', label: 'Settings', icon: <SettingsOutlinedIcon /> },
 ] as const;
 

@@ -11,8 +11,8 @@ import { READING_FONT } from '@/theme/readingThemes';
 
 const plain = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
-/** Every translation made, newest first; readable offline. */
-export default function TranslationsPage() {
+/** Every translation made, newest first; readable offline (the Dictionary page's second tab). */
+export function TranslationHistory() {
   const { library } = useLibrary();
   const online = useOnlineStatus();
   const [items, setItems] = useState<Translation[]>([]);
@@ -46,9 +46,8 @@ export default function TranslationsPage() {
     && (!q || plain(`${t.source_text} ${t.translation} ${t.vocabulary.map((v) => v.term).join(' ')}`).includes(q)));
 
   return (
-    <Box sx={{ maxWidth: 760 }}>
-      <Stack direction="row" alignItems="center" sx={{ mb: 2 }}>
-        <Typography variant="h5" sx={{ flex: 1 }}>Translations</Typography>
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="flex-end" sx={{ mb: 1 }}>
         <Button startIcon={<FileDownloadOutlinedIcon />} disabled={!online || items.length === 0}
           onClick={(e) => setExportAnchor(e.currentTarget)}>Vocabulary</Button>
         <Menu anchorEl={exportAnchor} open={!!exportAnchor} onClose={() => setExportAnchor(null)}>

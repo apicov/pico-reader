@@ -109,3 +109,15 @@ def test_define_a_word_missing_from_the_dictionaries(client, auth_headers, groq)
     assert r.json()["model"] == "qwen/qwen3.8-27b"  # shown under the definition
     assert "German–Spanish dictionary" in calls[0]["messages"][0]["content"]
     assert "SENTENCE: Nach dem" in calls[0]["messages"][1]["content"]
+
+
+def test_define_without_a_sentence_in_the_same_language(client, auth_headers, groq):
+    """The Dictionary page: no sentence, and a definition in the word's own language"""
+    calls, replies = groq
+    replies.append({"lemma": "das Haus", "part_of_speech": "Substantiv", "meaning": "Gebäude, in dem Menschen wohnen",
+                    "notes": ""})
+    r = client.post("/api/define", headers=auth_headers, json={"word": "Haus", "language": "de", "target_lang": "de"})
+    assert r.status_code == 200 and r.json()["meaning"] == "Gebäude, in dem Menschen wohnen"
+    system, user = calls[0]["messages"][0]["content"], calls[0]["messages"][1]["content"]
+    assert "monolingual German dictionary" in system and "main meanings" in system and "SENTENCE" not in system
+    assert user == "WORD: Haus"

@@ -169,13 +169,19 @@ class Definition(BaseModel):
     via: str = ""  # main or fallback
 
 
-def define_prompt(language: str, target: str) -> str:
+def define_prompt(language: str, target: str, in_sentence: bool = True) -> str:
+    """A bilingual entry, or a monolingual one (a definition in the word's own language) when target == language;
+    without a sentence (the Dictionary page), its main meanings."""
     source, goal = LANGUAGES.get(language, language), LANGUAGES.get(target, target)
-    return f"""You are a {source}–{goal} dictionary for a reader learning {source}. The WORD was not in their
-dictionaries: it may be inflected, compound, rare, regional, old or a name. Using the SENTENCE it appears in:
+    kind = f"monolingual {source} dictionary" if language == target else f"{source}–{goal} dictionary"
+    meaning = ("its meaning in this sentence" if in_sentence
+               else "its main meanings (most common first, at most four)")
+    explain = ", explained in simple words (a definition, not a synonym alone)" if language == target else ""
+    return f"""You are a {kind} for a reader learning {source}. The WORD was not in their
+dictionaries: it may be inflected, compound, rare, regional, old or a name.{" Using the SENTENCE it appears in:" if in_sentence else ""}
 - "lemma": its dictionary form in {source} (German nouns with their article);
 - "part_of_speech": in {goal}, short (e.g. "sustantivo", "verbo");
-- "meaning": its meaning in this sentence, in {goal}, short like a dictionary entry (alternatives separated by ";");
+- "meaning": {meaning}, in {goal}{explain}, short like a dictionary entry (alternatives separated by ";");
 - "notes": in {goal}, one short sentence on the form (e.g. "participio de …", "compuesto de … + …"), or "".
 Reply with one JSON object and nothing else with exactly those four keys."""
 
@@ -183,8 +189,8 @@ Reply with one JSON object and nothing else with exactly those four keys."""
 @router.post("/define", response_model=Definition)
 def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
     try:
-        data, model, via = groq_client.chat_json_via(define_prompt(body.language, body.target_lang),
-                                                     f"WORD: {body.word}\nSENTENCE: {body.context or body.word}",
+        data, model, via = groq_client.chat_json_via(define_prompt(body.language, body.target_lang, bool(body.context)),
+                                                     f"WORD: {body.word}" + (f"\nSENTENCE: {body.context}" if body.context else ""),
                                                      max_tokens=300, who=(reader.email, "define"))
     except groq_client.GroqError as e:
         raise HTTPException(e.status, str(e))

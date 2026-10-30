@@ -266,9 +266,19 @@ def test_words(world, phone):
     phone.goto(f"{WEB}/#/review")
     phone.get_by_role("button", name="Show answer").click()
     shot(phone, "review")
-    phone.goto(f"{WEB}/#/translations")
+    phone.goto(f"{WEB}/#/dictionary?tab=history")
     phone.get_by_text("La alarma llegó").first.wait_for(timeout=15_000)
     shot(phone, "translations")
+    script(json_replies=[
+        {"_match": "German–Spanish", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "sustantivo",
+         "meaning": "ley de protección radiológica",
+         "notes": "compuesto de Strahlenschutz + Gesetz"},
+        {"_match": "monolingual German", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "Substantiv",
+         "meaning": "Gesetz, das Menschen und Umwelt vor ionisierender Strahlung schützt", "notes": ""}])
+    phone.goto(f"{WEB}/#/dictionary?lang=de&w=Strahlenschutzgesetzes")
+    phone.get_by_text("ionisierender Strahlung").wait_for(timeout=15_000)
+    phone.get_by_text("ley de protección radiológica").wait_for()
+    shot(phone, "dictionary")
 
 
 def test_ask(world, phone):

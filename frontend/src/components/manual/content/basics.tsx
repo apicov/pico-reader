@@ -109,7 +109,7 @@ export const findingYourWay: ManualChapter = {
             { icon: <PeopleAltOutlinedIcon />, label: 'Community', text: <>Posts, reviews and lists of the other readers (<ManualLink to="community">Community</ManualLink>).</> },
             { icon: <QuestionAnswerOutlinedIcon />, label: 'Ask your library', text: <>Questions about your books, statistics, notes (<ManualLink to="ask">Ask your library</ManualLink>).</> },
             { icon: <NoteAltOutlinedIcon />, label: 'Notes', text: <>Your summaries, outlines and diagrams (<ManualLink to="notes">Notes</ManualLink>).</> },
-            { icon: <TranslateIcon />, label: 'Translations', text: <>Passages you translated and their vocabulary, as an Anki deck too (<ManualLink to="words.translations">Translations</ManualLink>).</> },
+            { icon: <TranslateIcon />, label: 'Dictionary and translations', text: <>Look up any word, offline dictionaries first, then the AI (<ManualLink to="words.dictionary">Dictionary</ManualLink>); the passages you translated in its second tab (<ManualLink to="words.translations">Translations</ManualLink>).</> },
             { icon: <SettingsOutlinedIcon />, label: 'Settings', text: <>Theme, languages, the computer, dictionaries, offline search… and this manual (<ManualLink to="settings">Settings</ManualLink>).</> },
             { icon: <CloudOffOutlinedIcon />, label: 'Offline', text: <>Shown when there's no connection. Downloaded books still open (<ManualLink to="offline">Offline use</ManualLink>).</> },
           ]} />

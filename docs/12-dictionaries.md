@@ -22,6 +22,17 @@ StarDict dictionaries, converted into packages the devices install, so looking u
 - **No longer available**: installed here but gone from the library (deleted, or made private by someone
   else); remove to free the space.
 
+## The Dictionary page (top bar, `/#/dictionary`)
+
+Looking up without a book, GoldenDict style: a language, a word (headwords starting the same are suggested
+from the installed dictionaries as you type), the same results as the dictionary sheet in a book. When no
+dictionary has the word and the device is online, `POST /api/define` is asked twice in parallel, without a
+sentence: `target_lang` = the reader's language (a translation) and `target_lang` = the word's language (a
+monolingual definition; the prompt changes when the two are equal). The address keeps `lang` and `w`, so back
+and forward go through the words; `?tab=history` is the translations list (`/#/translations` redirects there).
+Lookups are recorded like a book's, with no `book_id`: they count in the statistics, but not in the lookups
+per 1000 words read.
+
 ## Who sees which
 
 A dictionary is for **every reader**, or **only its uploader**. Admins see all. Readers never learn who

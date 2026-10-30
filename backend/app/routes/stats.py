@@ -174,7 +174,8 @@ def stats(period: str = "week", tz: str = "UTC", book_id: str | None = None,
         {**p, "unit": "week" if weekly else "day"})}
     lookups_by = {(r.language, r.bucket): int(r.n) for r in db.execute(text(f"""
         SELECT l.language, date_trunc(:unit, l.created_at AT TIME ZONE :tz)::date AS bucket, count(*) AS n
-        FROM lookups l WHERE l.reader_email = :e AND l.created_at >= :since {lookup_filter} GROUP BY 1, 2"""),
+        FROM lookups l WHERE l.reader_email = :e AND l.created_at >= :since {lookup_filter}
+          AND l.book_id IS NOT NULL GROUP BY 1, 2"""),  # not the Dictionary page's: they aren't reading
         {**p, "unit": "week" if weekly else "day"})}
     for language in sorted({k[0] for k in words_by} | {k[0] for k in lookups_by}):
         series = []

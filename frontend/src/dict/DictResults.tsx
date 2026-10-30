@@ -46,7 +46,7 @@ function Definition({ html, dictId, onWord }: { html: string; dictId: string; on
 }
 
 /** A review card for a looked-up word: its dictionary form, the first definition as plain text, its sentence */
-function cardFor(r: Lookup, record: { bookId: string; context: string }): Promise<boolean> {
+function cardFor(r: Lookup, record: { bookId: string | null; context: string }): Promise<boolean> {
   const first = r.results[0];
   const entry = first.entries[0];
   const tmp = document.createElement('div');
@@ -56,15 +56,22 @@ function cardFor(r: Lookup, record: { bookId: string; context: string }): Promis
     source: 'lookup', book_id: record.bookId });
 }
 
-export function DictResults({ word, language, dark, record }: {
+type AiDefinition = { lemma: string; part_of_speech: string; meaning: string; notes: string; model?: string; via?: string };
+
+export function DictResults({ word, language, dark, record, aiTargets }: {
   word: string; language: string; dark: boolean;
-  /** Record the lookup of `word` for the statistics (not the words followed from a definition) */
-  record?: { bookId: string; location: string; context: string };
+  /** Record the lookup of `word` for the statistics (not the words followed from a definition); bookId null on
+   *  the Dictionary page, context '' when there's no sentence */
+  record?: { bookId: string | null; location: string; context: string };
+  /** The languages the AI answers in when no dictionary has the word (default: the reader's target language);
+   *  the word's own language gives a definition in it */
+  aiTargets?: string[];
 }) {
   const { settings } = useSettings();
   const online = useOnlineStatus();
   const [known, setKnown] = useState(false);
-  const [ai, setAi] = useState<{ lemma: string; part_of_speech: string; meaning: string; notes: string; model?: string; via?: string } | 'asking' | 'failed' | null>(null);
+  // by target language
+  const [ai, setAi] = useState<Record<string, AiDefinition | 'asking' | 'failed'> | null>(null);
   const [carded, setCarded] = useState(false);
   const recorded = useRef('');
   const [current, setCurrent] = useState(word);
@@ -72,28 +79,32 @@ export function DictResults({ word, language, dark, record }: {
   const [busy, setBusy] = useState(true);
   const [preferred, setPreferred] = useState<string | null>(null);
 
-  useEffect(() => { setCurrent(word); setAi(null); setKnown(false); setCarded(false); }, [word]);
+  useEffect(() => { setCurrent(word); setAi(null); setKnown(false); setCarded(false); }, [word, language]);
   useEffect(() => { void preferredDict(language).then(setPreferred); }, [language]);
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
     void lookUp(current, language).then((r) => {
-      if (record && current === word && recorded.current !== `${word}|${record.location}`) {
-        recorded.current = `${word}|${record.location}`;
+      if (record && current === word && recorded.current !== `${word}|${language}|${record.location}`) {
+        recorded.current = `${word}|${language}|${record.location}`;
         void recordLookup({ book_id: record.bookId, language, word: r.word, location: record.location,
           matched: r.results[0]?.entries[0]?.headword ?? '', dictionaries: r.results.map((x) => x.dict.id),
           found: r.results.length > 0, context: record.context.slice(0, 1000) });
         if (settings.autoReview && r.results.length) void cardFor(r, record).then(setCarded);
-        // no dictionary has it: ask the model, with the sentence for context
+        // no dictionary has it: ask the model, with the sentence for context (if any), once per language
         if (!r.results.length && online) {
-          setAi('asking');
-          void api<{ lemma: string; part_of_speech: string; meaning: string; notes: string; model?: string; via?: string }>('/api/define', {
-            method: 'POST', body: { word: r.word, context: record.context.slice(0, 1500), language, target_lang: settings.targetLanguage },
-          }).then((d) => {
-            setAi(d);
-            if (settings.autoReview) void addCard({ language, term: d.lemma, meaning: d.meaning, example: record.context.slice(0, 500),
-              source: 'lookup', book_id: record.bookId }).then(setCarded);
-          }).catch(() => setAi('failed'));
+          const targets = [...new Set(aiTargets ?? [settings.targetLanguage])];
+          setAi(Object.fromEntries(targets.map((t) => [t, 'asking' as const])));
+          targets.forEach((target, i) => {
+            void api<AiDefinition>('/api/define', {
+              method: 'POST', body: { word: r.word, context: record.context.slice(0, 1500), language, target_lang: target },
+            }).then((d) => {
+              setAi((a) => ({ ...a, [target]: d }));
+              // the review card from the first language's answer (the reader's target language)
+              if (settings.autoReview && i === 0) void addCard({ language, term: d.lemma, meaning: d.meaning,
+                example: record.context.slice(0, 500), source: 'lookup', book_id: record.bookId }).then(setCarded);
+            }).catch(() => setAi((a) => ({ ...a, [target]: 'failed' })));
+          });
         }
       }
       if (!cancelled) { setResult(r); setBusy(false); }
@@ -105,26 +116,29 @@ export function DictResults({ word, language, dark, record }: {
   if (busy && !result) return <Box sx={{ p: 2, textAlign: 'center' }}><CircularProgress size={20} /></Box>;
   if (!result) return null;
   const nothingInstalled = !result.results.length && !result.suggestions.length && !ai;
-  const aiBlock = ai && current === word && (
-    <Box sx={{ mb: 2 }}>
+  const several = !!ai && Object.keys(ai).length > 1;
+  const aiBlock = ai && current === word && Object.entries(ai).map(([target, d]) => (
+    <Box key={target} sx={{ mb: 2 }}>
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
         <AutoAwesomeOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-        <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>AI · not in your dictionaries</Typography>
+        <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+          AI{several ? ` · ${languageName(target)}` : ''} · not in your dictionaries
+        </Typography>
       </Stack>
-      {ai === 'asking' && <CircularProgress size={16} />}
-      {ai === 'failed' && <Typography variant="body2" color="text.secondary">The AI couldn't define it right now.</Typography>}
-      {typeof ai === 'object' && (
+      {d === 'asking' && <CircularProgress size={16} />}
+      {d === 'failed' && <Typography variant="body2" color="text.secondary">The AI couldn't define it right now.</Typography>}
+      {typeof d === 'object' && (
         <>
           <Typography sx={{ fontWeight: 600, fontFamily: 'Literata, serif' }}>
-            {ai.lemma}{ai.part_of_speech ? <Typography component="span" variant="body2" color="text.secondary"> · {ai.part_of_speech}</Typography> : null}
+            {d.lemma}{d.part_of_speech ? <Typography component="span" variant="body2" color="text.secondary"> · {d.part_of_speech}</Typography> : null}
           </Typography>
-          <Typography className="dict-def">{ai.meaning}</Typography>
-          {ai.notes && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{ai.notes}</Typography>}
-          <ModelNote models={ai.model} via={ai.via} sx={{ mt: 0.5 }} />
+          <Typography className="dict-def" lang={target}>{d.meaning}</Typography>
+          {d.notes && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{d.notes}</Typography>}
+          <ModelNote models={d.model} via={d.via} sx={{ mt: 0.5 }} />
         </>
       )}
     </Box>
-  );
+  ));
   const headword = result.results[0]?.entries[0]?.headword ?? result.word;
   return (
     <Box className={dark ? 'dict-dark' : undefined}>
@@ -166,7 +180,7 @@ export function DictResults({ word, language, dark, record }: {
           ))}
         </Box>
       ))}
-      {!result.results.length && result.suggestions.length > 0 && !(ai && typeof ai === 'object') && (
+      {!result.results.length && result.suggestions.length > 0 && !(ai && Object.values(ai).some((d) => typeof d === 'object')) && (
         <Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>“{result.word}” isn't in your dictionaries. Did you mean:</Typography>
           <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>

@@ -13,7 +13,7 @@ import LibraryPage from '@/pages/LibraryPage';
 import LoginPage from '@/pages/LoginPage';
 import SettingsPage from '@/pages/SettingsPage';
 import DictionariesPage from '@/pages/DictionariesPage';
-import TranslationsPage from '@/pages/TranslationsPage';
+import DictionaryPage from '@/pages/DictionaryPage';
 import AskPage from '@/pages/AskPage';
 import StatsPage from '@/pages/StatsPage';
 import ReviewPage from '@/pages/ReviewPage';
@@ -62,7 +62,9 @@ function Routed() {
       <Route path="/" element={<AppShell><LibraryPage /></AppShell>} />
       <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
       <Route path="/dictionaries" element={<AppShell><DictionariesPage /></AppShell>} />
-      <Route path="/translations" element={<AppShell><TranslationsPage /></AppShell>} />
+      <Route path="/dictionary" element={<AppShell><DictionaryPage /></AppShell>} />
+      {/* the translations are the Dictionary page's second tab */}
+      <Route path="/translations" element={<Navigate to="/dictionary?tab=history" replace />} />
       <Route path="/stats" element={<AppShell><StatsPage /></AppShell>} />
       <Route path="/review" element={<AppShell><ReviewPage /></AppShell>} />
       <Route path="/upload" element={<AppShell><Suspense fallback={spinner}><UploadPage /></Suspense></AppShell>} />
