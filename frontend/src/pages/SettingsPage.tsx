@@ -100,7 +100,8 @@ export default function SettingsPage() {
         <Typography variant="body2" color="text.secondary">
           {perBook.size === 0 ? 'No downloaded books.' : `${perBook.size} book${perBook.size > 1 ? 's' : ''}, ${mb(total)}`}
         </Typography>
-        <List dense>
+        {/* many books: the list scrolls (about five rows, the sixth cut to show there's more) instead of the page growing */}
+        <List dense sx={{ maxHeight: 300, overflowY: 'auto', pr: 1 }}>
           {[...perBook.entries()].map(([bookId, size]) => (
             <ListItem key={bookId} disableGutters secondaryAction={
               <IconButton edge="end" aria-label="Remove from this device" onClick={() => void removeBook(bookId)}>
