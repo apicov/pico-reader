@@ -29,23 +29,25 @@ export async function setPreferredDict(language: string, dictId: string): Promis
 }
 
 /** The installed, switched-on dictionaries for a language, in the reader's order (then bilingual ones first,
- *  then by name). */
-export async function dictsFor(language: string): Promise<InstalledDict[]> {
+ *  then by name); without a language, those of every language (by language, each in its order). */
+export async function dictsFor(language?: string): Promise<InstalledDict[]> {
   const prefs = await dictPrefs();
   const usable = Object.values(await installedDicts())
-    .filter((d) => d.from_lang === language && isCurrent(d) && !prefs.disabled.includes(d.id))
+    .filter((d) => (language === undefined || d.from_lang === language) && isCurrent(d) && !prefs.disabled.includes(d.id))
     .sort((a, b) => Number(a.to_lang === a.from_lang) - Number(b.to_lang === b.from_lang) || a.name.localeCompare(b.name));
-  return byOrder(usable, prefs.order[language]);
+  if (language !== undefined) return byOrder(usable, prefs.order[language]);
+  return [...new Set(usable.map((d) => d.from_lang))].sort()
+    .flatMap((l) => byOrder(usable.filter((d) => d.from_lang === l), prefs.order[l]));
 }
 
-/** Look a word up in every installed dictionary for `language`: the word, then its likely dictionary
- *  forms, then the same without accents; prefix suggestions when nothing matches. */
-export async function lookUp(selection: string, language: string): Promise<Lookup> {
+/** Look a word up in every installed dictionary for `language` (without one, in all of them): the word, then
+ *  its likely dictionary forms, then the same without accents; prefix suggestions when nothing matches. */
+export async function lookUp(selection: string, language?: string): Promise<Lookup> {
   const word = cleanWord(selection);
   const key = keyOf(word);
-  const forms = candidateForms(key, language);
   const dicts = await dictsFor(language);
   const results = await Promise.all(dicts.map(async (dict) => {
+    const forms = candidateForms(key, dict.from_lang);
     let entries = await backend.lookup(dict.id, forms, false);
     let loose = false;
     if (!entries.length) {

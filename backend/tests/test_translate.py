@@ -121,3 +121,18 @@ def test_define_without_a_sentence_in_the_same_language(client, auth_headers, gr
     system, user = calls[0]["messages"][0]["content"], calls[0]["messages"][1]["content"]
     assert "monolingual German dictionary" in system and "main meanings" in system and "SENTENCE" not in system
     assert user == "WORD: Haus"
+
+
+def test_define_a_word_of_unknown_language(client, auth_headers, groq):
+    """The Dictionary page, all languages at once: the model tells the word's language; an empty target asks for a
+    definition in it"""
+    calls, replies = groq
+    replies.append({"lemma": "das Haus", "part_of_speech": "Substantiv", "meaning": "Gebäude, in dem Menschen wohnen",
+                    "notes": "", "language": "DE"})
+    r = client.post("/api/define", headers=auth_headers, json={"word": "Haus"})
+    assert r.status_code == 200 and r.json()["language"] == "de"
+    system = calls[0]["messages"][0]["content"]
+    assert "monolingual dictionary in the WORD's own language" in system and '"language"' in system
+    replies.append({"lemma": "das Haus", "part_of_speech": "sustantivo", "meaning": "casa", "notes": "", "language": "?"})
+    r = client.post("/api/define", headers=auth_headers, json={"word": "Haus", "target_lang": "es"})
+    assert r.json()["language"] == "" and "dictionary into Spanish" in calls[1]["messages"][0]["content"]

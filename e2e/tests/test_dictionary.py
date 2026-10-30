@@ -4,16 +4,17 @@ from playwright.sync_api import expect
 from conftest import AI, WEB
 
 # matched by prompt: the two requests are made at the same time
-TRANSLATED = {"_match": "German–Spanish", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "sustantivo", "meaning": "ley de protección radiológica",
+TRANSLATED = {"_match": "dictionary into Spanish", "language": "de", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "sustantivo", "meaning": "ley de protección radiológica",
               "notes": ""}
-DEFINED = {"_match": "monolingual German", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "Substantiv",
+DEFINED = {"_match": "monolingual dictionary in the WORD's own language", "language": "de", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "Substantiv",
            "meaning": "Gesetz zum Schutz vor ionisierender Strahlung", "notes": ""}
 
 
 def test_a_word_no_dictionary_has_is_translated_and_defined_by_the_ai(page):
-    # no dictionary installed: the AI answers twice, in the reader's language (es) and in the word's (de)
+    # no dictionary installed, no language picked: the AI answers twice, in the reader's language (es) and in
+    # the word's own, which it tells (de)
     httpx.post(f"{AI}/script-json", json=[TRANSLATED, DEFINED]).raise_for_status()
-    page.goto(f"{WEB}/#/dictionary?lang=de")
+    page.goto(f"{WEB}/#/dictionary")
     page.get_by_label("Word").fill("Strahlenschutzgesetzes")
     page.get_by_label("Word").press("Enter")
     block = lambda label: page.get_by_text(f"AI · {label} · not in your dictionaries").locator("xpath=ancestor::div[2]")

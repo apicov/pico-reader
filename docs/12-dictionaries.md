@@ -24,14 +24,16 @@ StarDict dictionaries, converted into packages the devices install, so looking u
 
 ## The Dictionary page (top bar, `/#/dictionary`)
 
-Looking up without a book, GoldenDict style: a language, a word (headwords starting the same are suggested
-from the installed dictionaries as you type), the same results as the dictionary sheet in a book. When no
-dictionary has the word and the device is online, `POST /api/define` is asked twice in parallel, without a
-sentence: `target_lang` = the reader's language (a translation) and `target_lang` = the word's language (a
-monolingual definition; the prompt changes when the two are equal). The address keeps `lang` and `w`, so back
-and forward go through the words; `?tab=history` is the translations list (`/#/translations` redirects there).
-Lookups are recorded like a book's, with no `book_id`: they count in the statistics, but not in the lookups
-per 1000 words read.
+Looking up without a book, GoldenDict style: a word, no language (headwords starting the same are suggested
+from the installed dictionaries as you type), looked up in every switched-on dictionary of every language (by
+language, each in the reader's order; the results name their languages). When no dictionary has the word and
+the device is online, `POST /api/define` is asked twice in parallel, without a sentence and with `language`
+empty, so the model recognizes it and returns it: `target_lang` = the reader's language (a translation) and
+`target_lang` empty (a monolingual definition in the word's own language). The address keeps `w`, so back and
+forward go through the words; `?tab=history` is the translations list (`/#/translations` redirects there).
+Lookups are recorded like a book's, with no `book_id` and the language of the first dictionary that has the
+word, else the AI's (not recorded when neither tells, e.g. offline): they count in the statistics, but not in
+the lookups per 1000 words read.
 
 ## Who sees which
 

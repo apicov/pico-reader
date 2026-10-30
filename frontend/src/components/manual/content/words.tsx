@@ -32,11 +32,13 @@ export const words: ManualChapter = {
       body: (
         <>
           <p>The translate button in the top bar opens the <strong>Dictionary</strong>: look up any word, without a book.
-            Pick the word's language, type (headwords that start the same are offered as you type) and press Enter.</p>
+            Type it (headwords that start the same are offered as you type) and press Enter: no language to pick, all your
+            dictionaries are searched.</p>
           <ul>
-            <li>Your installed dictionaries answer first, as in a book, offline too; a word in a definition looks that word up.</li>
-            <li>When none has it, the AI answers twice: <strong>translated</strong> into your language (Settings) and
-              <strong> explained</strong> in the word's own language. Online only.</li>
+            <li>Your installed, switched-on dictionaries of every language answer first, offline too, each with its
+              languages; a word in a definition looks that word up.</li>
+            <li>When none has it, the AI recognizes its language and answers twice: <strong>translated</strong> into your
+              language (Settings) and <strong> explained</strong> in the word's own language. Online only.</li>
             <li>The word is in the address: back and forward go through the words you looked up.</li>
             <li>The lookups count in your <ManualLink to="stats">Statistics</ManualLink> (not in the lookups per 1000 words
               read, since you weren't reading).</li>

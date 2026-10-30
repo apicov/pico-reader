@@ -3,6 +3,7 @@ later analysis; asking again for the same passage with the same settings returns
 
 import hashlib
 import json
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -155,12 +156,13 @@ def delete_translation(translation_id: int, reader: Reader = Depends(get_current
 class DefineRequest(BaseModel):
     word: str = Field(min_length=1, max_length=100)
     context: str = Field(default="", max_length=1500)
-    language: str = Field(pattern=r"^[a-z]{2,3}$")
-    target_lang: str = Field(pattern=r"^[a-z]{2,3}$")
+    language: str = Field(default="", pattern=r"^([a-z]{2,3})?$")  # empty: the model tells (the Dictionary page)
+    target_lang: str = Field(default="", pattern=r"^([a-z]{2,3})?$")  # empty: the word's own language
 
 
 class Definition(BaseModel):
     word: str
+    language: str  # the word's: the one asked for, else the one the model recognized ("" if it didn't say)
     lemma: str
     part_of_speech: str
     meaning: str
@@ -170,20 +172,32 @@ class Definition(BaseModel):
 
 
 def define_prompt(language: str, target: str, in_sentence: bool = True) -> str:
-    """A bilingual entry, or a monolingual one (a definition in the word's own language) when target == language;
-    without a sentence (the Dictionary page), its main meanings."""
-    source, goal = LANGUAGES.get(language, language), LANGUAGES.get(target, target)
-    kind = f"monolingual {source} dictionary" if language == target else f"{source}–{goal} dictionary"
+    """A bilingual entry, or a monolingual one (a definition in the word's own language) when target == language
+    or target is empty; without a sentence (the Dictionary page), its main meanings. An empty language: the model
+    recognizes it, and says which."""
+    monolingual = not target or target == language
+    source = LANGUAGES.get(language, language) if language else "the WORD's language"
+    goal = source if monolingual else LANGUAGES.get(target, target)
+    if monolingual:
+        kind = f"monolingual {source} dictionary" if language else "monolingual dictionary in the WORD's own language"
+    else:
+        kind = f"{source}–{goal} dictionary" if language else f"dictionary into {goal}"
+    reader = f"a reader learning {source}" if language else "a reader learning languages"
     meaning = ("its meaning in this sentence" if in_sentence
                else "its main meanings (most common first, at most four)")
-    explain = ", explained in simple words (a definition, not a synonym alone)" if language == target else ""
-    return f"""You are a {kind} for a reader learning {source}. The WORD was not in their
+    explain = ", explained in simple words (a definition, not a synonym alone)" if monolingual else ""
+    keys = "four"
+    detect = ""
+    if not language:
+        keys = "five"
+        detect = '\n- "language": the ISO 639-1 code of the WORD\'s language (the most likely one if several).'
+    return f"""You are a {kind} for {reader}. The WORD was not in their
 dictionaries: it may be inflected, compound, rare, regional, old or a name.{" Using the SENTENCE it appears in:" if in_sentence else ""}
 - "lemma": its dictionary form in {source} (German nouns with their article);
 - "part_of_speech": in {goal}, short (e.g. "sustantivo", "verbo");
 - "meaning": {meaning}, in {goal}{explain}, short like a dictionary entry (alternatives separated by ";");
-- "notes": in {goal}, one short sentence on the form (e.g. "participio de …", "compuesto de … + …"), or "".
-Reply with one JSON object and nothing else with exactly those four keys."""
+- "notes": in {goal}, one short sentence on the form (e.g. "participio de …", "compuesto de … + …"), or "".{detect}
+Reply with one JSON object and nothing else with exactly those {keys} keys."""
 
 
 @router.post("/define", response_model=Definition)
@@ -197,6 +211,8 @@ def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
     meaning = str(data.get("meaning") or "").strip()
     if not meaning:
         raise HTTPException(502, "The model returned no meaning")
-    return Definition(word=body.word, lemma=str(data.get("lemma") or body.word).strip(),
+    language = body.language or str(data.get("language") or "").strip().lower()
+    return Definition(word=body.word, language=language if re.fullmatch(r"[a-z]{2,3}", language) else "",
+                      lemma=str(data.get("lemma") or body.word).strip(),
                       part_of_speech=str(data.get("part_of_speech") or "").strip(), meaning=meaning,
                       notes=str(data.get("notes") or "").strip(), model=model, via=via)
