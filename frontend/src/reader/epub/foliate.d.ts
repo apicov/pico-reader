@@ -21,6 +21,7 @@ declare module 'foliate-js/view.js' {
     deleteAnnotation(annotation: { value: string }): Promise<unknown>;
     goRight(): Promise<void>;
     close(): void;
+    history: { back(): void; canGoBack: boolean };
   }
 }
 

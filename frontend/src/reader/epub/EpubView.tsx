@@ -1,5 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Box, Dialog, DialogContent } from '@mui/material';
+import { Box, Button, Dialog, DialogContent } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import 'katex/dist/katex.min.css'; // math in a note's popup (the note is shown in the app's page)
 import DOMPurify from 'dompurify';
 import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
@@ -53,6 +55,9 @@ function bookCss(s: Settings): string {
     a:link { color: ${c.accent} !important; }
     img, svg { max-width: 100%; height: auto; }
     pre { white-space: pre-wrap !important; }
+    /* a wide table fits its column (the page is in columns: wider, it ran over the next pages) */
+    table { max-width: 100% !important; }
+    td, th { overflow-wrap: anywhere; }
     ${c.mode === 'dark' ? 'img { filter: brightness(0.9); }' : ''}
     ::highlight(seen) { text-decoration: underline dotted ${c.accent} 1.5px; text-underline-offset: 3px; }
     aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"] { display: none; }
@@ -130,6 +135,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
   seenRef.current = seenWords;
   const drawn = useRef(new Map<string, string>()); // cfi → color
   const [note, setNote] = useState<string | null>(null);
+  const [canGoBack, setCanGoBack] = useState(false); // after following a link: back to where it was
 
   useEffect(() => {
     const host = hostRef.current;
@@ -178,7 +184,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       const target = view.book.resolveHref?.(href);
       if (!target) return;
       const here = sectionOf.get(a.ownerDocument) === target.index ? asElement(target.anchor(a.ownerDocument)) : null;
-      if (!(here && hiddenNote(here)) && !isNoteRef(a)) return;
+      if (!(here && hiddenNote(here)) && !isNoteRef(a)) { setCanGoBack(true); return; } // foliate goes there
       e.preventDefault();
       void (async () => {
         const doc = here ? null : await view.book.sections[target.index]?.createDocument?.().catch(() => null);
@@ -267,8 +273,9 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
   }, [seenWords]);
 
   useImperativeHandle(ref, () => ({
-    goToToc: (href) => void viewRef.current?.goTo(href),
+    goToToc: (href) => { setCanGoBack(false); void viewRef.current?.goTo(href); },
     goTo: (location, progress) => {
+      setCanGoBack(false);
       if (location.startsWith('epubcfi(')) void viewRef.current?.goTo(location);
       else void viewRef.current?.goToFraction(progress);
     },
@@ -285,8 +292,16 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       {/* tap the page edges to turn pages (the middle stays free for selecting text) */}
       <Box sx={{ ...zone, left: 0 }} onClick={() => void viewRef.current?.goLeft()} aria-label="Previous page" />
       <Box sx={{ ...zone, right: 0 }} onClick={() => void viewRef.current?.goRight()} aria-label="Next page" />
+      {canGoBack && (
+        <Button variant="contained" size="small" startIcon={<ArrowBackIcon />}
+          onClick={() => { setCanGoBack(false); viewRef.current?.history.back(); }}
+          sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 2 }}>
+          Back
+        </Button>
+      )}
       <Dialog open={note !== null} onClose={() => setNote(null)} fullWidth maxWidth="sm"
-        slotProps={{ paper: { 'aria-label': 'Note' } }}>
+        slotProps={{ paper: { 'aria-label': 'Note', sx: { bgcolor: READING_THEMES[settings.theme].surface,
+          color: READING_THEMES[settings.theme].text, backgroundImage: 'none' } } }}>
         <DialogContent onClick={(e) => e.preventDefault()} dangerouslySetInnerHTML={{ __html: note ?? '' }}
           sx={{ fontFamily: READING_FONT, lineHeight: 1.5, '& p': { my: 1 }, '& a': { color: 'inherit' },
             '& img': { maxWidth: '100%', height: 'auto' } }} />

@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, Stack } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './reflow.css';
@@ -64,6 +65,20 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
   const chapters = bundle.meta.chapters;
   const html = useMemo(() => bundle.chapterHtml(target.chapter), [bundle, target.chapter]);
   useBookStyles(bundle, dark);
+  // after following a link: where it was, to go back (gone on any other move)
+  const [back, setBack] = useState<ReflowTarget | null>(null);
+  const byLink = useRef(false);
+  useEffect(() => {
+    if (byLink.current) byLink.current = false;
+    else setBack(null);
+  }, [target]);
+  const follow = (to: ReflowTarget) => {
+    const scroller = scrollRef.current;
+    const max = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
+    setBack({ chapter: target.chapter, fraction: scroller && max > 0 ? scroller.scrollTop / max : 0 });
+    byLink.current = true;
+    onNavigate(to);
+  };
 
   // Put the chapter in and typeset its math (once per chapter: images and math aren't redone for a new highlight)
   useLayoutEffect(() => {
@@ -152,11 +167,11 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
     if (href.startsWith('file:') || !href) return;
     const [path, anchor] = href.split('#');
     if (!path) {
-      onNavigate({ chapter: target.chapter, anchor });
+      follow({ chapter: target.chapter, anchor });
       return;
     }
     const index = bundle.chapterIndex(resolvePath(chapters[target.chapter].file, path));
-    if (index >= 0) onNavigate({ chapter: index, anchor });
+    if (index >= 0) follow({ chapter: index, anchor });
   };
 
   return (
@@ -175,6 +190,12 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
           )}
         </Box>
       </Stack>
+      {back && (
+        <Button variant="contained" size="small" startIcon={<ArrowBackIcon />} onClick={() => onNavigate(back)}
+          sx={{ position: 'sticky', display: 'flex', mx: 'auto', bottom: 'calc(12px + env(safe-area-inset-bottom))', mb: 2 }}>
+          Back
+        </Button>
+      )}
     </div>
   );
 }

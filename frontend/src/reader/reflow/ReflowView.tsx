@@ -34,6 +34,9 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
     onLocation(`c${chapter}:${fraction.toFixed(4)}`, Math.min(1, (chapter + fraction) / n));
   }, [onLocation, n]);
 
+  // the place where it opened (a chapter too short to scroll reports nothing else; bookmarks need it)
+  useEffect(() => onScroll(target.chapter, target.fraction ?? 0), []);  // eslint-disable-line react-hooks/exhaustive-deps
+
   const navigate = useCallback((t: ReflowTarget) => {
     setTarget(t);
     onScroll(t.chapter, t.fraction ?? 0);

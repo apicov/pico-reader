@@ -1,6 +1,8 @@
 import hashlib
 import io
+import json
 import re
+import zipfile
 
 import httpx
 import pytest
@@ -267,3 +269,69 @@ def test_pdf_links_work_and_pages_get_their_own_size(page, pdf_book_id):
     until(lambda: page.evaluate("""() => { const s = document.querySelector('.pdf-scroll');
         const top = document.querySelector('[data-index="2"]').offsetTop - 20;  // (the last page: as far as it goes)
         return s.scrollTop >= Math.min(top, s.scrollHeight - s.clientHeight - 1); }"""), what="the third page")
+
+
+def test_a_wide_table_stays_in_its_column(page, book_id):
+    frame = open_book(page, book_id)
+    sizes = frame.evaluate("""() => {
+        const cells = Array.from({ length: 9 }, (_, i) => `<td>Donaudampfschifffahrtsgesellschaft${i}</td>`).join('');
+        document.querySelector('h1').insertAdjacentHTML('afterend', `<table id="wide"><tr>${cells}</tr><tr>${cells}</tr></table>`);
+        // (a tall table goes on in the next column: its cells, not its box, tell its width)
+        const row = [...document.querySelectorAll('#wide tr:first-child td')].map((td) => td.getBoundingClientRect());
+        return [row.at(-1).right - row[0].left, parseFloat(getComputedStyle(document.documentElement).columnWidth)];
+    }""")
+    assert sizes[0] <= sizes[1] + 1, sizes
+
+
+def test_back_after_following_a_link(page, book_id):
+    frame = open_book(page, book_id)
+    chapter = "() => document.querySelector('foliate-view').lastLocation?.tocItem?.label ?? ''"
+    frame.locator("#ref4").evaluate("a => a.click()")
+    until(lambda: page.evaluate(chapter) == "Kapitel 2", what="chapter 2")
+    page.get_by_role("button", name="Back").click()
+    until(lambda: page.evaluate(chapter) == "Kapitel 1", what="back in chapter 1")
+    assert page.get_by_role("button", name="Back").count() == 0
+
+
+@pytest.fixture(scope="module")
+def reflow_book_id(api):
+    """A reflow book (tools/README.md): two chapters, a link from the first into the second, and its own CSS."""
+    files = {
+        "book.json": json.dumps({"format": 1, "title": "Verweise", "author": "Test", "language": "de",
+                                 "chapters": [{"file": "index.html", "title": "Eins", "part": ""},
+                                              {"file": "chapters/zwei.html", "title": "Zwei", "part": ""}],
+                                 "styles": ["book.css"]}),
+        "index.html": '<h1>Eins</h1><p class="callout">Am Anfang.</p><p><a href="chapters/zwei.html#ziel">Zum Ziel</a></p>',
+        "chapters/zwei.html": '<h1>Zwei</h1><p id="ziel">Das Ziel.</p>',
+        "book.css": "body { outline: 3px solid rgb(1, 2, 3); } .callout { color: rgb(200, 0, 0); }",
+    }
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        for name, content in files.items():
+            z.writestr(name, content)
+    data = out.getvalue()
+    info = {"reflow": {"size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "content_type": "application/zip"}}
+    r = api.post("/api/books", json={"title": "Verweise", "author": "Test", "language": "de", "files": info})
+    r.raise_for_status()
+    book = r.json()
+    httpx.put(book["uploads"]["reflow"], content=data, headers={"Content-Type": "application/zip"}).raise_for_status()
+    api.post(f"/api/books/{book['id']}/commit").raise_for_status()
+    return book["id"]
+
+
+def test_a_reflow_books_css_stays_in_its_text_and_links_lead_back(page, reflow_book_id):
+    page.goto(f"{WEB}/#/read/{reflow_book_id}")
+    page.locator(".reflow").get_by_text("Am Anfang.").wait_for(timeout=30_000)
+    style = lambda sel, prop: page.locator(sel).first.evaluate(f"el => getComputedStyle(el).{prop}")
+    assert style(".callout", "color") == "rgb(200, 0, 0)"
+    assert style("body", "outlineStyle") == "none" and style(".reflow", "outlineColor") == "rgb(1, 2, 3)"
+    # the chapter isn't rebuilt when the annotations change (a bookmark)
+    page.locator(".callout").evaluate("el => { el.dataset.kept = 'yes'; }")
+    page.get_by_label("Bookmark this place").click()
+    page.get_by_label("Remove bookmark").wait_for()
+    assert page.locator(".callout").get_attribute("data-kept") == "yes"
+    page.get_by_text("Zum Ziel").click()
+    page.locator(".reflow").get_by_text("Das Ziel.").wait_for()
+    page.get_by_role("button", name="Back").click()
+    page.locator(".reflow").get_by_text("Am Anfang.").wait_for()
+    assert page.get_by_role("button", name="Back").count() == 0

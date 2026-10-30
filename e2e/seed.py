@@ -32,7 +32,7 @@ PARAGRAPHS = [
 # notes, at the end of the chapters: a footnote in an aside (hidden in the text), linked as a noteref and plainly,
 # and an endnote in the next chapter
 NOTES = {1: """<p id="notes">Eine Fußnote<a id="ref1" epub:type="noteref" href="#fn1">1</a>, noch einmal<a id="ref2" href="#fn1">*</a>,
-eine Endnote<a id="ref3" epub:type="noteref" href="c2.xhtml#en1">2</a>.</p>
+eine Endnote<a id="ref3" epub:type="noteref" href="c2.xhtml#en1">2</a>, <a id="ref4" href="c2.xhtml">weiter</a>.</p>
 <aside epub:type="footnote" id="fn1"><p>Der Text der Fußnote. <a epub:type="backlink" href="#notes">↩</a></p></aside>""",
          2: """<aside epub:type="endnote" id="en1"><p>Der Text der Endnote.</p></aside>"""}
 
