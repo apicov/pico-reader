@@ -10,7 +10,7 @@ import { recordLookup } from '@/services/events';
 import { api } from '@/services/api';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import { addCard } from '@/services/review';
-import { markKnown } from '@/services/words';
+import { addLookedUp, markKnown } from '@/services/words';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import CheckIcon from '@mui/icons-material/Check';
@@ -92,9 +92,12 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
       if (record && current === word && recorded.current !== `${word}|${language}|${record.location}`) {
         recorded.current = `${word}|${language}|${record.location}`;
         // the word's language: the one given, else the first dictionary's that has it, else the AI's (if it says)
-        const recordAs = (lang: string) => void recordLookup({ book_id: record.bookId, language: lang, word: r.word,
-          location: record.location, matched: r.results[0]?.entries[0]?.headword ?? '',
-          dictionaries: r.results.map((x) => x.dict.id), found: r.results.length > 0, context: record.context.slice(0, 1000) });
+        const recordAs = (lang: string) => {
+          const matched = r.results[0]?.entries[0]?.headword ?? '';
+          void recordLookup({ book_id: record.bookId, language: lang, word: r.word, location: record.location, matched,
+            dictionaries: r.results.map((x) => x.dict.id), found: r.results.length > 0, context: record.context.slice(0, 1000) });
+          if (r.results.length) void addLookedUp(lang, [r.word, matched]);  // underlined in the book at once
+        };
         const given = language ?? r.results[0]?.dict.from_lang;
         let recordedAs = !!given;
         if (given) recordAs(given);

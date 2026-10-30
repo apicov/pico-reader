@@ -77,7 +77,7 @@ function Page({ doc, index, size, scale, visible, highlights }: {
 
   const highlightsRef = useRef(highlights);
   highlightsRef.current = highlights;
-  const highlightKey = highlights.map((h) => h.text).join('\u0000');
+  const highlightKey = highlights.map((h) => `${h.color}:${h.text}`).join('\u0000');
   useEffect(() => {
     const layer = textRef.current;
     if (!layer || !visible) return;

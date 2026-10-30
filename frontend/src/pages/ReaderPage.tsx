@@ -24,7 +24,7 @@ import { EpubView } from '@/reader/epub/EpubView';
 import { PdfView } from '@/reader/pdf/PdfView';
 import type { TocItem, ViewHandle } from '@/reader/types';
 import { flushEvents, saveSession, SessionTracker } from '@/services/events';
-import { lookedUpWords, wordsIn } from '@/services/words';
+import { cachedLookedUpWords, lookedUpWords, subscribeLookedUp, wordsIn } from '@/services/words';
 import { setShelfStatus } from '@/services/shelf';
 import { offlineSearchEnabled } from '@/search/offlineSearch';
 import type { TextSelection } from '@/reader/selection';
@@ -168,6 +168,10 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
   useEffect(() => {
     if (!book) return;
     void lookedUpWords(book.language).then(setLooked);
+    // a lookup (or a word marked known) changes the underlines at once
+    return subscribeLookedUp((language) => {
+      if (language === book.language) void cachedLookedUpWords(language).then(setLooked);
+    });
   }, [book?.language]);  // eslint-disable-line react-hooks/exhaustive-deps
   const seenWords = settings.markLookedUp ? looked : null;
   const openToc = () => {

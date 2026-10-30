@@ -1,5 +1,6 @@
 /** Marks highlights in plain DOM text (reflow chapters): finds each highlight's text (whitespace-insensitive),
- *  the occurrence nearest to where it was made, and wraps it in <mark> elements. */
+ *  the occurrence nearest to where it was made (how far down the chapter, as measured when it was made), and wraps
+ *  it in <mark> elements. */
 
 interface Piece { node: Text; start: number }
 
@@ -30,13 +31,21 @@ export function markHighlights(root: HTMLElement, highlights: { id: string; text
     const { text, pieces, map } = textIndex(root);
     const needle = h.text.replace(/\s+/g, ' ').trim();
     if (!needle || !pieces.length) continue;
-    let best = -1;
-    let bestDistance = Infinity;
-    for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
-      const distance = Math.abs(at / text.length - h.fraction);
-      if (distance < bestDistance) { best = at; bestDistance = distance; }
-    }
-    if (best < 0) continue;
+    const found: number[] = [];
+    for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) found.push(at);
+    if (!found.length) continue;
+    // one occurrence: that one; more: the one nearest the place, by its height on the page (by its place in the
+    // text where nothing is laid out)
+    const box = root.getBoundingClientRect();
+    const down = (at: number) => {
+      const raw = map[at];
+      const piece = pieces.findLast((p) => p.start <= raw)!;
+      const range = root.ownerDocument.createRange();
+      range.setStart(piece.node, raw - piece.start);
+      return box.height ? (range.getBoundingClientRect().top - box.top) / box.height : at / text.length;
+    };
+    const best = found.length === 1 ? found[0]
+      : found.reduce((a, b) => (Math.abs(down(b) - h.fraction) < Math.abs(down(a) - h.fraction) ? b : a));
     const startRaw = map[best];
     const endRaw = map[best + needle.length - 1] + 1;
     // wrap each text node's part separately (a highlight can cross elements)

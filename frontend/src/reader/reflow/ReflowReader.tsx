@@ -8,6 +8,7 @@ import { watchSelection, type TextSelection } from '../selection';
 import { markHighlights } from '../highlightText';
 import { tappedImage } from '../images';
 import { markSeenWords } from '@/services/words';
+import { scopeCss } from './scopeCss';
 
 export interface ReflowTarget {
   chapter: number;
@@ -43,13 +44,13 @@ function renderMath(root: HTMLElement) {
   });
 }
 
-/** The book's own CSS (book.json "styles"), applied while the book is open. */
+/** The book's own CSS (book.json "styles"), applied to the chapter's text while the book is open. */
 function useBookStyles(bundle: ReflowBundle, dark: boolean) {
   useEffect(() => {
     const names = (bundle.meta.styles ?? []).filter((n) => n !== 'book-dark.css' || dark);
     const els = names.map((n) => {
       const el = document.createElement('style');
-      el.textContent = bundle.text(n) ?? '';
+      el.textContent = scopeCss(bundle.text(n) ?? '', '.reflow');
       document.head.appendChild(el);
       return el;
     });
@@ -64,17 +65,26 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
   const html = useMemo(() => bundle.chapterHtml(target.chapter), [bundle, target.chapter]);
   useBookStyles(bundle, dark);
 
-  // Put the chapter in, typeset its math, then go to the target place in it
+  // Put the chapter in and typeset its math (once per chapter: images and math aren't redone for a new highlight)
   useLayoutEffect(() => {
     const content = contentRef.current;
-    const scroller = scrollRef.current;
-    if (!content || !scroller) return;
+    if (!content) return;
     content.innerHTML = html;
     renderMath(content);
     content.querySelectorAll<HTMLAnchorElement>('a[href^="file:"]').forEach((a) => a.classList.add('disabled-link'));
+  }, [html]);
+
+  // Mark the highlights and the looked-up words, again when they change (the list is rebuilt on every sync:
+  // only a real change counts)
+  const highlightsKey = JSON.stringify(highlights);
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    content.querySelectorAll('mark.hl, span.seen').forEach((el) => el.replaceWith(...el.childNodes));
+    content.normalize();
     markHighlights(content, highlights);
     if (seenWords) markSeenWords(content, seenWords);
-  }, [html, highlights, seenWords]);
+  }, [html, highlightsKey, seenWords]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
