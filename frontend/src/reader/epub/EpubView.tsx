@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { Box } from '@mui/material';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Box, Dialog, DialogContent } from '@mui/material';
+import DOMPurify from 'dompurify';
 import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
 import { Overlayer } from 'foliate-js/overlayer.js';
@@ -8,7 +9,7 @@ import { tappedImage } from '../images';
 import type { Settings } from '@/contexts/SettingsContext';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
 import { watchSelection } from '../selection';
-import { markSeenWords } from '@/services/words';
+import { seenWordRanges } from '@/services/words';
 
 /** The app's @font-face rules with absolute URLs: the book's sections are separate documents (blob URLs),
  *  so they neither inherit the app's fonts nor resolve its relative font paths. */
@@ -40,28 +41,71 @@ function bookCss(s: Settings): string {
     html { color-scheme: ${c.mode}; --theme-bg-color: ${c.background}; background: ${c.background} !important;
       -webkit-tap-highlight-color: ${c.tap}; }
     body { background: transparent !important; color: ${c.text} !important; font-size: ${18 * s.fontScale}px !important; }
-    /* the reading font and colours win over the book's own (dark themes need it), except for code */
-    body, body * { font-family: ${READING_FONT} !important; }
+    /* the reading font and colours win over the book's own (dark themes need it), except for code and math, which
+       keep their own fonts (KaTeX places glyphs by its fonts' metrics) and colours (syntax highlighting, \\color);
+       the exceptions sit in :where() so the rules' specificity, and so which book rules beat them, stays the same */
+    body, body *:where(:not(.katex, .katex *, math, math *, mjx-container, mjx-container *)) {
+      font-family: ${READING_FONT} !important; }
     pre, code, kbd, samp, pre *, code * { font-family: ui-monospace, monospace !important; }
-    body *:not(a) { color: inherit !important; }
+    body *:not(a):where(:not(pre *, code *, .katex *, math *, mjx-container *)) { color: inherit !important; }
     p, li, blockquote, dd { line-height: ${s.lineHeight} !important; text-align: ${s.justify ? 'justify' : 'start'};
       hyphens: auto; -webkit-hyphens: auto; widows: 2; orphans: 2; }
     a:link { color: ${c.accent} !important; }
     img, svg { max-width: 100%; height: auto; }
     pre { white-space: pre-wrap !important; }
     ${c.mode === 'dark' ? 'img { filter: brightness(0.9); }' : ''}
-.seen { text-decoration: underline dotted ${c.accent}; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+    ::highlight(seen) { text-decoration: underline dotted ${c.accent} 1.5px; text-underline-offset: 3px; }
     aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"] { display: none; }
   `;
+}
+
+/** Underline the looked-up words (a CSS highlight: the DOM stays as it is, so EPUB positions don't move).
+ *  WebViews without the Custom Highlight API (Chromium < 105) show no underlines. */
+function markSeen(doc: Document, words: Set<string> | null) {
+  const win = doc.defaultView as (Window & typeof globalThis) | null;
+  const registry = win?.CSS?.highlights;
+  if (!win || !registry) return;
+  if (words?.size) registry.set('seen', new win.Highlight(...seenWordRanges(doc.body, words)));
+  else registry.delete('seen');
+}
+
+/** The element an anchor resolved to (anchors can also be ranges or offsets); tag checks, not instanceof:
+ *  the book's pages are documents of their own */
+const asElement = (x: unknown) => (x && typeof x === 'object' && 'closest' in x ? x as Element : null);
+
+const EPUB_NS = 'http://www.idpf.org/2007/ops';
+const NOTE_TYPES = /\b(footnote|endnote|rearnote)\b/;
+const isNoteRef = (a: Element) => /\bnoteref\b/.test(a.getAttributeNS(EPUB_NS, 'type') ?? '')
+  || a.getAttribute('role') === 'doc-noteref';
+/** A note hidden by bookCss (asides typed as notes) */
+const hiddenNote = (el: Element) => {
+  for (let e: Element | null = el; e; e = e.parentElement) {
+    if (e.localName === 'aside' && NOTE_TYPES.test(e.getAttributeNS(EPUB_NS, 'type') ?? '')) return e;
+  }
+  return null;
+};
+
+/** A note's content for the popup: its element (or the block around the anchor it starts with), without the
+ *  link back to the text, sanitized; null when there's nothing to show. */
+function noteHtml(target: Element): string | null {
+  const note = (hiddenNote(target) ?? target.closest('aside, li, dd, p, div') ?? target).cloneNode(true) as Element;
+  note.querySelectorAll('a').forEach((a) => {
+    if (/\bbacklink\b/.test(a.getAttributeNS(EPUB_NS, 'type') ?? '') || a.getAttribute('role') === 'doc-backlink'
+      || a.classList.contains('footnote-back')) a.remove();
+  });
+  if (!note.textContent?.trim()) return null;
+  return DOMPurify.sanitize(note.innerHTML, { FORBID_TAGS: ['style', 'form', 'input'] });
 }
 
 const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255, 210, 0, 0.45)', green: 'rgba(80, 200, 120, 0.4)', blue: 'rgba(80, 150, 255, 0.38)' };
 
 const MARGIN_PX = { narrow: '0px', normal: '8px', wide: '32px' } as const;
 
-function flatten(items: FoliateTocItem[] | undefined, depth = 0, out: TocItem[] = []): TocItem[] {
+function flatten(items: FoliateTocItem[] | null | undefined, depth = 0, out: TocItem[] = []): TocItem[] {
   for (const item of items ?? []) {
-    out.push({ id: item.href, label: item.label.trim(), depth });
+    // an entry without a link is a heading; one without text (only a picture) has an empty label
+    const label = (item.label ?? '').trim();
+    out.push(item.href ? { id: item.href, label, depth } : { id: `header:${out.length}`, label, depth, header: true });
     flatten(item.subitems, depth + 1, out);
   }
   return out;
@@ -85,6 +129,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
   const seenRef = useRef(seenWords);
   seenRef.current = seenWords;
   const drawn = useRef(new Map<string, string>()); // cfi → color
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -94,6 +139,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     host.append(view);
     viewRef.current = view;
     let closed = false;
+    const sectionOf = new WeakMap<Document, number>();
 
     view.addEventListener('relocate', (e) => {
       const d = (e as CustomEvent<FoliateRelocate>).detail;
@@ -108,12 +154,13 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     view.addEventListener('load', (e) => {
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
       if (!doc.documentElement.lang) doc.documentElement.lang = language;
+      sectionOf.set(doc, index);
       doc.addEventListener('keydown', onKey);
       doc.addEventListener('click', (ev) => {
         const src = tappedImage(ev.target);
         if (src && !doc.getSelection()?.toString()) callbacks.current.onImage?.(src);
       });
-      if (seenRef.current) markSeenWords(doc.body, seenRef.current);
+      markSeen(doc, seenRef.current);
       // the selection, with its CFI (for highlights)
       watchSelection(doc, (sel) => {
         const s = doc.getSelection();
@@ -125,9 +172,27 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
         callbacks.current.onSelection(sel);
       });
     });
+    // a link to a note opens it in a popup (notes in asides are hidden in the text); other links: foliate goes there
+    view.addEventListener('link', (e) => {
+      const { a, href } = (e as CustomEvent<{ a: Element; href: string }>).detail;
+      const target = view.book.resolveHref?.(href);
+      if (!target) return;
+      const here = sectionOf.get(a.ownerDocument) === target.index ? asElement(target.anchor(a.ownerDocument)) : null;
+      if (!(here && hiddenNote(here)) && !isNoteRef(a)) return;
+      e.preventDefault();
+      void (async () => {
+        const doc = here ? null : await view.book.sections[target.index]?.createDocument?.().catch(() => null);
+        const el = here ?? (doc ? asElement(target.anchor(doc)) : null);
+        const html = el ? noteHtml(el) : null;
+        if (html) setNote(html);
+        else void view.goTo(href);
+      })();
+    });
     // highlights: drawn by foliate's overlayer, again whenever a section is laid out
     view.addEventListener('create-overlay', () => {
-      for (const h of highlightsRef.current) void view.addAnnotation({ value: h.location, color: h.color });
+      for (const h of highlightsRef.current) {
+        if (h.location.startsWith('epubcfi(')) void view.addAnnotation({ value: h.location, color: h.color });
+      }
     });
     view.addEventListener('draw-annotation', (e) => {
       const { draw, annotation } = (e as CustomEvent<{ draw: (f: unknown, o: unknown) => void; annotation: { color?: string } }>).detail;
@@ -169,25 +234,37 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     view.renderer.style.setProperty('padding-inline', MARGIN_PX[settings.margin]);
   }, [settings]);
 
+  // Left/right follow the screen (the book's direction decides which is forward); PageDown/Space always go on
   const onKey = (e: KeyboardEvent) => {
-    if (!activeRef.current) return;
-    if (e.key === 'ArrowLeft' || e.key === 'PageUp') void viewRef.current?.goLeft();
-    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') void viewRef.current?.goRight();
+    if (!activeRef.current || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.isContentEditable || t?.closest?.('input, textarea, select, [role="dialog"]')) return; // typing, a dialog
+    const view = viewRef.current;
+    if (e.key === 'ArrowLeft') void view?.goLeft();
+    else if (e.key === 'ArrowRight') void view?.goRight();
+    else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) void view?.prev();
+    else if (e.key === 'PageDown' || e.key === ' ') void view?.next();
   };
   useEffect(() => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Add new highlights, remove deleted ones
+  // Add new highlights, remove deleted ones (before the book is open, create-overlay draws them)
   useEffect(() => {
     const view = viewRef.current;
-    if (!view?.book) return;
     const now = new Map(highlights.filter((h) => h.location.startsWith('epubcfi(')).map((h) => [h.location, h.color]));
+    if (!view?.book) { drawn.current = now; return; }
     for (const [cfi] of drawn.current) if (!now.has(cfi)) void view.deleteAnnotation({ value: cfi });
     for (const [cfi, color] of now) if (drawn.current.get(cfi) !== color) void view.addAnnotation({ value: cfi, color });
     drawn.current = now;
   }, [highlights]);
+
+  // The underlines follow the looked-up words (and the setting) on the open pages too
+  useEffect(() => {
+    const contents = (viewRef.current?.renderer as unknown as { getContents?: () => { doc?: Document }[] })?.getContents?.() ?? [];
+    for (const c of contents) if (c.doc?.body) markSeen(c.doc, seenWords);
+  }, [seenWords]);
 
   useImperativeHandle(ref, () => ({
     goToToc: (href) => void viewRef.current?.goTo(href),
@@ -208,6 +285,12 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       {/* tap the page edges to turn pages (the middle stays free for selecting text) */}
       <Box sx={{ ...zone, left: 0 }} onClick={() => void viewRef.current?.goLeft()} aria-label="Previous page" />
       <Box sx={{ ...zone, right: 0 }} onClick={() => void viewRef.current?.goRight()} aria-label="Next page" />
+      <Dialog open={note !== null} onClose={() => setNote(null)} fullWidth maxWidth="sm"
+        slotProps={{ paper: { 'aria-label': 'Note' } }}>
+        <DialogContent onClick={(e) => e.preventDefault()} dangerouslySetInnerHTML={{ __html: note ?? '' }}
+          sx={{ fontFamily: READING_FONT, lineHeight: 1.5, '& p': { my: 1 }, '& a': { color: 'inherit' },
+            '& img': { maxWidth: '100%', height: 'auto' } }} />
+      </Dialog>
     </Box>
   );
 });

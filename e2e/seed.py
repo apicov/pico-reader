@@ -29,10 +29,18 @@ PARAGRAPHS = [
 ] * 12
 
 
+# notes, at the end of the chapters: a footnote in an aside (hidden in the text), linked as a noteref and plainly,
+# and an endnote in the next chapter
+NOTES = {1: """<p id="notes">Eine Fußnote<a id="ref1" epub:type="noteref" href="#fn1">1</a>, noch einmal<a id="ref2" href="#fn1">*</a>,
+eine Endnote<a id="ref3" epub:type="noteref" href="c2.xhtml#en1">2</a>.</p>
+<aside epub:type="footnote" id="fn1"><p>Der Text der Fußnote. <a epub:type="backlink" href="#notes">↩</a></p></aside>""",
+         2: """<aside epub:type="endnote" id="en1"><p>Der Text der Endnote.</p></aside>"""}
+
+
 def epub() -> bytes:
     chapter = lambda n, title: f"""<?xml version="1.0" encoding="utf-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" lang="de"><head><title>{title}</title></head><body>
-<h1>{title}</h1>{''.join(f'<p id="p{n}-{i}">{p}</p>' for i, p in enumerate(PARAGRAPHS))}</body></html>"""
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="de"><head><title>{title}</title></head><body>
+<h1>{title}</h1>{''.join(f'<p id="p{n}-{i}">{p}</p>' for i, p in enumerate(PARAGRAPHS))}{NOTES[n]}</body></html>"""
     files = {
         "META-INF/container.xml": """<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -48,7 +56,8 @@ def epub() -> bytes:
 <spine><itemref idref="c1"/><itemref idref="c2"/></spine></package>""",
         "OEBPS/nav.xhtml": """<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Inhalt</title></head>
-<body><nav epub:type="toc"><ol><li><a href="c1.xhtml">Kapitel 1</a></li><li><a href="c2.xhtml">Kapitel 2</a></li></ol></nav>
+<body><nav epub:type="toc"><ol><li><span>Teil I</span><ol><li><a href="c1.xhtml">Kapitel 1</a></li></ol></li>
+<li><a href="c2.xhtml">Kapitel 2</a></li><li><a href="c2.xhtml#en1"><img src="none.png" alt=""/></a></li></ol></nav>
 </body></html>""",
         "OEBPS/c1.xhtml": chapter(1, "Kapitel 1"),
         "OEBPS/c2.xhtml": chapter(2, "Kapitel 2"),

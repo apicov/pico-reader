@@ -26,37 +26,56 @@ export async function markKnown(language: string, word: string): Promise<void> {
   await deleteCardsFor(language, word);
 }
 
-/** Wrap words of `words` in <span class="seen"> in an element's text (not inside code or math). */
-export function markSeenWords(root: HTMLElement, words: Set<string>): void {
-  if (!words.size) return;
-  const doc = root.ownerDocument;
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (n) => (n.parentElement?.closest('code, pre, .katex, .math, script, style, .seen')
+/** Where the words of `words` are in an element's text (not inside code or math): per text node, the matches. */
+function seenMatches(root: HTMLElement, words: Set<string>): { node: Text; spans: [number, number][] }[] {
+  if (!words.size) return [];
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement?.closest('code, pre, .katex, .math, math, mjx-container, script, style, .seen')
       ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
   });
-  const nodes: Text[] = [];
-  let n: Text | null;
-  while ((n = walker.nextNode() as Text | null)) nodes.push(n);
+  const out: { node: Text; spans: [number, number][] }[] = [];
   const re = /\p{L}[\p{L}\p{M}'’-]*/gu;
-  for (const node of nodes) {
+  let node: Text | null;
+  while ((node = walker.nextNode() as Text | null)) {
+    const spans: [number, number][] = [];
+    for (const m of node.data.matchAll(re)) {
+      if (words.has(m[0].normalize('NFC').toLowerCase())) spans.push([m.index, m.index + m[0].length]);
+    }
+    if (spans.length) out.push({ node, spans });
+  }
+  return out;
+}
+
+/** Wrap words of `words` in <span class="seen"> in an element's text (not inside code or math). */
+export function markSeenWords(root: HTMLElement, words: Set<string>): void {
+  const doc = root.ownerDocument;
+  for (const { node, spans } of seenMatches(root, words)) {
     const text = node.data;
-    let m: RegExpExecArray | null;
-    let last = 0;
     const parts: (string | HTMLElement)[] = [];
-    re.lastIndex = 0;
-    while ((m = re.exec(text))) {
-      if (!words.has(m[0].normalize('NFC').toLowerCase())) continue;
-      if (m.index > last) parts.push(text.slice(last, m.index));
+    let last = 0;
+    for (const [from, to] of spans) {
+      if (from > last) parts.push(text.slice(last, from));
       const span = doc.createElement('span');
       span.className = 'seen';
-      span.textContent = m[0];
+      span.textContent = text.slice(from, to);
       parts.push(span);
-      last = m.index + m[0].length;
+      last = to;
     }
-    if (!parts.length) continue;
     if (last < text.length) parts.push(text.slice(last));
     node.replaceWith(...parts);
   }
+}
+
+/** The words of `words` in an element's text as ranges, leaving the DOM as it is (EPUB positions count its
+ *  nodes, so wrapping words in spans would move every highlight saved after them). */
+export function seenWordRanges(root: HTMLElement, words: Set<string>): Range[] {
+  const doc = root.ownerDocument;
+  return seenMatches(root, words).flatMap(({ node, spans }) => spans.map(([from, to]) => {
+    const range = doc.createRange();
+    range.setStart(node, from);
+    range.setEnd(node, to);
+    return range;
+  }));
 }
 
 /** How often each word of `words` appears in a text, most frequent first (the "words in this chapter" list). */
