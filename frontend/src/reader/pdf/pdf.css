@@ -19,3 +19,5 @@
 .textLayer span.hl { background: rgba(255, 210, 0, 0.4); }
 .textLayer span.hl-green { background: rgba(80, 200, 120, 0.35); }
 .textLayer span.hl-blue { background: rgba(80, 150, 255, 0.32); }
+/* links (from the PDF's link annotations): invisible, over the text */
+.pdf-link { position: absolute; z-index: 2; }

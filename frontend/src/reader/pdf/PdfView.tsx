@@ -43,20 +43,25 @@ function markSpans(layer: HTMLElement, highlights: { text: string; color: string
   }
 }
 
-function Page({ doc, index, size, scale, visible, highlights }: {
+/** A link on a page: where (CSS px on the page) and to what (a web address, or a place in the PDF) */
+interface PageLink { left: number; top: number; width: number; height: number; url?: string; dest?: OutlineNode['dest'] }
+
+function Page({ doc, index, size, scale, visible, highlights, onLink }: {
   doc: PDFDocumentProxy; index: number; size: Size; scale: number; visible: boolean;
-  highlights: { text: string; color: string }[];
+  highlights: { text: string; color: string }[]; onLink: (link: PageLink) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
+  const [links, setLinks] = useState<PageLink[]>([]);
 
   useEffect(() => {
     if (!visible) return;
     let task: RenderTask | null = null;
     let textLayer: { cancel: () => void } | null = null;
     let cancelled = false;
+    let page: PDFPageProxy | null = null;
     void (async () => {
-      const page: PDFPageProxy = await doc.getPage(index + 1);
+      page = await doc.getPage(index + 1);
       if (cancelled || !canvasRef.current || !textRef.current) return;
       const viewport = page.getViewport({ scale });
       const dpr = Math.min(window.devicePixelRatio || 1,
@@ -71,8 +76,21 @@ function Page({ doc, index, size, scale, visible, highlights }: {
       textLayer = layer;
       await Promise.all([task.promise, layer.render()]).catch(() => undefined);
       if (!cancelled) markSpans(textDiv, highlightsRef.current);
+      const annotations = await page.getAnnotations().catch(() => []);
+      if (cancelled) return;
+      setLinks(annotations.filter((a) => a.subtype === 'Link' && (a.url || a.dest)).map((a) => {
+        const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(a.rect) as number[];
+        return { left: Math.min(x1, x2), top: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
+          url: a.url as string | undefined, dest: a.dest as OutlineNode['dest'] };
+      }));
     })();
-    return () => { cancelled = true; task?.cancel(); textLayer?.cancel(); };
+    // a page that scrolls away gives its memory back (a long PDF would otherwise keep every page's resources)
+    return () => {
+      cancelled = true;
+      task?.cancel();
+      textLayer?.cancel();
+      void Promise.resolve(task?.promise).catch(() => undefined).finally(() => page?.cleanup());
+    };
   }, [doc, index, scale, visible]);
 
   const highlightsRef = useRef(highlights);
@@ -90,6 +108,11 @@ function Page({ doc, index, size, scale, visible, highlights }: {
       style={{ width: size.w * scale, height: size.h * scale, '--scale-factor': scale } as React.CSSProperties}>
       {visible && <canvas ref={canvasRef} />}
       {visible && <div ref={textRef} className="textLayer" />}
+      {visible && links.map((l, i) => (
+        <a key={i} className="pdf-link" href={l.url ?? '#'} aria-label={l.url ?? 'Link'}
+          style={{ left: l.left, top: l.top, width: l.width, height: l.height }}
+          onClick={(e) => { e.preventDefault(); onLink(l); }} />
+      ))}
     </div>
   );
 }
@@ -119,11 +142,9 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
       try {
         loaded = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
         if (cancelled) return;
-        const all: Size[] = [];
-        for (let i = 1; i <= loaded.numPages; i++) {
-          const vp = (await loaded.getPage(i)).getViewport({ scale: 1 });
-          all.push({ w: vp.width, h: vp.height });
-        }
+        // every page taken as big as the first one, to show the PDF at once; measured below
+        const first = (await loaded.getPage(1)).getViewport({ scale: 1 });
+        const all: Size[] = Array.from({ length: loaded.numPages }, () => ({ w: first.width, h: first.height }));
         const m = /^p(\d+):([\d.]+)$/.exec(initial.location ?? '');
         if (m) restore.current = { page: Math.min(Number(m[1]) - 1, all.length - 1), fraction: Number(m[2]) };
         else if (initial.progress) {
@@ -142,6 +163,13 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
         });
         walk(outline ?? [], 0);
         onToc(items);
+        // the real sizes, in the background; only pages of another size change the layout (and the place is kept)
+        const measured: Size[] = [];
+        for (let i = 1; i <= loaded.numPages && !cancelled; i++) {
+          const vp = (await loaded.getPage(i)).getViewport({ scale: 1 });
+          measured.push({ w: vp.width, h: vp.height });
+        }
+        if (!cancelled && measured.some((m, i) => m.w !== all[i].w || m.h !== all[i].h)) setSizes(measured);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       }
@@ -195,6 +223,7 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
     const target = restore.current ?? current.current;
     restore.current = null;
     scrollTo(target.page, target.fraction);
+    current.current = target;  // the place until the reader scrolls (the measured sizes can come first)
   }, [doc, width, scale, scrollTo]);
 
   // Report the place: the page at the top of the screen and how far down it is
@@ -269,6 +298,18 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
     return () => { el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move); el.removeEventListener('touchend', end); };
   }, [zoom]);
 
+  const goToDest = useCallback(async (dest: OutlineNode['dest']) => {
+    if (!doc) return;
+    const explicit = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
+    if (!Array.isArray(explicit) || !explicit[0]) return;
+    const index = typeof explicit[0] === 'number' ? explicit[0] : await doc.getPageIndex(explicit[0] as never);
+    scrollTo(index, 0);
+  }, [doc, scrollTo]);
+  const onLink = useCallback((link: PageLink) => {
+    if (link.url) { if (/^(https?|mailto):/i.test(link.url)) window.open(link.url, '_blank', 'noopener'); }
+    else void goToDest(link.dest ?? null);
+  }, [goToDest]);
+
   useImperativeHandle(ref, () => ({
     currentText: () => [...(pagesRef.current?.querySelectorAll('.textLayer') ?? [])].map((l) => l.textContent ?? '').join('\n'),
     goTo: (location, progress) => {
@@ -276,15 +317,8 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
       if (m) scrollTo(Number(m[1]) - 1, Number(m[2]));
       else if (sizes.length) scrollTo(Math.min(sizes.length - 1, Math.floor(progress * sizes.length)), (progress * sizes.length) % 1);
     },
-    goToToc: (id) => void (async () => {
-      if (!doc) return;
-      let dest = outlineDests.current.get(id);
-      if (typeof dest === 'string') dest = await doc.getDestination(dest);
-      if (!Array.isArray(dest) || !dest[0]) return;
-      const index = typeof dest[0] === 'number' ? dest[0] : await doc.getPageIndex(dest[0] as never);
-      scrollTo(index, 0);
-    })(),
-  }), [doc, scrollTo, sizes.length]);
+    goToToc: (id) => void goToDest(outlineDests.current.get(id) ?? null),
+  }), [scrollTo, sizes.length, goToDest]);
 
   const themeClass = ['dark', 'black', 'night'].includes(settings.theme) ? 'pdf-dark' : settings.theme === 'sepia' ? 'pdf-sepia' : '';
   if (error) return <Typography color="error" sx={{ p: 3 }}>This PDF can't be opened: {error}</Typography>;
@@ -294,7 +328,7 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
         <div ref={pagesRef} className="pdf-pages">
           {doc && sizes.map((size, i) => (
             <Page key={i} doc={doc} index={i} size={size} scale={scale} visible={visible.has(i)}
-              highlights={pageHighlights.get(i) ?? NO_HIGHLIGHTS} />
+              highlights={pageHighlights.get(i) ?? NO_HIGHLIGHTS} onLink={onLink} />
           ))}
         </div>
       </div>

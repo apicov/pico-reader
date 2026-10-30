@@ -1,5 +1,9 @@
-import re
+import hashlib
 import io
+import re
+
+import httpx
+import pytest
 
 from PIL import Image
 
@@ -200,3 +204,66 @@ def test_looked_up_words_are_underlined_without_changing_the_page(page, book_id)
     page.get_by_label("Text settings").click()
     page.get_by_label("Underline words I looked up").click()
     until(lambda: frame.evaluate(seen)[0] == 0, what="the underlines gone")
+
+
+def pdf() -> bytes:
+    """Three pages, the third landscape; on the first a link to the third and one to the web."""
+    def text(*lines):
+        body = " ".join(f"BT /F1 18 Tf 20 {y} Td ({t}) Tj ET" for y, t in lines).encode()
+        return b"<< /Length %d >>\nstream\n%s\nendstream" % (len(body), body)
+    page = lambda box, contents, extra=b"": (b"<< /Type /Page /Parent 2 0 R /MediaBox [%s] /Contents %d 0 R "
+                                            b"/Resources << /Font << /F1 9 0 R >> >> %s>>" % (box, contents, extra))
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+        page(b"0 0 300 400", 6, b"/Annots [7 0 R 8 0 R] "),
+        page(b"0 0 300 400", 10),
+        page(b"0 0 500 300", 11),
+        text((350, "Seite eins"), (300, "Zur Seite drei"), (250, "Ins Netz")),
+        b"<< /Type /Annot /Subtype /Link /Rect [15 290 200 320] /Border [0 0 0] /Dest [5 0 R /XYZ 0 300 0] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [15 240 200 270] /Border [0 0 0] "
+        b"/A << /S /URI /URI (https://example.com/) >> >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        text((350, "Seite zwei")),
+        text((250, "Seite drei")),
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objects, 1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n%s\nendobj\n" % (i, body))
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1))
+    out.write(b"".join(b"%010d 00000 n \n" % o for o in offsets))
+    out.write(b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref))
+    return out.getvalue()
+
+
+@pytest.fixture(scope="module")
+def pdf_book_id(api):
+    data = pdf()
+    files = {"pdf": {"size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "content_type": "application/pdf"}}
+    r = api.post("/api/books", json={"title": "Links (PDF)", "author": "Test", "language": "de", "files": files})
+    r.raise_for_status()
+    book = r.json()
+    httpx.put(book["uploads"]["pdf"], content=data, headers={"Content-Type": "application/pdf"}).raise_for_status()
+    api.post(f"/api/books/{book['id']}/commit").raise_for_status()
+    return book["id"]
+
+
+def test_pdf_links_work_and_pages_get_their_own_size(page, pdf_book_id):
+    page.context.route("https://example.com/**", lambda route: route.fulfill(body="<p>web</p>", content_type="text/html"))
+    page.goto(f"{WEB}/#/read/{pdf_book_id}")
+    page.locator(".pdf-link").first.wait_for(state="attached", timeout=30_000)
+    # the landscape page, measured after the PDF is shown, gets its own shape
+    until(lambda: page.locator('[data-index="2"]').evaluate("el => el.offsetWidth > el.offsetHeight"),
+          what="the third page landscape")
+    with page.expect_popup() as popup:
+        page.get_by_label("https://example.com/").click()
+    assert popup.value.url.startswith("https://example.com/")
+    popup.value.close()
+    page.get_by_label("Link", exact=True).click()  # to the third page
+    until(lambda: page.evaluate("""() => { const s = document.querySelector('.pdf-scroll');
+        const top = document.querySelector('[data-index="2"]').offsetTop - 20;  // (the last page: as far as it goes)
+        return s.scrollTop >= Math.min(top, s.scrollHeight - s.clientHeight - 1); }"""), what="the third page")
