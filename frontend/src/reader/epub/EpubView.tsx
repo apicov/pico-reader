@@ -78,6 +78,32 @@ function markSeen(doc: Document, words: Set<string> | null) {
  *  the book's pages are documents of their own */
 const asElement = (x: unknown) => (x && typeof x === 'object' && 'closest' in x ? x as Element : null);
 
+/** Display math wider than its column is scaled down to fit (it ran into the next column or was cut off); again
+ *  whenever the column's width or the text size changes. Math can't wrap, and scrolling sideways fights page turns. */
+const refits = new WeakMap<Document, () => void>();
+function fitDisplayMath(doc: Document) {
+  const win = doc.defaultView;
+  if (!win) return;
+  const fit = () => doc.querySelectorAll<HTMLElement>('.katex-display, math[display="block"], mjx-container[display="true"]')
+    .forEach((el) => {
+      el.style.fontSize = '';
+      el.style.overflowX = '';
+      const ratio = el.clientWidth / el.scrollWidth;
+      if (ratio >= 1) return;
+      el.style.fontSize = `${Math.max(0.5, ratio * 0.98)}em`;
+      if (el.scrollWidth > el.clientWidth + 1) el.style.overflowX = 'auto';  // too wide even at half size: it scrolls
+    });
+  // foliate widens the page as it adds columns: only the column's width and the text size matter
+  let last = '';
+  const check = () => {
+    const now = `${getComputedStyle(doc.documentElement).columnWidth}|${getComputedStyle(doc.body).fontSize}`;
+    if (now !== last) { last = now; win.requestAnimationFrame(fit); }
+  };
+  new win.ResizeObserver(check).observe(doc.documentElement);
+  refits.set(doc, check);
+  void doc.fonts?.ready.then(() => win.requestAnimationFrame(fit));  // the math fonts change the widths
+}
+
 const EPUB_NS = 'http://www.idpf.org/2007/ops';
 const NOTE_TYPES = /\b(footnote|endnote|rearnote)\b/;
 const isNoteRef = (a: Element) => /\bnoteref\b/.test(a.getAttributeNS(EPUB_NS, 'type') ?? '')
@@ -167,6 +193,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
         if (src && !doc.getSelection()?.toString()) callbacks.current.onImage?.(src);
       });
       markSeen(doc, seenRef.current);
+      fitDisplayMath(doc);
       // the selection, with its CFI (for highlights)
       watchSelection(doc, (sel) => {
         const s = doc.getSelection();
@@ -238,6 +265,8 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     view.renderer.setStyles(bookCss(settings));
     view.renderer.style.background = READING_THEMES[settings.theme].background;
     view.renderer.style.setProperty('padding-inline', MARGIN_PX[settings.margin]);
+    const contents = (view.renderer as unknown as { getContents?: () => { doc?: Document }[] }).getContents?.() ?? [];
+    requestAnimationFrame(() => contents.forEach((c) => c.doc && refits.get(c.doc)?.()));  // a new text size
   }, [settings]);
 
   // Left/right follow the screen (the book's direction decides which is forward); PageDown/Space always go on

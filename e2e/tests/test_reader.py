@@ -335,3 +335,18 @@ def test_a_reflow_books_css_stays_in_its_text_and_links_lead_back(page, reflow_b
     page.get_by_role("button", name="Back").click()
     page.locator(".reflow").get_by_text("Am Anfang.").wait_for()
     assert page.get_by_role("button", name="Back").count() == 0
+
+
+def test_wide_display_math_fits_its_column(page, book_id):
+    open_book(page, book_id)
+    page.evaluate("""async () => {
+        const v = document.querySelector('foliate-view');
+        const doc = await v.book.sections[1].createDocument();
+        const r = doc.createRange(); r.selectNode(doc.getElementById('wide-math'));
+        await v.goTo(v.getCFI(1, r));
+    }""")
+    frame = until(lambda: next((f for f in page.frames if f.locator("#wide-math").count()), None), what="chapter 2")
+    # scaled (it's wider than the column at full size), and then inside it
+    fits = """() => { const m = document.getElementById('wide-math');
+        return m.style.fontSize !== '' && m.scrollWidth <= m.clientWidth + 1; }"""
+    until(lambda: frame.evaluate(fits), what="the formula scaled to its column")

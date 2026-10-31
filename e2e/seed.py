@@ -34,7 +34,9 @@ PARAGRAPHS = [
 NOTES = {1: """<p id="notes">Eine Fußnote<a id="ref1" epub:type="noteref" href="#fn1">1</a>, noch einmal<a id="ref2" href="#fn1">*</a>,
 eine Endnote<a id="ref3" epub:type="noteref" href="c2.xhtml#en1">2</a>, <a id="ref4" href="c2.xhtml">weiter</a>.</p>
 <aside epub:type="footnote" id="fn1"><p>Der Text der Fußnote. <a epub:type="backlink" href="#notes">↩</a></p></aside>""",
-         2: """<aside epub:type="endnote" id="en1"><p>Der Text der Endnote.</p></aside>"""}
+         2: """<aside epub:type="endnote" id="en1"><p>Der Text der Endnote.</p></aside>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block" id="wide-math"><mrow>"""
+            + "<mo>+</mo>".join(f"<msub><mi>x</mi><mn>{i}</mn></msub>" for i in range(16)) + "</mrow></math>"}
 
 
 def epub() -> bytes:
