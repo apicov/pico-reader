@@ -2,11 +2,17 @@
 
 ## Deploying a change
 
-From the workstation checkout, after committing:
+Push to GitHub, then the server takes it (the folder is a git checkout, [04](04-backend.md) §2):
 
 ```bash
-git archive HEAD | ssh root@172.104.159.186 'cd /home/tsp/code/pico-reader && tar x && chown -R tsp:tsp .'
+git push
+ssh root@172.104.159.186 'cd /home/tsp/code/pico-reader && sudo -u tsp git fetch -q && sudo -u tsp git reset --hard origin/main'
 ```
+
+`reset --hard` makes the folder exactly the pushed commit: files deleted or moved in the repo go too (a copy
+of the files wouldn't remove them, and a stale test once broke the web build). What git ignores stays: `.venv`,
+`node_modules`, `dist`, the `.env` link. `git log -1` on the server says what's deployed; to go back, `git reset
+--hard <commit>` and the steps below.
 
 Then on the server, depending on what changed:
 

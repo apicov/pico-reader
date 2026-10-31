@@ -19,14 +19,28 @@ limit keep it light on a 2 GB box.
 
 ## 2. Code
 
-The repository goes to `/home/tsp/code/pico-reader`. From a workstation checkout:
+The repository is cloned to `/home/tsp/code/pico-reader` with a read-only deploy key of its own (a GitHub
+deploy key works for one repository only). As tsp:
 
 ```bash
-ssh root@<ip> 'mkdir -p /home/tsp/code/pico-reader'
-git archive HEAD | ssh root@<ip> 'cd /home/tsp/code/pico-reader && tar x && chown -R tsp:tsp .'
+ssh-keygen -t ed25519 -N "" -C "pico-reader deploy" -f ~/.ssh/pico-reader-deploy
+cat >> ~/.ssh/config <<EOF
+Host github-pico-reader
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/pico-reader-deploy
+    IdentitiesOnly yes
+EOF
+cat ~/.ssh/pico-reader-deploy.pub
 ```
 
-(With a git remote, `git clone` as tsp works as well.)
+Add the printed key in GitHub → the repository → Settings → Deploy keys, without write access. Then:
+
+```bash
+git clone git@github-pico-reader:apicov/pico-reader.git ~/code/pico-reader
+```
+
+Updates are in [08](08-operations.md).
 
 ## 3. Python environment
 
