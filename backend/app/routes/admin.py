@@ -3,7 +3,6 @@ POST gives signed PUT links for the files, PUT goes straight to R2, then /commit
 Posting an existing id adds or replaces files (e.g. a reflow copy) and updates the metadata."""
 
 import json
-
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +10,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, dictionary_service as dicts, library_service as books
+from app import assets
+from app import dictionary_service as dicts
+from app import library_service as books
 from app.auth import Reader, get_current_admin
 from app.db import get_db
 

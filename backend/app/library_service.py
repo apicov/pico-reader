@@ -12,7 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, embed, r2
+from app import assets, r2
 from app.auth import Reader
 
 TEXT_FORMATS = ["reflow", "epub", "pdf"]  # the best text first: what the index is built from

@@ -4,7 +4,26 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import admin, annotations, auth, books, categories, chat, community, computer, events, learning, library, notes, progress, search, shelf, stats, translate, vocabulary
+from app.routes import (
+    admin,
+    annotations,
+    auth,
+    books,
+    categories,
+    chat,
+    community,
+    computer,
+    events,
+    learning,
+    library,
+    notes,
+    progress,
+    search,
+    shelf,
+    stats,
+    translate,
+    vocabulary,
+)
 
 logging.basicConfig(level=logging.INFO)
 

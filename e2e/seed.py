@@ -13,10 +13,10 @@ import zlib
 
 import boto3
 import httpx
+from sqlalchemy import text
 
 from app.auth import create_access_token
 from app.db import get_engine
-from sqlalchemy import text
 
 API, S3 = sys.argv[1], sys.argv[2]
 EMAIL = "reader@example.com"

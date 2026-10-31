@@ -54,7 +54,7 @@ def edit(category_id: int, body: CategoryEdit, _: Reader = Depends(get_current_a
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(409, "There is already a category with that name there")
+        raise HTTPException(409, "There is already a category with that name there") from None
     return next(n for n in cats.tree(db) if n["id"] == category_id)
 
 

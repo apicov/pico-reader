@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
@@ -11,7 +11,7 @@ TZ = "Europe/Berlin"
 def today_at(hour: int, days_ago: int = 0) -> str:
     from zoneinfo import ZoneInfo
     local = datetime.now(ZoneInfo(TZ)).replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=days_ago)
-    return local.astimezone(timezone.utc).isoformat()
+    return local.astimezone(UTC).isoformat()
 
 
 def session(sid, book_id, days_ago, seconds, start=0.1, end=0.2, hour=9):

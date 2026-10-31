@@ -119,7 +119,7 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
                                                      who=(reader.email, "translate"))
         result = _clean(data)
     except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     row = db.execute(text(f"""
         INSERT INTO translations (reader_email, book_id, location, source_text, context, source_lang, target_lang,
                                   model, prompt_version, cache_key, result)
@@ -207,7 +207,7 @@ def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
                                                      f"WORD: {body.word}" + (f"\nSENTENCE: {body.context}" if body.context else ""),
                                                      max_tokens=300, who=(reader.email, "define"))
     except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     meaning = str(data.get("meaning") or "").strip()
     if not meaning:
         raise HTTPException(502, "The model returned no meaning")

@@ -1,6 +1,7 @@
 """Book text → passages of about a paragraph or three (~1000 characters), each with the place the reader opens
 for it: reflow `c<chapter>:<fraction>`, EPUB a progress through the book (as foliate measures it: section
-file sizes), PDF `p<page>:<fraction>`. Used by the indexer (app/indexer.py); tools/readertool/passages.py is the same code for `reader index` (keep the two equal)."""
+file sizes), PDF `p<page>:<fraction>`. Used by the indexer (app/indexer.py);
+tools/readertool/passages.py is the same code for `reader index` (keep the two equal)."""
 
 import posixpath
 import re
@@ -119,7 +120,7 @@ def from_epub(path: Path) -> list[Passage]:
         sizes = [z.getinfo(s).file_size for s in spine]
         whole = max(1, sum(sizes))
         out, before = [], 0
-        for index, (name, size) in enumerate(zip(spine, sizes)):
+        for index, (name, size) in enumerate(zip(spine, sizes, strict=True)):
             paragraphs = _paragraphs(z.read(name).decode("utf-8", errors="replace"))
             total = _total(paragraphs)
             for start, heading, text in _chunks(paragraphs, ""):
@@ -139,7 +140,7 @@ def from_pdf(path: Path) -> list[Passage]:
             height = page.rect.height or 1
             blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
             buffer, top = [], 0.0
-            for x0, y0, x1, y1, text, *_ in blocks:
+            for _x0, y0, _x1, _y1, text, *_ in blocks:
                 if not buffer:
                     top = y0
                 buffer.append(" ".join(text.split()))

@@ -123,5 +123,5 @@ def download(db: Session, table: str, asset_id: str, kind: str) -> dict:
         url = r2.download_url(f["key"])
     except Exception:
         logger.exception("R2 signed URL failed for %s", f["key"])
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Storage unavailable")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Storage unavailable") from None
     return {"url": url, "expiresIn": get_settings().download_url_seconds, "size": f["size"], "sha256": f["sha256"]}

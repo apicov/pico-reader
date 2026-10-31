@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import categories, embed, groq_client, library_service as books
+from app import categories, embed, groq_client
+from app import library_service as books
 from app.auth import Reader, get_current_admin, get_current_reader
 from app.db import get_db
 
@@ -161,7 +162,7 @@ def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int,
     vectors = embed.embed(variants, "query")
     scope = "AND c.book_id = ANY(:books)" if book_ids else ""
     rankings = []
-    for variant, vector in zip(variants, vectors):
+    for variant, vector in zip(variants, vectors, strict=True):
         params = {"v": _vector(vector.tolist()), "q": variant, "n": CANDIDATES, "books": book_ids or []}
         rankings.append(db.execute(text(f"""SELECT c.id FROM book_chunks c WHERE TRUE {scope}
                                             ORDER BY c.embedding <=> CAST(:v AS vector) LIMIT :n"""),
@@ -227,7 +228,7 @@ def ask(body: AskRequest, reader: Reader = Depends(get_current_reader), db: Sess
     try:
         data, _model = groq_client.chat_json(ASK_PROMPT, user, max_tokens=1200, who=(reader.email, "ask"))
     except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     answer = str(data.get("answer") or "").strip()
     if not answer:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "The model returned no answer")

@@ -228,7 +228,7 @@ export default function LibraryPage() {
     void cachedCategories().then((t) => setTree((cur) => (cur.length ? cur : t)));
     reloadTree();
     void getPref<CategoryFilter>('library_category').then((c) => c !== undefined && setCategory(c ?? null));
-  }, [online, library]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [online, library]);
   const pickCategory = (c: CategoryFilter) => { setCategory(c); void setPref('library_category', c); };
   const leafName = useMemo(() => new Map(tree.map((c) => [c.id, c.name])), [tree]);
   const byId = useMemo(() => new Map(shelf.map((e) => [e.book_id, e])), [shelf]);

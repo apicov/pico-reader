@@ -13,15 +13,14 @@ import json
 import re
 import uuid
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 import pytest
+from conftest import AI, WEB, until
 from PIL import Image, ImageDraw, ImageFont
-
-from conftest import AI, API, WEB, until
-from test_reader import FIRST, open_book, select_first_paragraph
+from test_reader import open_book, select_first_paragraph
 from test_upload import marker_project
 
 OUT = Path(__file__).resolve().parents[2] / "frontend" / "public" / "manual"
@@ -120,7 +119,7 @@ TAU = "<p>The Leonora Christine left the solar system with fifty people aboard.<
 
 
 def at(days_ago: int, hour: int) -> str:
-    return (datetime.now(timezone.utc).replace(hour=hour, minute=0, second=0, microsecond=0)
+    return (datetime.now(UTC).replace(hour=hour, minute=0, second=0, microsecond=0)
             - timedelta(days=days_ago)).isoformat()
 
 

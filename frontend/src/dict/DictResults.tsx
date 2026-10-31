@@ -82,10 +82,14 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
   const [preferred, setPreferred] = useState<Record<string, string | null>>({});
 
   useEffect(() => { setCurrent(word); setAi(null); setKnown(false); setCarded(false); }, [word, language]);
+  // as they are when a lookup finishes: a change of these alone doesn't look the word up again
+  const latest = useRef({ word, record, online, aiTargets, autoReview: settings.autoReview, targetLanguage: settings.targetLanguage });
+  latest.current = { word, record, online, aiTargets, autoReview: settings.autoReview, targetLanguage: settings.targetLanguage };
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
     void lookUp(current, language).then((r) => {
+      const { word, record, online, aiTargets, autoReview, targetLanguage } = latest.current;
       const langs = [...new Set(r.results.map((x) => x.dict.from_lang))];
       void Promise.all(langs.map(async (l) => [l, await preferredDict(l)] as const))
         .then((p) => { if (!cancelled) setPreferred(Object.fromEntries(p)); });
@@ -101,10 +105,10 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
         const given = language ?? r.results[0]?.dict.from_lang;
         let recordedAs = !!given;
         if (given) recordAs(given);
-        if (settings.autoReview && r.results.length) void cardFor(r, record).then((ok) => { if (!cancelled) setCarded(ok); });
+        if (autoReview && r.results.length) void cardFor(r, record).then((ok) => { if (!cancelled) setCarded(ok); });
         // no dictionary has it: ask the model, with the sentence for context (if any), once per language
         if (!r.results.length && online) {
-          const targets = [...new Set(aiTargets ?? [settings.targetLanguage])];
+          const targets = [...new Set(aiTargets ?? [targetLanguage])];
           if (!cancelled) setAi(Object.fromEntries(targets.map((t) => [t, 'asking' as const])));
           targets.forEach((target, i) => {
             void api<AiDefinition>('/api/define', {
@@ -119,7 +123,7 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
                 recordAs(lang);
               }
               // the review card from the first language's answer (the reader's target language)
-              if (settings.autoReview && i === 0 && lang) void addCard({ language: lang, term: d.lemma, meaning: d.meaning,
+              if (autoReview && i === 0 && lang) void addCard({ language: lang, term: d.lemma, meaning: d.meaning,
                 example: record.context.slice(0, 500), source: 'lookup', book_id: record.bookId }).then((ok) => { if (!cancelled) setCarded(ok); });
             }).catch(() => { if (!cancelled) setAi((a) => ({ ...a, [target]: 'failed' })); });
           });

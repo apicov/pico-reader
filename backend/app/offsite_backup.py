@@ -5,7 +5,7 @@
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app import r2
 from app.config import get_settings
@@ -19,7 +19,7 @@ def main(path: str) -> None:
     key = PREFIX + os.path.basename(path)
     client.upload_file(path, bucket, key)
     print(f"uploaded {key}")
-    cutoff = datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=KEEP_DAYS)
     for page in client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=PREFIX):
         for obj in page.get("Contents", []):
             if obj["LastModified"] < cutoff:

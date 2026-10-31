@@ -1,4 +1,4 @@
-from tests.test_chat import FakeGroq, call, new, ask, say  # noqa: F401
+from tests.test_chat import FakeGroq, ask, call, new, say  # noqa: F401
 from tests.test_chat import groq as chat_groq  # noqa: F401 (fixture)
 from tests.test_search import fake_embed, fresh_query_cache, indexed_book  # noqa: F401 (fixtures)
 from tests.test_translate import BODY, groq  # noqa: F401 (fixture)

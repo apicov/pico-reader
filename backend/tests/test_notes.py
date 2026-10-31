@@ -90,6 +90,7 @@ def test_filter_by_book_and_book_deletion_keeps_the_note(client, admin_headers, 
 
 def _db():
     from sqlalchemy.orm import sessionmaker
+
     from app.db import get_engine
     return sessionmaker(bind=get_engine())()
 

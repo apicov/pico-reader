@@ -123,7 +123,7 @@ def convert(db: Session, dict_id: str) -> int:
                     raise ValueError("The zip unpacks to more than a dictionary can be")
                 z.extractall(unpacked)
         except zipfile.BadZipFile:
-            raise ValueError("The upload is not a zip file")
+            raise ValueError("The upload is not a zip file") from None
         d = stardict.read(_stardict_folder(unpacked))
         if not d.entries:
             raise ValueError("The dictionary has no entries")

@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, categories, groq_client, library_service as books
+from app import assets, categories, groq_client
+from app import library_service as books
 from app.auth import Reader, get_current_reader
 from app.db import get_db
 
@@ -56,7 +57,7 @@ def categorize(book_id: str, reader: Reader = Depends(get_current_reader), db: S
     try:
         result = categories.classify(db, book_id, force=True)
     except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     if result is None:
         raise HTTPException(422, "The AI couldn't place this book (is it indexed yet?)")
     return result

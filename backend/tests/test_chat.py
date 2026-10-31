@@ -297,6 +297,7 @@ def test_an_answer_says_which_model_wrote_it(client, admin_headers, indexed_book
 
 def test_an_answer_finished_by_the_fallback_says_so(client, admin_headers, indexed_book, groq, monkeypatch):
     import httpx
+
     from app import groq_client
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "groq")
     monkeypatch.setenv("LLM_FALLBACK_API_KEY", "second-key")

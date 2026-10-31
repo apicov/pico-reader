@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { citeButtons, withSpoilers } from './Markdown';
+import { citeButtons, withSpoilers } from './markdownHtml';
 
 describe('withSpoilers', () => {
   it('wraps ||text|| in a spoiler span', () => {

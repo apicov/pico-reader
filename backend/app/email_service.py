@@ -18,7 +18,7 @@ import logging
 import os
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests as http
 
@@ -64,7 +64,7 @@ def send_verification_code(email: str, code: str) -> bool:
             logger.error("Email key %s is not set in production; email to %s NOT sent", _KEY_ENV[_PROVIDER], email)
             return False
         logger.info("EMAIL (development mode) to %s at %s — VERIFICATION CODE: %s",
-                    email, datetime.now(timezone.utc).isoformat(), code)
+                    email, datetime.now(UTC).isoformat(), code)
         return True
 
     outcome = _send_with(_PROVIDER, email, subject, html)

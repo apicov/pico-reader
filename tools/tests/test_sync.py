@@ -3,14 +3,13 @@
 import copy
 import os
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
 import requests
 
-from readertool.client import ToolError
 from readertool import sync as sync_module
+from readertool.client import ToolError
 from readertool.sync import SOURCES_MARK, Sync, drop_file
 
 T0 = 1_800_000_000.0

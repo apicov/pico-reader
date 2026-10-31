@@ -82,7 +82,11 @@ def categorize(args) -> None:
             db.rollback()
             print(f"{book_id}: failed: {e}")
             continue
-        print(f"{book_id}: {result['category'] + (' + ' + result['second'] if result['second'] else '') + '  — ' + result['reason'] if result else 'unchanged'}")
+        if result is None:
+            print(f"{book_id}: unchanged")
+            continue
+        second = f" + {result['second']}" if result["second"] else ""
+        print(f"{book_id}: {result['category']}{second}  — {result['reason']}")
 
 
 if __name__ == "__main__":

@@ -3,10 +3,9 @@
 import io
 import re
 
-from PIL import Image
-
 from conftest import WEB, until
 from manual_capture import add_book
+from PIL import Image
 
 
 def figure() -> bytes:

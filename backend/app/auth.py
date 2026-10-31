@@ -3,7 +3,7 @@
 A token alone is not enough: every request re-checks that the email is still an active
 reader, so removing someone from the allowlist locks them out immediately."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -27,7 +27,7 @@ class Reader(BaseModel):
 
 def create_access_token(email: str) -> str:
     settings = get_settings()
-    expires = datetime.now(timezone.utc) + timedelta(days=settings.token_days)
+    expires = datetime.now(UTC) + timedelta(days=settings.token_days)
     return jwt.encode({"sub": email, "exp": expires}, settings.secret_key, algorithm=ALGORITHM)
 
 
@@ -48,7 +48,7 @@ def get_current_reader(
     try:
         payload = jwt.decode(credentials.credentials, get_settings().secret_key, algorithms=[ALGORITHM])
     except JWTError:
-        raise unauthorized
+        raise unauthorized from None
     email = payload.get("sub")
     reader = find_reader(db, email) if email else None
     if reader is None:

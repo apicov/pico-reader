@@ -1,7 +1,6 @@
 import httpx
-from playwright.sync_api import expect
-
 from conftest import AI, WEB
+from playwright.sync_api import expect
 
 # matched by prompt: the two requests are made at the same time
 TRANSLATED = {"_match": "dictionary into Spanish", "language": "de", "lemma": "das Strahlenschutzgesetz", "part_of_speech": "sustantivo", "meaning": "ley de protección radiológica",

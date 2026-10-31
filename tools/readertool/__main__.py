@@ -20,11 +20,11 @@
 """
 
 import argparse
+import contextlib
+import json
 import sys
 import tempfile
 from pathlib import Path
-
-import json
 
 from readertool import client, markdown, metadata, passages, quarto, stardict, sync
 from readertool.client import Api, ToolError
@@ -93,7 +93,8 @@ def main() -> None:
     args = p.parse_args()
 
     try:
-        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books, "delete": delete, "index": index_books,
+        {"login": login, "add": add, "add-markdown": add_markdown, "add-quarto": add_quarto, "list": list_books,
+         "delete": delete, "index": index_books,
          "dict-add": dict_add, "dict-add-all": dict_add_all, "dict-list": dict_list, "dict-delete": dict_delete,
          "sync": sync_folder, "project": project}[args.cmd](args)
     except ToolError as e:
@@ -122,10 +123,8 @@ def sync_folder(args) -> None:
     if args.install:
         Api()  # signed in?
         return sync.install(args.folder, args.interval)
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         sync.run(Api(), args.folder, args.interval, args.once)
-    except KeyboardInterrupt:
-        pass
 
 
 def project(args) -> None:
@@ -232,8 +231,9 @@ INDEX_FORMATS = ["reflow", "epub", "pdf"]  # the best text first
 
 
 def index_books(args) -> None:
-    from readertool import embed
     import requests
+
+    from readertool import embed
 
     api = Api()
     books = api.get("/api/library")["books"]

@@ -140,7 +140,7 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
     setSettingsAnchor(null);
     setFormatAnchor(null);
     setPicture(null);
-  }, [active]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active]);
 
   // Opened again at a place (a citation, a quote, a search result) while it was open behind another page
   const target = active ? params.get('location') ?? params.get('progress') : null;

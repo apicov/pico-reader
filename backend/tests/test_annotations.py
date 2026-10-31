@@ -11,6 +11,7 @@ def test_create_and_pull(client, auth_headers):
     assert [a["id"] for a in first["annotations"]] == ["aaaaaaaa-1"]
     # a later pull repeats only the last seconds (the overlap), not older rows
     from sqlalchemy import text
+
     from app.db import get_engine
     with get_engine().begin() as c:
         c.execute(text("UPDATE annotations SET updated_at = now() - interval '1 minute'"))

@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, dictionary_service as dicts, r2
+from app import assets, r2
+from app import dictionary_service as dicts
 from app.auth import Reader, get_current_reader
 from app.db import get_db
 

@@ -14,5 +14,5 @@ export function fold(key: string): string {
 export function cleanWord(selection: string): string {
   return selection.normalize('NFC').trim()
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-    .replace(/[­​]/g, ''); // soft hyphens from hyphenated text
+    .replace(/[\u00AD\u200B]/g, ''); // soft hyphens from hyphenated text
 }

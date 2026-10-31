@@ -19,6 +19,7 @@ def test_known_words_leave_lists(client, admin_headers, bucket):
 
 def test_lookup_keeps_its_sentence(client, auth_headers):
     from sqlalchemy import text
+
     from app.db import get_engine
     client.post("/api/events", headers=auth_headers, json={"lookups": [{**lookup(9, "b", "Wagen"), "context": "Der Wagen fuhr."}]})
     with get_engine().connect() as c:

@@ -9,9 +9,10 @@ import json
 import logging
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -197,7 +198,7 @@ def vocabulary_due(ctx: Context, language: str | None = None) -> dict:
         SELECT term, language, due FROM review_cards WHERE reader_email = :e AND NOT deleted
           AND (CAST(:l AS text) IS NULL OR language = :l) ORDER BY due LIMIT 200"""),
         {"e": ctx.reader.email, "l": language}).fetchall()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     due = [r for r in rows if r.due <= now]
     return {"cards": len(rows), "due_now": len(due), "due_terms": [r.term for r in due[:20]],
             "next_due": min((r.due for r in rows if r.due > now), default=None)}
@@ -255,9 +256,9 @@ def member_lists(ctx: Context, handle: str | None = None) -> dict:
                                {"h": handle.lower().lstrip("@")}).scalar()
         if owner is None:
             return {"error": f"No reader called {handle!r}"}
-    return {"lists": [{"title": l["title"], "by": l["author"]["display_name"],
-                       "books": [i["book"]["title"] for i in l["items"] if i["book"]["available"]]}
-                      for l in community.lists(ctx.db, ctx.reader, owner_email=owner) if not l["hidden"]][:20]}
+    return {"lists": [{"title": lst["title"], "by": lst["author"]["display_name"],
+                       "books": [i["book"]["title"] for i in lst["items"] if i["book"]["available"]]}
+                      for lst in community.lists(ctx.db, ctx.reader, owner_email=owner) if not lst["hidden"]][:20]}
 
 
 def _no_spoilers(text_: str) -> str:

@@ -5,10 +5,9 @@ says where a note was made). Private: nobody else sees a reader's notes."""
 
 import json
 import uuid
-
-from fastapi import APIRouter, Depends, HTTPException
 from typing import Literal
 
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -64,7 +63,8 @@ SELECT = """SELECT n.id, n.title, n.markdown, n.book_id, b.title AS book_title, 
 
 def _note(r) -> Note:
     return Note(id=r.id, title=r.title, markdown=r.markdown, book_id=r.book_id, book_title=r.book_title,
-                sources=r.sources, origin=r.origin, project_id=r.project_id, project=r.project, created_at=r.created_at.isoformat(), updated_at=r.updated_at.isoformat())
+                sources=r.sources, origin=r.origin, project_id=r.project_id, project=r.project,
+                created_at=r.created_at.isoformat(), updated_at=r.updated_at.isoformat())
 
 
 def _check(title: str, markdown: str) -> tuple[str, str]:
@@ -141,7 +141,7 @@ def add(body: NoteIn, reader: Reader = Depends(get_current_reader), db: Session 
     try:
         return create_note(db, reader.email, body.title, body.markdown, body.book_id, [], body.origin, body.project_id)
     except NoteLimit as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from e
 
 
 @router.get("/{note_id}", response_model=Note)
@@ -159,7 +159,7 @@ def edit(note_id: str, body: NoteChange, reader: Reader = Depends(get_current_re
         return change_note(db, reader.email, note_id, body.title, body.markdown,
                            project_id=body.project_id if "project_id" in body.model_fields_set else KEEP)
     except NoteLimit as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from e
 
 
 @router.delete("/{note_id}", status_code=204)

@@ -4,7 +4,7 @@ Days are the reader's own days: the app sends its time zone, and every day bound
 
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -71,7 +71,7 @@ def _zone(tz: str) -> ZoneInfo:
     try:
         return ZoneInfo(tz)
     except (ZoneInfoNotFoundError, ValueError):
-        raise HTTPException(422, "Unknown time zone")
+        raise HTTPException(422, "Unknown time zone") from None
 
 
 def _streaks(days_read: set[date], today: date) -> tuple[int, int]:
@@ -94,7 +94,7 @@ def _streaks(days_read: set[date], today: date) -> tuple[int, int]:
 def stats(period: str = "week", tz: str = "UTC", book_id: str | None = None,
           reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     zone = _zone(tz)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = now.astimezone(zone).date()
     if period in PERIODS:
         first_day = today - timedelta(days=PERIODS[period] - 1)
@@ -229,13 +229,14 @@ def stats(period: str = "week", tz: str = "UTC", book_id: str | None = None,
 
 def usage_summary(db: Session, email: str, period: str, tz: str) -> dict:
     zone = _zone(tz)
-    today = datetime.now(timezone.utc).astimezone(zone).date()
+    today = datetime.now(UTC).astimezone(zone).date()
     days = PERIODS.get(period)
-    since = datetime.combine(today - timedelta(days=days - 1), datetime.min.time(), zone) if days else datetime(2000, 1, 1, tzinfo=timezone.utc)
+    since = datetime.combine(today - timedelta(days=days - 1), datetime.min.time(), zone) if days else datetime(2000, 1, 1, tzinfo=UTC)
     p = {"e": email, "since": since, "tz": tz}
     by_purpose = [dict(r._mapping) for r in db.execute(text("""
         SELECT purpose, count(*) AS calls, sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens
-        FROM llm_usage WHERE reader_email = :e AND created_at >= :since GROUP BY 1 ORDER BY sum(prompt_tokens + completion_tokens) DESC"""), p)]
+        FROM llm_usage WHERE reader_email = :e AND created_at >= :since
+        GROUP BY 1 ORDER BY sum(prompt_tokens + completion_tokens) DESC"""), p)]
     by_day = [dict(r._mapping) for r in db.execute(text("""
         SELECT (created_at AT TIME ZONE :tz)::date AS day, sum(prompt_tokens + completion_tokens) AS tokens, count(*) AS calls
         FROM llm_usage WHERE reader_email = :e AND created_at >= :since GROUP BY 1 ORDER BY 1"""), p)]

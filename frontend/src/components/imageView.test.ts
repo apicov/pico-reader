@@ -1,4 +1,4 @@
-import { clampView, zoomAt } from './ImageViewer';
+import { clampView, zoomAt } from './imageView';
 
 describe('zooming a picture', () => {
   it('keeps the point under the fingers in place', () => {

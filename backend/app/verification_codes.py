@@ -6,7 +6,7 @@ codes expire after 10 minutes, 5 attempts per code, at most 3 codes per email pe
 
 import hmac
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ MAX_CODES_PER_EMAIL_PER_HOUR = 3
 def store_verification_code(db: Session, email: str, code: str) -> bool:
     """Store a new code for `email`. False when the hourly send limit is reached."""
     email = email.lower().strip()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     _cleanup(db, now)
 
     row = db.execute(
@@ -54,7 +54,7 @@ def store_verification_code(db: Session, email: str, code: str) -> bool:
 def verify_code(db: Session, email: str, code: str) -> bool:
     """Check a code. Single use; the attempt is counted in the same statement so guesses can't race."""
     email = email.lower().strip()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     row = db.execute(
         text("""
             UPDATE login_codes SET attempts = attempts + 1

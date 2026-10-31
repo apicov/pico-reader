@@ -72,7 +72,7 @@ def save_avatar(body: AvatarIn, reader: Reader = Depends(get_member), db: Sessio
         try:
             data = base64.b64decode(body.jpeg_base64, validate=True)
         except ValueError:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Not base64")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Not base64") from None
         if not data.startswith(b"\xff\xd8") or len(data) > AVATAR_MAX_BYTES:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The avatar must be a JPEG under 150 KB")
         key = secrets.token_urlsafe(16)

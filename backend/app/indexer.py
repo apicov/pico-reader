@@ -17,7 +17,9 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import categories, dictionary_service as dicts, embed, library_service as books, passages, r2
+from app import categories, embed, passages, r2
+from app import dictionary_service as dicts
+from app import library_service as books
 from app.db import get_engine
 
 logger = logging.getLogger("indexer")

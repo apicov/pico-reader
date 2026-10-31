@@ -1,6 +1,7 @@
 import sqlite3
 import zipfile
 from io import BytesIO
+from pathlib import Path
 
 from tests.test_translate import BODY, groq  # noqa: F401 (fixture)
 
@@ -22,7 +23,7 @@ def test_apkg_has_one_card_per_term(client, auth_headers, groq):
     with zipfile.ZipFile(BytesIO(r.content)) as z:
         db = BytesIO(z.read("collection.anki2"))
     path = "/tmp/pico-reader-test-collection.anki2"
-    open(path, "wb").write(db.getvalue())
+    Path(path).write_bytes(db.getvalue())
     notes = sqlite3.connect(path).execute("SELECT flds FROM notes").fetchall()
     terms = sorted(n[0].split("\x1f")[0] for n in notes)
     assert terms == ["anfahren", "bremsen", "der Wagen"]  # der Wagen only once

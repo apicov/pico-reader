@@ -6,10 +6,8 @@ import zipfile
 
 import httpx
 import pytest
-
-from PIL import Image
-
 from conftest import TITLE, WEB, until
+from PIL import Image
 
 FIRST = "Der Alarm kam am Vormittag"
 
@@ -84,7 +82,7 @@ def test_night_theme_taps_flash_amber_not_blue(page, book_id):
 
 
 def test_the_book_stays_open_behind_the_other_pages(page, book_id):
-    frame = open_book(page, book_id)
+    open_book(page, book_id)
     keep = "document.querySelector('foliate-view')"
     page.evaluate(f"{keep}.stillHere = true")  # gone if the book were opened again
     page.get_by_role("link", name="Ask your library").click()

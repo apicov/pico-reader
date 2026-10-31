@@ -51,6 +51,8 @@ npx tsc -b                    # type check, as the build does
 | Frontend | `cd frontend && npm test` | Services and helpers (vitest, jsdom, `fake-indexeddb`): the offline queues, sync, the book cache, offline search, notes and their conflicts, collections, sending to the computer, Markdown import and grouping chosen files into books |
 | Frontend coverage | `npm run coverage` | Summary in the terminal, details in `frontend/coverage/index.html` |
 | Desktop tool | `cd tools && PYTHONPATH=. .venv/bin/python -m pytest tests` | `reader sync` against a stand-in server: inbox, outbox, notes both ways, conflicts, projects, the live loop |
+| Frontend lint | `cd frontend && npm run lint && npm run typecheck` | ESLint (TypeScript, the rules of hooks and their dependencies), no warnings allowed; the type check |
+| Python lint | `backend/.venv/bin/ruff check .` (from the repository root) | ruff over backend, tools and e2e (`ruff.toml`): pyflakes, pycodestyle, sorted imports, bugbear, pyupgrade |
 | End to end | `e2e/run.sh` (about a minute) | The built web app in Chromium against a local backend: sign-in, My shelf and collections, opening an EPUB and highlighting, a bookmark made offline, the night theme (no blue, also in the tap flash), a note from the chat, adding several books and marker folders, and the study computer with the real `reader sync` (inbox, outbox, a project's notes followed live in the app) |
 
 `e2e/run.sh` needs the dev database container running. It makes a throwaway database, starts moto for R2, a

@@ -68,6 +68,7 @@ def test_a_reader_uploads_and_the_server_indexes(client, auth_headers, bucket):
     key = next(o["Key"] for o in bucket.list_objects_v2(Bucket="test-library")["Contents"] if "/search-" in o["Key"])
     payload = json.loads(gzip.decompress(bucket.get_object(Bucket="test-library", Key=key)["Body"].read()))
     import base64
+
     import numpy as np
     vectors = np.frombuffer(base64.b64decode(payload["vectors"]), dtype=np.float16).reshape(len(payload["passages"]), -1)
     assert vectors.shape[1] == 384 and payload["passages"][0]["heading"] == "Erstes Kapitel"

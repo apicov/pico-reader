@@ -66,8 +66,8 @@ def read(folder: Path) -> Dictionary:
             info[k.strip()] = v.strip()
     d = Dictionary(folder, info)
     offset_size = 8 if info.get("idxoffsetbits") == "64" else 4
-    index = gzip.open(idx).read() if idx.suffix == ".gz" else idx.read_bytes()
-    data = gzip.open(dict_file).read() if dict_file.suffix == ".dz" else dict_file.read_bytes()
+    index = gzip.decompress(idx.read_bytes()) if idx.suffix == ".gz" else idx.read_bytes()
+    data = gzip.decompress(dict_file.read_bytes()) if dict_file.suffix == ".dz" else dict_file.read_bytes()
     types = info.get("sametypesequence", "")
     res = folder / "res"
 
