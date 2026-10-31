@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import agent, llm
+from app import agent, llm, owners
 from app.auth import Reader, get_current_reader
 from app.db import get_db, get_engine, new_session
 from app.search_service import CITATION_RULES, Passage, books_named, library_overview
@@ -68,11 +68,7 @@ class MessageIn(BaseModel):
 
 
 def _own(db: Session, reader: Reader, conversation_id: str):
-    row = db.execute(text("""SELECT id, title, book_ids, created_at, updated_at FROM conversations
-                             WHERE id = :id AND reader_email = :e"""), {"id": conversation_id, "e": reader.email}).fetchone()
-    if row is None:
-        raise HTTPException(404, "Not found")
-    return row
+    return owners.mine(db, "conversations", conversation_id, reader, "id, title, book_ids, created_at, updated_at")
 
 
 @router.get("", response_model=list[Conversation])

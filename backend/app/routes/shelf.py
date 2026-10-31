@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app import owners
 from app.auth import Reader, get_current_reader
 from app.db import get_db
 
@@ -99,9 +100,7 @@ class CollectionIn(BaseModel):
 
 
 def _own_collection(db: Session, reader: Reader, collection_id: str) -> None:
-    owner = db.execute(text("SELECT reader_email FROM collections WHERE id = :id"), {"id": collection_id}).scalar()
-    if owner != reader.email:
-        raise HTTPException(404, "No such collection")
+    owners.mine(db, "collections", collection_id, reader, missing="No such collection")
 
 
 @router.get("/collections", response_model=list[Collection])

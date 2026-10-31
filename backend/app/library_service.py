@@ -8,12 +8,12 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, r2
+from app import assets, owners, r2
 from app.auth import Reader
+from app.errors import Conflict, Invalid, NotFound
 from pico_core.formats import TEXT_FORMATS
 
 # --- history ---
@@ -35,24 +35,21 @@ def history(db: Session, reader: Reader, days: int = 365, limit: int = 300) -> l
 
 # --- uploads ---
 
-def _owned(db: Session, reader: Reader, book_id: str):
-    row = db.execute(text("SELECT id, title, uploaded_by, files, status FROM books WHERE id = :id"), {"id": book_id}).fetchone()
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such book")
-    if not reader.is_admin and row.uploaded_by != reader.email:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the reader who added this book (or an admin) can change it")
-    return row
+def owned(db: Session, reader: Reader, book_id: str):
+    return owners.changeable(db, "books", book_id, reader, owner="uploaded_by", columns="id, title, files, status",
+                             missing="No such book",
+                             forbidden="Only the reader who added this book (or an admin) can change it")
 
 
 def start_upload(db: Session, reader: Reader, book_id: str | None, title: str, author: str, language: str,
                  files: dict[str, assets.FileInfo]) -> dict:
     """Create the book (or update an existing one the reader may change); signed upload links for its files."""
     if "search" in files:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The search file is made by the server")
+        raise Invalid("The search file is made by the server")
     if book_id:
         assets.check_id(book_id)
         if db.execute(text("SELECT 1 FROM books WHERE id = :id"), {"id": book_id}).fetchone():
-            _owned(db, reader, book_id)
+            owned(db, reader, book_id)
     else:
         book_id = assets.new_id(title)
     pending, links = assets.plan_uploads("books", book_id, assets.BOOK_KINDS, files)
@@ -67,7 +64,7 @@ def start_upload(db: Session, reader: Reader, book_id: str | None, title: str, a
 
 def commit_upload(db: Session, reader: Reader, book_id: str) -> dict:
     """Make the uploaded files visible, write the history, queue indexing when the text changed."""
-    before = _owned(db, reader, book_id)
+    before = owned(db, reader, book_id)
     pending = db.execute(text("SELECT pending FROM books WHERE id = :id"), {"id": book_id}).scalar() or {}
     files = assets.commit(db, "books", book_id)
     new_book = before.status == "pending" and not before.files
@@ -80,7 +77,7 @@ def commit_upload(db: Session, reader: Reader, book_id: str) -> dict:
 
 
 def delete_book(db: Session, reader: Reader, book_id: str) -> None:
-    row = _owned(db, reader, book_id)
+    row = owned(db, reader, book_id)
     record(db, book_id, row.title, "deleted", reader.email,
            {"files": {k: {"size": f["size"], "sha256": f["sha256"]} for k, f in (row.files or {}).items()}})
     db.commit()
@@ -94,7 +91,7 @@ def queue_index(db: Session, book_id: str, actor: str, force: bool = False) -> i
     row = db.execute(text("""SELECT b.files, i.sha256 AS indexed FROM books b LEFT JOIN book_index i ON i.book_id = b.id
                              WHERE b.id = :id"""), {"id": book_id}).fetchone()
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such book")
+        raise NotFound("No such book")
     fmt = next((f for f in TEXT_FORMATS if f in row.files), None)
     if fmt is None:
         return None
@@ -150,7 +147,7 @@ def add_chunks(db: Session, book_id: str, chunks: list[dict]) -> None:
     """chunks: {seq, location, progress, heading, text, embedding}"""
     fmt = db.execute(text("SELECT format FROM book_index WHERE book_id = :id"), {"id": book_id}).scalar()
     if fmt is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Start the index first")
+        raise Conflict("Start the index first")
     if chunks:
         db.execute(text("""
             INSERT INTO book_chunks (book_id, seq, format, location, progress, heading, text, embedding)

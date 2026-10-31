@@ -5,11 +5,11 @@ none fits, and only under an existing one (it then waits for an admin's approval
 import logging
 import re
 
-from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import llm
+from app.errors import Invalid, NotFound
 
 logger = logging.getLogger(__name__)
 MAX_DEPTH = 3
@@ -67,7 +67,7 @@ def find(db: Session, path: str | None) -> dict | None:
 
 def check(db: Session, category_id: int | None) -> None:
     if category_id is not None and db.execute(text("SELECT 1 FROM categories WHERE id = :id"), {"id": category_id}).fetchone() is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No category {category_id}")
+        raise NotFound(f"No category {category_id}")
 
 
 def set_book(db: Session, book_id: str, main: int | None, second: int | None, source: str | None, reason: str = "") -> None:
@@ -81,10 +81,10 @@ def add(db: Session, parent_id: int | None, name: str, status_: str = "approved"
     name = name.strip()
     nodes = _nodes(db)
     if parent_id is not None and parent_id not in nodes:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such parent")
+        raise NotFound("No such parent")
     depth = nodes[parent_id]["depth"] + 1 if parent_id is not None else 1
     if depth > MAX_DEPTH:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Categories go 3 levels deep at most")
+        raise Invalid("Categories go 3 levels deep at most")
     same = next((n for n in nodes.values() if n["parent_id"] == parent_id and n["name"].lower() == name.lower()), None)
     if same:
         return same
@@ -98,11 +98,11 @@ def merge(db: Session, source_id: int, target_id: int) -> None:
     """Move the books and subcategories of `source` into `target`, then delete it."""
     nodes = _nodes(db)
     if source_id not in nodes or target_id not in nodes:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such category")
+        raise NotFound("No such category")
     cur = target_id
     while cur is not None:
         if cur == source_id:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Can't merge a category into one below it")
+            raise Invalid("Can't merge a category into one below it")
         cur = nodes[cur]["parent_id"]
     for col in ("category_id", "category2_id"):
         db.execute(text(f"UPDATE books SET {col} = :t WHERE {col} = :s"), {"t": target_id, "s": source_id})

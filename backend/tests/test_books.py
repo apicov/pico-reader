@@ -89,3 +89,11 @@ def test_search_file_kind_cannot_be_uploaded(client, auth_headers, bucket):
     r = client.post("/api/books", headers=auth_headers, json={"title": "x", "language": "de",
                     "files": {"search": info(b"x", "application/gzip")}})
     assert r.status_code == 422
+
+
+def test_committing_before_the_upload_says_what_is_missing(client, auth_headers, bucket):
+    r = client.post("/api/books", headers=auth_headers, json={"title": "Kleines Buch", "language": "de",
+                                                              "files": {"epub": info(EPUB, "application/epub+zip")}})
+    commit = client.post(f"/api/books/{r.json()['id']}/commit", headers=auth_headers)
+    assert commit.status_code == 409
+    assert commit.json()["detail"] == {"message": "Upload incomplete", "missing": ["epub"]}

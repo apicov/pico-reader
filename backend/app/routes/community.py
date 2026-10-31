@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import community as c
+from app import owners
 from app.auth import Reader, get_current_admin, get_current_reader
 from app.db import get_db
 
@@ -206,7 +207,7 @@ def create_post(body: PostIn, reader: Reader = Depends(get_member), db: Session 
 
 @router.put("/posts/{post_id}")
 def edit_post(post_id: UUID, body: PostIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
-    c.own(db, reader, "posts", "author_email", str(post_id), admin_may=False)
+    owners.changeable(db, "posts", str(post_id), reader, owner="author_email", admin_may=False)
     db.execute(text("UPDATE posts SET title = :t, body = :b, edited = true, updated_at = now() WHERE id = :id"),
                {"t": body.title.strip(), "b": body.body, "id": post_id})
     c.save_post_parts(db, str(post_id), body.book_ids, [q.model_dump() for q in body.quotes])
@@ -216,7 +217,7 @@ def edit_post(post_id: UUID, body: PostIn, reader: Reader = Depends(get_member),
 
 @router.delete("/posts/{post_id}", status_code=204)
 def delete_post(post_id: UUID, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
-    c.own(db, reader, "posts", "author_email", str(post_id))
+    owners.changeable(db, "posts", str(post_id), reader, owner="author_email")
     db.execute(text("DELETE FROM likes WHERE target_type = 'comment' AND target_id IN "
                     "(SELECT id FROM comments WHERE post_id = :id)"), {"id": post_id})
     db.execute(text("DELETE FROM likes WHERE target_type = 'post' AND target_id = :id"), {"id": post_id})
@@ -251,7 +252,7 @@ def add_comment(post_id: UUID, body: CommentIn, reader: Reader = Depends(get_mem
 
 @router.put("/comments/{comment_id}")
 def edit_comment(comment_id: UUID, body: CommentIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
-    c.own(db, reader, "comments", "author_email", str(comment_id), admin_may=False)
+    owners.changeable(db, "comments", str(comment_id), reader, owner="author_email", admin_may=False)
     post_id = db.execute(text("""UPDATE comments SET body = :b, spoiler = :s, edited = true, updated_at = now()
                                  WHERE id = :id AND NOT deleted RETURNING post_id"""),
                          {"b": body.body.strip(), "s": body.spoiler, "id": comment_id}).scalar()
@@ -263,7 +264,7 @@ def edit_comment(comment_id: UUID, body: CommentIn, reader: Reader = Depends(get
 
 @router.delete("/comments/{comment_id}", status_code=204)
 def delete_comment(comment_id: UUID, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
-    c.own(db, reader, "comments", "author_email", str(comment_id))
+    owners.changeable(db, "comments", str(comment_id), reader, owner="author_email")
     db.execute(text("UPDATE comments SET deleted = true, body = '', updated_at = now() WHERE id = :id"), {"id": comment_id})
     db.execute(text("DELETE FROM likes WHERE target_type = 'comment' AND target_id = :id"), {"id": comment_id})
     db.commit()
@@ -322,7 +323,7 @@ def create_list(body: ListIn, reader: Reader = Depends(get_member), db: Session 
 
 @router.put("/lists/{list_id}")
 def edit_list(list_id: UUID, body: ListIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
-    c.own(db, reader, "lists", "owner_email", str(list_id), admin_may=False)
+    owners.changeable(db, "lists", str(list_id), reader, owner="owner_email", admin_may=False)
     db.execute(text("UPDATE lists SET title = :t, description = :d, updated_at = now() WHERE id = :id"),
                {"t": body.title.strip(), "d": body.description, "id": list_id})
     c.save_list_items(db, str(list_id), [i.model_dump() for i in body.items])
@@ -332,7 +333,7 @@ def edit_list(list_id: UUID, body: ListIn, reader: Reader = Depends(get_member),
 
 @router.delete("/lists/{list_id}", status_code=204)
 def delete_list(list_id: UUID, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
-    c.own(db, reader, "lists", "owner_email", str(list_id))
+    owners.changeable(db, "lists", str(list_id), reader, owner="owner_email")
     db.execute(text("DELETE FROM lists WHERE id = :id"), {"id": list_id})
     db.commit()
 

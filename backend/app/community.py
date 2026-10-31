@@ -6,11 +6,11 @@ import re
 import secrets
 import unicodedata
 
-from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import Reader
+from app.errors import Invalid, NotFound
 
 HANDLE = re.compile(r"[a-z0-9_]{3,20}")
 LIKE_TARGETS = {"post": "posts", "comment": "comments", "review": "reviews"}
@@ -37,8 +37,7 @@ def ensure_profile(db: Session, reader: Reader) -> None:
 def normalize_handle(handle: str) -> str:
     handle = unicodedata.normalize("NFKD", handle).encode("ascii", "ignore").decode().lower().strip()
     if not HANDLE.fullmatch(handle):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            "A handle is 3–20 letters, digits or underscores")
+        raise Invalid("A handle is 3–20 letters, digits or underscores")
     return handle
 
 
@@ -56,7 +55,7 @@ def author_cols(alias: str, prefix: str = "") -> str:
 def email_for(db: Session, handle: str) -> str:
     email = db.execute(text("SELECT reader_email FROM profiles WHERE handle = :h"), {"h": handle.lower()}).scalar()
     if email is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such reader")
+        raise NotFound("No such reader")
     return email
 
 
@@ -71,7 +70,7 @@ def book_stubs(db: Session, ids: list[str]) -> dict[str, dict]:
 def check_books(db: Session, ids: list[str]) -> None:
     missing = set(ids) - {r.id for r in db.execute(text("SELECT id FROM books WHERE id = ANY(:ids)"), {"ids": list(ids)})}
     if missing:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No such book: {', '.join(sorted(missing))}")
+        raise NotFound(f"No such book: {', '.join(sorted(missing))}")
 
 
 # --- likes ---
@@ -91,9 +90,9 @@ def with_likes(item: dict, counts: dict) -> dict:
 def set_like(db: Session, reader: Reader, target_type: str, target_id: str, on: bool) -> None:
     table = LIKE_TARGETS.get(target_type)
     if table is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown kind")
+        raise NotFound("Unknown kind")
     if db.execute(text(f"SELECT 1 FROM {table} WHERE id = CAST(:id AS uuid)"), {"id": target_id}).fetchone() is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise NotFound("Not found")
     if on:
         db.execute(text("""INSERT INTO likes (target_type, target_id, reader_email) VALUES (:t, CAST(:id AS uuid), :e)
                            ON CONFLICT DO NOTHING"""), {"t": target_type, "id": target_id, "e": reader.email})
@@ -177,7 +176,7 @@ def list_posts(db: Session, reader: Reader, book_id: str | None = None, author_e
 def get_post(db: Session, reader: Reader, post_id: str) -> dict:
     rows = _post_rows(db, reader, "AND x.id = CAST(:id AS uuid)", {"id": post_id}, 1)
     if not rows:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such post")
+        raise NotFound("No such post")
     r = rows[0]
     quotes = db.execute(text("""SELECT position, book_id, text, format, location, progress FROM post_quotes
                                 WHERE post_id = CAST(:id AS uuid) ORDER BY position"""), {"id": post_id}).fetchall()
@@ -187,14 +186,6 @@ def get_post(db: Session, reader: Reader, post_id: str) -> dict:
                        "progress": q.progress} for q in quotes]
     post["comments"] = comments(db, reader, post_id)
     return post
-
-
-def own(db: Session, reader: Reader, table: str, owner_col: str, item_id: str, admin_may: bool = True):
-    row = db.execute(text(f"SELECT {owner_col} AS owner FROM {table} WHERE id = CAST(:id AS uuid)"), {"id": item_id}).fetchone()
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
-    if row.owner != reader.email and not (admin_may and reader.is_admin):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the author can change this")
 
 
 def save_post_parts(db: Session, post_id: str, book_ids: list[str], quotes: list[dict]) -> None:
@@ -256,7 +247,7 @@ def lists(db: Session, reader: Reader, owner_email: str | None = None, list_id: 
 def save_list_items(db: Session, list_id: str, items: list[dict]) -> None:
     check_books(db, [i["book_id"] for i in items])
     if len({i["book_id"] for i in items}) != len(items):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A book can be in a list only once")
+        raise Invalid("A book can be in a list only once")
     db.execute(text("DELETE FROM list_items WHERE list_id = CAST(:id AS uuid)"), {"id": list_id})
     for rank, i in enumerate(items):
         db.execute(text("""INSERT INTO list_items (list_id, rank, book_id, note) VALUES (CAST(:id AS uuid), :r, :b, :n)"""),
@@ -271,8 +262,8 @@ HIDEABLE = {"post": "posts", "comment": "comments", "review": "reviews", "list":
 def set_hidden(db: Session, kind: str, item_id: str, hidden: bool) -> None:
     table = HIDEABLE.get(kind)
     if table is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown kind")
+        raise NotFound("Unknown kind")
     if db.execute(text(f"UPDATE {table} SET hidden_by_admin = :h WHERE id = CAST(:id AS uuid)"),
                   {"h": hidden, "id": item_id}).rowcount == 0:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise NotFound("Not found")
     db.commit()

@@ -43,7 +43,7 @@ app.add_middleware(
 
 @app.exception_handler(DomainError)
 def domain_error(_: Request, e: DomainError):
-    return JSONResponse({"detail": str(e)}, status_code=e.status)
+    return JSONResponse({"detail": e.detail}, status_code=e.status)
 
 
 @app.exception_handler(llm.LLMError)

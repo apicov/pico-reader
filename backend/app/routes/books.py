@@ -41,7 +41,7 @@ def upload(body: BookUpload, reader: Reader = Depends(get_current_reader), db: S
 @router.put("/books/{book_id}/category", status_code=204)
 def set_category(book_id: str, body: CategoryIn, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """The uploader's or an admin's choice; the AI never overwrites it. No category: the AI may pick one again."""
-    books._owned(db, reader, book_id)
+    books.owned(db, reader, book_id)
     categories.check(db, body.category_id)
     categories.check(db, body.category2_id)
     categories.set_book(db, book_id, body.category_id, body.category2_id if body.category_id else None, "reader")
@@ -51,7 +51,7 @@ def set_category(book_id: str, body: CategoryIn, reader: Reader = Depends(get_cu
 @router.post("/books/{book_id}/categorize")
 def categorize(book_id: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """Ask the AI again (replaces a category chosen by hand)."""
-    books._owned(db, reader, book_id)
+    books.owned(db, reader, book_id)
     db.execute(text("UPDATE books SET category_source = NULL WHERE id = :b"), {"b": book_id})
     db.commit()
     result = categories.classify(db, book_id, force=True)
@@ -72,7 +72,7 @@ def delete(book_id: str, reader: Reader = Depends(get_current_reader), db: Sessi
 
 @router.post("/books/{book_id}/reindex")
 def reindex(book_id: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
-    row = books._owned(db, reader, book_id)
+    row = books.owned(db, reader, book_id)
     job = books.queue_index(db, book_id, reader.email, force=True)
     if job:
         books.record(db, book_id, row.title, "reindexed", reader.email, {"job": job})

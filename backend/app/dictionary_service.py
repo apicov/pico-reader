@@ -7,12 +7,12 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import assets, r2
 from app.auth import Reader
+from app.errors import Conflict, Invalid, NotFound
 from pico_core import stardict
 from pico_core.formats import DICT_PACKAGE_TYPES
 
@@ -29,13 +29,13 @@ def check_visible(db: Session, reader: Reader, dict_id: str) -> None:
     found = db.execute(text(f"SELECT 1 FROM dictionaries d WHERE d.id = :id AND {visible()}"),
                        {"id": dict_id, "e": reader.email, "admin": reader.is_admin}).fetchone()
     if found is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise NotFound("Not found")
 
 
 def edit(db: Session, admin: Reader, dict_id: str, changes: dict) -> None:
     row = db.execute(text("SELECT uploaded_by FROM dictionaries WHERE id = :id"), {"id": dict_id}).fetchone()
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise NotFound("Not found")
     if changes.get("visibility") == "private" and row.uploaded_by is None:
         changes["uploaded_by"] = admin.email  # "only the uploader" of an older dictionary: the admin who hid it
     if changes:
@@ -49,7 +49,7 @@ def edit(db: Session, admin: Reader, dict_id: str, changes: dict) -> None:
 def start_upload(db: Session, admin: Reader, name: str, from_lang: str, to_lang: str, visibility: str,
                  source: assets.FileInfo, dict_id: str | None = None) -> dict:
     if source.size > MAX_SOURCE_BYTES:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Dictionaries up to 300 MB can be converted")
+        raise Invalid("Dictionaries up to 300 MB can be converted")
     dict_id = assets.check_id(dict_id) if dict_id else assets.new_id(name)
     pending, links = assets.plan_uploads("dictionaries", dict_id, assets.DICT_KINDS, {"source": source})
     db.execute(text("""
@@ -68,13 +68,13 @@ def commit_source(db: Session, admin: Reader, dict_id: str) -> int:
     unlisted until converted (an update of a listed one stays listed with its old packages meanwhile)."""
     row = db.execute(text("SELECT files, pending FROM dictionaries WHERE id = :id FOR UPDATE"), {"id": dict_id}).fetchone()
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+        raise NotFound("Not found")
     src = (row.pending or {}).get("source")
     if src is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Nothing to commit")
+        raise Conflict("Nothing to commit")
     if r2.object_size(src["key"]) != src["size"]:
         db.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, {"message": "Upload incomplete", "missing": ["source"]})
+        raise Conflict({"message": "Upload incomplete", "missing": ["source"]})
     old = (row.files or {}).get("source")
     db.execute(text("""UPDATE dictionaries SET files = files || jsonb_build_object('source', CAST(:s AS jsonb)),
                        pending = '{}', updated_at = now() WHERE id = :id"""), {"s": json.dumps(src), "id": dict_id})
