@@ -65,11 +65,11 @@ def index_finish(book_id: str, admin: Reader = Depends(get_current_admin), db: S
 # --- searching ---
 
 @router.get("/search", response_model=list[Passage])
-def search(q: str, book_id: list[str] | None = Query(default=None), limit: int = 10,
+def search(q: str, book_id: list[str] | None = Query(default=None), limit: int = Query(10, ge=1, le=30),
            reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     if not q.strip():
         return []
-    return retrieve(db, q.strip()[:500], book_id, min(limit, 30), who=(reader.email, "search"))
+    return retrieve(db, q.strip()[:500], book_id, limit, who=(reader.email, "search"))
 
 
 class AskRequest(BaseModel):

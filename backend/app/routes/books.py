@@ -1,7 +1,7 @@
 """Books added from the app by any reader (into the shared library). The reader who added a book, or an admin,
 may change or delete it; every change is kept in the books' history."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -81,7 +81,7 @@ def reindex(book_id: str, reader: Reader = Depends(get_current_reader), db: Sess
 
 
 @router.get("/books/history")
-def history(days: int = 365, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
+def history(days: int = Query(365, ge=1, le=3650), reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     return books.history(db, reader, days)
 
 

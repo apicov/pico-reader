@@ -6,7 +6,7 @@ import json
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -128,12 +128,12 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
 
 
 @router.get("/translations", response_model=list[Translation])
-def translations(book_id: str | None = None, since_id: int = 0, limit: int = 500,
+def translations(book_id: str | None = None, since_id: int = 0, limit: int = Query(500, ge=1, le=2000),
                  reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """Newest first; `since_id` returns only newer ones (the app syncs its offline copy with it)."""
     rows = db.execute(text(f"""SELECT {_COLUMNS} FROM translations WHERE reader_email = :e AND id > :since
                                AND (CAST(:b AS text) IS NULL OR book_id = :b) ORDER BY id DESC LIMIT :n"""),
-                      {"e": reader.email, "since": since_id, "b": book_id, "n": min(limit, 2000)})
+                      {"e": reader.email, "since": since_id, "b": book_id, "n": limit})
     return [_row(r) for r in rows]
 
 

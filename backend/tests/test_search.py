@@ -61,3 +61,9 @@ def test_search_still_works_when_groq_fails(client, admin_headers, indexed_book,
 def test_deleting_a_book_drops_its_index(client, admin_headers, indexed_book):
     client.delete(f"/api/admin/books/{indexed_book}", headers=admin_headers)
     assert client.get("/api/search", headers=admin_headers, params={"q": "pruning"}).json() == []
+
+
+def test_page_sizes_are_bounded(client, auth_headers):
+    assert client.get("/api/search", headers=auth_headers, params={"q": "x", "limit": 31}).status_code == 422
+    assert client.get("/api/translations", headers=auth_headers, params={"limit": 2001}).status_code == 422
+    assert client.get("/api/books/history", headers=auth_headers, params={"days": 0}).status_code == 422
