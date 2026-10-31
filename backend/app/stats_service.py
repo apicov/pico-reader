@@ -49,7 +49,7 @@ def reading_stats(db: Session, email: str, period: str = "week", tz: str = "UTC"
                            {"e": email}).scalar()
         first_day = first.astimezone(zone).date() if first else today
     else:
-        raise Invalid( "period is week, month, year or all")
+        raise Invalid("period is week, month, year or all")
     weekly = (today - first_day).days > 62
     if weekly:
         first_day -= timedelta(days=first_day.weekday())  # buckets start on Mondays

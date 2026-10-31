@@ -18,6 +18,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 SENT_REPLY = {"message": "If this email can sign in, a code is on its way."}
 
 
+class Message(BaseModel):
+    message: str
+
+
 class SendCodeRequest(BaseModel):
     email: EmailStr
 
@@ -33,7 +37,7 @@ class TokenResponse(BaseModel):
     reader: Reader
 
 
-@router.post("/send-code")
+@router.post("/send-code", response_model=Message)
 def send_code(body: SendCodeRequest, background: BackgroundTasks, db: Session = Depends(get_db)):
     if find_reader(db, body.email) is None:
         logger.info("Sign-in code asked for unknown email %s", body.email)

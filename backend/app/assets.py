@@ -48,6 +48,22 @@ class FileInfo(BaseModel):
     content_type: str
 
 
+class PublicFile(BaseModel):
+    """A file as the app sees it (its R2 key stays on the server)."""
+    size: int
+    sha256: str
+
+
+class UploadStarted(BaseModel):
+    id: str
+    uploads: dict[str, str]  # kind → a signed PUT link
+
+
+class Committed(BaseModel):
+    id: str
+    files: dict[str, PublicFile]
+
+
 def new_id(title: str) -> str:
     """A readable, URL-safe id: slug of the title plus a random suffix (titles repeat across editions)."""
     ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()

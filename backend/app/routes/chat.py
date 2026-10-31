@@ -62,6 +62,11 @@ class Message(BaseModel):
     extras: dict = {}  # tools used, links offered, actions proposed (with their current status)
 
 
+class ConversationWithMessages(BaseModel):
+    conversation: Conversation
+    messages: list[Message]
+
+
 class MessageIn(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
     tz: str = "UTC"  # the reader's time zone, for statistics in their days
@@ -133,7 +138,7 @@ def _messages(db: Session, conversation_id: str) -> list[Message]:
     return out
 
 
-@router.get("/{conversation_id}")
+@router.get("/{conversation_id}", response_model=ConversationWithMessages)
 def conversation(conversation_id: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     row = _own(db, reader, conversation_id)
     return {"conversation": Conversation(**row._mapping), "messages": _messages(db, conversation_id)}

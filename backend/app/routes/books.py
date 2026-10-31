@@ -1,6 +1,8 @@
 """Books added from the app by any reader (into the shared library). The reader who added a book, or an admin,
 may change or delete it; every change is kept in the books' history."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -28,7 +30,39 @@ class CategoryIn(BaseModel):
     category2_id: int | None = None
 
 
-@router.post("/books")
+class Categorized(BaseModel):
+    category: str  # its path
+    second: str | None
+    reason: str
+
+
+class Reindexed(BaseModel):
+    job: int | None  # None: the index is current
+
+
+class HistoryEvent(BaseModel):
+    id: int
+    book_id: str
+    title: str
+    action: str
+    actor: str
+    details: dict
+    created_at: datetime
+
+
+class IndexJob(BaseModel):
+    id: int
+    book_id: str
+    title: str
+    status: str
+    error: str
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    position: int | None = None  # in the queue; only for a queued job
+
+
+@router.post("/books", response_model=assets.UploadStarted)
 def upload(body: BookUpload, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     categories.check(db, body.category_id)
     started = books.start_upload(db, reader, body.id, body.title, body.author, body.language, body.files)
@@ -48,7 +82,7 @@ def set_category(book_id: str, body: CategoryIn, reader: Reader = Depends(get_cu
     db.commit()
 
 
-@router.post("/books/{book_id}/categorize")
+@router.post("/books/{book_id}/categorize", response_model=Categorized)
 def categorize(book_id: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """Ask the AI again (replaces a category chosen by hand)."""
     books.owned(db, reader, book_id)
@@ -60,7 +94,7 @@ def categorize(book_id: str, reader: Reader = Depends(get_current_reader), db: S
     return result
 
 
-@router.post("/books/{book_id}/commit")
+@router.post("/books/{book_id}/commit", response_model=assets.Committed)
 def commit(book_id: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     return {"id": book_id, "files": assets.public_files(books.commit_upload(db, reader, book_id))}
 
@@ -70,7 +104,7 @@ def delete(book_id: str, reader: Reader = Depends(get_current_reader), db: Sessi
     books.delete_book(db, reader, book_id)
 
 
-@router.post("/books/{book_id}/reindex")
+@router.post("/books/{book_id}/reindex", response_model=Reindexed)
 def reindex(book_id: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     row = books.owned(db, reader, book_id)
     job = books.queue_index(db, book_id, reader.email, force=True)
@@ -80,11 +114,11 @@ def reindex(book_id: str, reader: Reader = Depends(get_current_reader), db: Sess
     return {"job": job}
 
 
-@router.get("/books/history")
+@router.get("/books/history", response_model=list[HistoryEvent])
 def history(days: int = Query(365, ge=1, le=3650), reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     return books.history(db, reader, days)
 
 
-@router.get("/index-jobs")
+@router.get("/index-jobs", response_model=list[IndexJob], response_model_exclude_unset=True)
 def index_jobs(_: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     return books.queue_status(db)

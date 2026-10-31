@@ -31,19 +31,34 @@ class MergeIn(BaseModel):
     into: int
 
 
-@router.get("/categories")
+class Category(BaseModel):
+    id: int
+    parent_id: int | None
+    name: str
+    slug: str
+    status: str  # approved | new (suggested by the AI)
+    position: int
+    path: str  # Literature > Science fiction
+    depth: int  # 1 at the top
+
+
+class CategoryWithBooks(Category):
+    books: int  # in it or below it
+
+
+@router.get("/categories", response_model=list[CategoryWithBooks])
 def tree(_: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     return cats.tree(db)
 
 
-@router.post("/admin/categories", status_code=201)
+@router.post("/admin/categories", status_code=201, response_model=Category)
 def add(body: CategoryNew, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     node = cats.add(db, body.parent_id, body.name)
     db.commit()
     return node
 
 
-@router.put("/admin/categories/{category_id}")
+@router.put("/admin/categories/{category_id}", response_model=CategoryWithBooks)
 def edit(category_id: int, body: CategoryEdit, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     nodes = {n["id"]: n for n in cats.tree(db)}
     node = nodes.get(category_id)

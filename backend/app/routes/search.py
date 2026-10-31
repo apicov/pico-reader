@@ -31,7 +31,19 @@ class Chunk(BaseModel):
     embedding: list[float] = Field(min_length=embed.DIMENSIONS, max_length=embed.DIMENSIONS)
 
 
-@router.post("/admin/books/{book_id}/index/start")
+class Ok(BaseModel):
+    ok: bool
+
+
+class ChunksAdded(BaseModel):
+    added: int
+
+
+class IndexFinished(BaseModel):
+    search_file: bool  # the offline search file was written
+
+
+@router.post("/admin/books/{book_id}/index/start", response_model=Ok)
 def index_start(book_id: str, body: IndexStart, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     """Drop the book's old passages; chunks follow in batches, then /finish."""
     if body.model != embed.MODEL:
@@ -43,7 +55,7 @@ def index_start(book_id: str, body: IndexStart, _: Reader = Depends(get_current_
     return {"ok": True}
 
 
-@router.post("/admin/books/{book_id}/index/chunks")
+@router.post("/admin/books/{book_id}/index/chunks", response_model=ChunksAdded)
 def index_chunks(book_id: str, chunks: list[Chunk], _: Reader = Depends(get_current_admin),
                  db: Session = Depends(get_db)):
     books.add_chunks(db, book_id, [c.model_dump() for c in chunks])
@@ -51,7 +63,7 @@ def index_chunks(book_id: str, chunks: list[Chunk], _: Reader = Depends(get_curr
     return {"added": len(chunks)}
 
 
-@router.post("/admin/books/{book_id}/index/finish")
+@router.post("/admin/books/{book_id}/index/finish", response_model=IndexFinished)
 def index_finish(book_id: str, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     """After the last chunks: write the offline search file and note it in the history."""
     entry = books.write_search_file(db, book_id)

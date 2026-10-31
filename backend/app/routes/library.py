@@ -4,6 +4,7 @@ import hashlib
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,56 @@ from app.db import get_db
 router = APIRouter(prefix="/api", tags=["library"])
 
 
-@router.get("/library")
+class CoverOut(assets.PublicFile):
+    url: str  # signed, short-lived
+
+
+class IndexInfo(BaseModel):
+    sha256: str  # of the file it was built from
+    chunks: int
+
+
+class LibraryBook(BaseModel):
+    id: str
+    title: str
+    author: str
+    language: str
+    updated_at: str
+    can_change: bool
+    category_id: int | None
+    category2_id: int | None
+    category_reason: str
+    formats: dict[str, assets.PublicFile]
+    search: assets.PublicFile | None
+    cover: CoverOut | None
+    index: IndexInfo | None
+
+
+class LibraryDictionary(BaseModel):
+    id: str
+    name: str
+    from_lang: str
+    to_lang: str
+    entry_count: int
+    updated_at: str
+    visibility: str
+    can_change: bool
+    files: dict[str, assets.PublicFile]
+
+
+class Library(BaseModel):
+    books: list[LibraryBook]
+    dictionaries: list[LibraryDictionary]
+
+
+class Download(BaseModel):
+    url: str
+    expiresIn: int  # noqa: N815 (what the app reads)
+    size: int
+    sha256: str
+
+
+@router.get("/library", response_model=Library)
 def library(request: Request, response: Response, reader: Reader = Depends(get_current_reader),
             db: Session = Depends(get_db)):
     """Books and dictionaries. The ETag covers the data, not the cover links (they're re-signed on every
@@ -68,13 +118,13 @@ def _signed(response: Response, link: dict) -> dict:
     return link
 
 
-@router.get("/books/{book_id}/download")
+@router.get("/books/{book_id}/download", response_model=Download)
 def book_download(book_id: str, kind: str, response: Response, _: Reader = Depends(get_current_reader),
                   db: Session = Depends(get_db)):
     return _signed(response, assets.download(db, "books", book_id, kind))
 
 
-@router.get("/dictionaries/{dict_id}/download")
+@router.get("/dictionaries/{dict_id}/download", response_model=Download)
 def dictionary_download(dict_id: str, kind: str, response: Response, reader: Reader = Depends(get_current_reader),
                         db: Session = Depends(get_db)):
     dicts.check_visible(db, reader, dict_id)

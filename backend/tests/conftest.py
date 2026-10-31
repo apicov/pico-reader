@@ -23,6 +23,8 @@ import numpy as np
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import routing
+from fastapi.encoders import jsonable_encoder
 from fastapi.testclient import TestClient
 from moto.server import ThreadedMotoServer
 from sqlalchemy import text
@@ -60,6 +62,32 @@ def clean_tables(schema):
         tables = conn.execute(text("""SELECT tablename FROM pg_tables WHERE schemaname = 'public'
                                       AND tablename NOT IN ('alembic_version', 'categories')""")).scalars().all()
         conn.execute(text(f"TRUNCATE {', '.join(tables)} CASCADE"))
+
+
+def _dropped(raw, out, at="") -> list[str]:
+    """Where `out` (the response) lacks a key `raw` (what the route returned) had."""
+    if isinstance(raw, dict) and isinstance(out, dict):
+        return [f"{at}.{k}" for k in raw if k not in out] + \
+            [d for k in raw if k in out for d in _dropped(raw[k], out[k], f"{at}.{k}")]
+    if isinstance(raw, list) and isinstance(out, list):
+        return [d for i, (r, o) in enumerate(zip(raw, out, strict=True)) for d in _dropped(r, o, f"{at}[{i}]")]
+    return []
+
+
+@pytest.fixture(autouse=True)
+def responses_keep_every_field(monkeypatch):
+    """A route's response model must describe everything it returns: a field it leaves out would silently not
+    reach the app."""
+    serialize = routing.serialize_response
+
+    async def checked(*, field=None, response_content, **kwargs):
+        out = await serialize(field=field, response_content=response_content, **kwargs)
+        if field is not None:
+            dropped = _dropped(jsonable_encoder(response_content), out)
+            assert not dropped, f"the response model drops {', '.join(dropped)}"
+        return out
+
+    monkeypatch.setattr(routing, "serialize_response", checked)
 
 
 @pytest.fixture(scope="session")

@@ -45,7 +45,12 @@ class Batch(BaseModel):
     lookups: list[Lookup] = Field(default=[], max_length=5000)
 
 
-@router.post("")
+class Recorded(BaseModel):
+    sessions: int
+    lookups: int
+
+
+@router.post("", response_model=Recorded)
 def record(batch: Batch, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     for s in batch.sessions:
         # words read: the progress gained times the book's words (0 when its size isn't known yet)

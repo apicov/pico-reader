@@ -22,7 +22,17 @@ class KnownWord(BaseModel):
     known: bool = True
 
 
-@router.get("/known-words")
+class Word(BaseModel):
+    language: str
+    word: str
+
+
+class KnownSet(BaseModel):
+    word: str  # as stored: trimmed, lower case
+    known: bool
+
+
+@router.get("/known-words", response_model=list[Word])
 def known_words(language: str | None = None, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     rows = db.execute(text("""SELECT language, word FROM known_words WHERE reader_email = :e
                               AND (CAST(:l AS text) IS NULL OR language = :l) ORDER BY word"""),
@@ -30,7 +40,7 @@ def known_words(language: str | None = None, reader: Reader = Depends(get_curren
     return [{"language": r.language, "word": r.word} for r in rows]
 
 
-@router.put("/known-words")
+@router.put("/known-words", response_model=KnownSet)
 def set_known(body: KnownWord, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     params = {"e": reader.email, "l": body.language, "w": body.word.strip().lower()}
     if body.known:
@@ -42,7 +52,7 @@ def set_known(body: KnownWord, reader: Reader = Depends(get_current_reader), db:
     return {"word": params["w"], "known": body.known}
 
 
-@router.get("/looked-up-words")
+@router.get("/looked-up-words", response_model=list[str])
 def looked_up_words(language: str, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """The words (as selected, and the dictionary forms found) looked up in a language and not marked known."""
     rows = db.execute(text("""
@@ -76,10 +86,15 @@ class Card(CardIn):
     updated_at: datetime
 
 
+class CardChanges(BaseModel):
+    cards: list[Card]
+    cursor: datetime | None  # pass it as `since` next time
+
+
 _COLUMNS = "id, language, term, meaning, example, source, book_id, state, due, deleted, client_updated_at, updated_at"
 
 
-@router.get("/review-cards")
+@router.get("/review-cards", response_model=CardChanges)
 def card_changes(since: datetime | None = None, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     rows = db.execute(text(f"""SELECT {_COLUMNS} FROM review_cards WHERE reader_email = :e
                                AND (CAST(:since AS timestamptz) IS NULL OR updated_at > CAST(:since AS timestamptz) - {OVERLAP})

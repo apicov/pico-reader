@@ -3,6 +3,7 @@ POST gives signed PUT links for the files, PUT goes straight to R2, then /commit
 Posting an existing id adds or replaces files (e.g. a reflow copy) and updates the metadata."""
 
 import json
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -59,15 +60,30 @@ class DictionaryEdit(BaseModel):
     visibility: _VISIBILITY | None = None
 
 
+class ConversionQueued(BaseModel):
+    id: str
+    job: int
+
+
+class DictJob(BaseModel):
+    id: int
+    dict_id: str
+    name: str
+    status: str
+    error: str
+    created_at: datetime
+    finished_at: datetime | None
+
+
 # Books: the same service as the app's uploads (history, indexing queue); an admin may change any book.
 # The desktop tool indexes on its own (`reader index`), or queues the server (`reader index --server`).
 
-@router.post("/books")
+@router.post("/books", response_model=assets.UploadStarted)
 def add_book(body: BookUpload, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     return books.start_upload(db, admin, body.id, body.title, body.author, body.language, body.files)
 
 
-@router.post("/books/{book_id}/commit")
+@router.post("/books/{book_id}/commit", response_model=assets.Committed)
 def commit_book(book_id: str, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     return {"id": book_id, "files": assets.public_files(books.commit_upload(db, admin, book_id))}
 
@@ -77,7 +93,7 @@ def delete_book(book_id: str, admin: Reader = Depends(get_current_admin), db: Se
     books.delete_book(db, admin, book_id)
 
 
-@router.post("/dictionaries")
+@router.post("/dictionaries", response_model=assets.UploadStarted)
 def add_dictionary(body: DictionaryUpload, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     """From the desktop tool, which converts on the computer and uploads the packages."""
     if "source" in body.files:
@@ -97,18 +113,18 @@ def add_dictionary(body: DictionaryUpload, admin: Reader = Depends(get_current_a
     return {"id": dict_id, "uploads": links}
 
 
-@router.post("/dictionaries/upload")
+@router.post("/dictionaries/upload", response_model=assets.UploadStarted)
 def upload_stardict(body: StarDictUpload, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     return dicts.start_upload(db, admin, body.name, body.from_lang, body.to_lang, body.visibility, body.source, body.id)
 
 
-@router.post("/dictionaries/{dict_id}/convert")
+@router.post("/dictionaries/{dict_id}/convert", response_model=ConversionQueued)
 def convert_stardict(dict_id: str, admin: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     """After the source zip's PUT: queue its conversion."""
     return {"id": dict_id, "job": dicts.commit_source(db, admin, dict_id)}
 
 
-@router.get("/dict-jobs")
+@router.get("/dict-jobs", response_model=list[DictJob])
 def dict_jobs(_: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     return dicts.jobs(db)
 
@@ -119,7 +135,7 @@ def edit_dictionary(dict_id: str, body: DictionaryEdit, admin: Reader = Depends(
     dicts.edit(db, admin, dict_id, body.model_dump(exclude_none=True))
 
 
-@router.post("/dictionaries/{dict_id}/commit")
+@router.post("/dictionaries/{dict_id}/commit", response_model=assets.Committed)
 def commit_dictionary(dict_id: str, _: Reader = Depends(get_current_admin), db: Session = Depends(get_db)):
     return {"id": dict_id, "files": assets.public_files(assets.commit(db, "dictionaries", dict_id))}
 

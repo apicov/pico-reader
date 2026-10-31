@@ -16,7 +16,22 @@ router = APIRouter(prefix="/api", tags=["computer"])
 MAX_PROJECTS = 50
 
 
-@router.post("/drops", status_code=201)
+class Created(BaseModel):
+    id: str
+
+
+class Poll(BaseModel):
+    drops: list[Drop]
+    projects: list[Project]
+    notes_stamp: str  # changes whenever a note does
+
+
+class ComputerStatus(BaseModel):
+    seen_at: str | None  # when it last synced; None: never
+    waiting: int
+
+
+@router.post("/drops", status_code=201, response_model=Created)
 def send(body: DropIn, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     return {"id": create_drop(db, reader.email, body)}
 
@@ -27,7 +42,7 @@ def pending(reader: Reader = Depends(get_current_reader), db: Session = Depends(
     return pending_drops(db, reader.email)
 
 
-@router.get("/computer/poll")
+@router.get("/computer/poll", response_model=Poll)
 def poll(reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """The desktop tool's call every few seconds, kept small: what waits for it, the projects, and a stamp that
     changes whenever a note is added, changed, moved or deleted (only then does it fetch the notes)."""
@@ -88,7 +103,7 @@ def delivered(drop_id: str, reader: Reader = Depends(get_current_reader), db: Se
         raise HTTPException(404, "Not found")
 
 
-@router.get("/computer")
+@router.get("/computer", response_model=ComputerStatus)
 def status(reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """When the computer last synced (null: never) and how much waits for it."""
     seen = db.execute(text("SELECT seen_at FROM computers WHERE reader_email = :e"), {"e": reader.email}).scalar()

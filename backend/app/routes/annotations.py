@@ -32,6 +32,11 @@ class Annotation(AnnotationIn):
     updated_at: datetime
 
 
+class Changes(BaseModel):
+    annotations: list[Annotation]
+    cursor: datetime | None  # pass it as `since` next time
+
+
 # Pulls re-read the last seconds before the cursor: a change committed just after another device's pull (its
 # updated_at is from before the commit) isn't skipped. Devices merge by id, so a repeat is harmless.
 OVERLAP = "interval '10 seconds'"
@@ -39,7 +44,7 @@ OVERLAP = "interval '10 seconds'"
 _COLUMNS = "id, book_id, kind, format, location, progress, text, note, color, deleted, client_updated_at, updated_at"
 
 
-@router.get("")
+@router.get("", response_model=Changes)
 def changes(since: datetime | None = None, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """What changed after `since` (all when absent), and the cursor for the next call."""
     rows = db.execute(text(f"""SELECT {_COLUMNS} FROM annotations WHERE reader_email = :e

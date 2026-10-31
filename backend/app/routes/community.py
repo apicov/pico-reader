@@ -21,6 +21,126 @@ router = APIRouter(prefix="/api", tags=["community"])
 AVATAR_MAX_BYTES = 150_000
 
 
+# --- what the community routes return (built in app/community.py; dates are ISO strings) ---
+
+class Author(BaseModel):
+    """A reader as others see them (never their email)."""
+    handle: str
+    display_name: str
+    avatar_url: str | None
+
+
+class BookStub(BaseModel):
+    id: str
+    title: str
+    author: str
+    available: bool  # False: deleted from the library since
+
+
+class Likeable(BaseModel):
+    id: str
+    likes: int
+    liked_by_me: bool
+
+
+class Review(Likeable):
+    book: BookStub
+    score: int  # 0–10
+    recommend: bool
+    body: str
+    spoiler: bool
+    hidden: bool  # by an admin
+    mine: bool
+    created_at: str
+    updated_at: str
+    author: Author
+
+
+class Quote(BaseModel):
+    book: BookStub
+    text: str
+    format: str
+    location: str
+    progress: float
+
+
+class Comment(Likeable):
+    parent_id: str | None
+    body: str  # empty when deleted or hidden
+    spoiler: bool
+    edited: bool
+    deleted: bool
+    hidden: bool
+    mine: bool
+    created_at: str
+    author: Author | None  # None when deleted or hidden
+
+
+class PostSummary(Likeable):
+    title: str
+    body: str  # the start of it, in lists
+    edited: bool
+    hidden: bool
+    mine: bool
+    created_at: str
+    updated_at: str
+    author: Author
+    comment_count: int
+    books: list[BookStub]
+
+
+class Post(PostSummary):
+    quotes: list[Quote]
+    comments: list[Comment]
+
+
+class ListItem(BaseModel):
+    book: BookStub
+    note: str
+
+
+class TopList(BaseModel):
+    id: str
+    title: str
+    description: str
+    hidden: bool
+    mine: bool
+    created_at: str
+    updated_at: str
+    author: Author
+    items: list[ListItem]
+
+
+class MyProfile(Author):
+    bio: str
+    show_reading: bool
+    chosen: bool  # False: the handle was made up, the app asks the reader to choose one
+
+
+class Profile(Author):
+    bio: str
+    mine: bool
+    finished_count: int
+    reading: list[BookStub]  # empty when the reader doesn't show it
+    reviews: list[Review]
+    posts: list[PostSummary]
+    lists: list[TopList]
+
+
+class RatingSummary(BaseModel):
+    avg_score: float | None
+    review_count: int
+    recommend_count: int
+
+
+class BookCommunity(BaseModel):
+    book: BookStub
+    summary: RatingSummary
+    my_review: Review | None
+    reviews: list[Review]
+    posts: list[PostSummary]
+
+
 def get_member(reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)) -> Reader:
     c.ensure_profile(db, reader)
     return reader
@@ -45,12 +165,12 @@ def _me(db: Session, reader: Reader) -> dict:
     return {**c.author(r), "bio": r.bio, "show_reading": r.show_reading, "chosen": r.chosen}
 
 
-@router.get("/profiles/me")
+@router.get("/profiles/me", response_model=MyProfile)
 def my_profile(reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     return _me(db, reader)
 
 
-@router.put("/profiles/me")
+@router.put("/profiles/me", response_model=MyProfile)
 def save_profile(body: ProfileIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     handle = c.normalize_handle(body.handle)
     taken = db.execute(text("SELECT 1 FROM profiles WHERE handle = :h AND reader_email <> :e"),
@@ -65,7 +185,7 @@ def save_profile(body: ProfileIn, reader: Reader = Depends(get_member), db: Sess
     return _me(db, reader)
 
 
-@router.put("/profiles/me/avatar")
+@router.put("/profiles/me/avatar", response_model=MyProfile)
 def save_avatar(body: AvatarIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     """A small JPEG made on the device; a new key each time so caches never show the old one."""
     data, key = None, None
@@ -93,7 +213,7 @@ def avatar(key: str, db: Session = Depends(get_db)):
                     headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
-@router.get("/profiles/{handle}")
+@router.get("/profiles/{handle}", response_model=Profile)
 def profile(handle: str, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     email = c.email_for(db, handle)
     r = db.execute(text("SELECT handle, display_name, bio, show_reading, avatar_key FROM profiles WHERE reader_email = :e"),
@@ -110,7 +230,7 @@ def profile(handle: str, reader: Reader = Depends(get_member), db: Session = Dep
             "lists": c.lists(db, reader, owner_email=email)}
 
 
-@router.get("/members")
+@router.get("/members", response_model=list[Author])
 def members(reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     rows = db.execute(text(f"SELECT {c.author_cols('p')} FROM profiles p ORDER BY lower(p.display_name)")).fetchall()
     return [c.author(r) for r in rows]
@@ -125,7 +245,7 @@ class ReviewIn(BaseModel):
     spoiler: bool = False
 
 
-@router.get("/books/{book_id}/community")
+@router.get("/books/{book_id}/community", response_model=BookCommunity)
 def book_community(book_id: str, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     reviews = c.reviews(db, reader, book_id=book_id)
     return {"book": c.book_stubs(db, [book_id])[book_id],
@@ -136,7 +256,7 @@ def book_community(book_id: str, reader: Reader = Depends(get_member), db: Sessi
             "posts": c.list_posts(db, reader, book_id=book_id, limit=100)}
 
 
-@router.put("/books/{book_id}/review")
+@router.put("/books/{book_id}/review", response_model=Review)
 def save_review(book_id: str, body: ReviewIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     c.check_books(db, [book_id])
     db.execute(text("""
@@ -155,7 +275,7 @@ def delete_review(book_id: str, reader: Reader = Depends(get_member), db: Sessio
     db.commit()
 
 
-@router.get("/ratings")
+@router.get("/ratings", response_model=dict[str, RatingSummary])
 def ratings(reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     """Every book's average, for the library cards."""
     return c.rating_summary(db)
@@ -178,7 +298,7 @@ class PostIn(BaseModel):
     quotes: list[QuoteIn] = Field(default=[], max_length=10)
 
 
-@router.get("/posts")
+@router.get("/posts", response_model=list[PostSummary])
 def posts(book: str | None = None, author: str | None = None, mine_books: bool = False,
           before: str | None = None, limit: int = Query(30, ge=1, le=100),
           reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
@@ -191,12 +311,12 @@ def posts(book: str | None = None, author: str | None = None, mine_books: bool =
                         book_ids=book_ids, before=before, limit=limit)
 
 
-@router.get("/posts/{post_id}")
+@router.get("/posts/{post_id}", response_model=Post)
 def post(post_id: UUID, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     return c.get_post(db, reader, str(post_id))
 
 
-@router.post("/posts", status_code=201)
+@router.post("/posts", status_code=201, response_model=Post)
 def create_post(body: PostIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     post_id = str(db.execute(text("INSERT INTO posts (author_email, title, body) VALUES (:e, :t, :b) RETURNING id"),
                              {"e": reader.email, "t": body.title.strip(), "b": body.body}).scalar())
@@ -205,7 +325,7 @@ def create_post(body: PostIn, reader: Reader = Depends(get_member), db: Session 
     return c.get_post(db, reader, post_id)
 
 
-@router.put("/posts/{post_id}")
+@router.put("/posts/{post_id}", response_model=Post)
 def edit_post(post_id: UUID, body: PostIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     owners.changeable(db, "posts", str(post_id), reader, owner="author_email", admin_may=False)
     db.execute(text("UPDATE posts SET title = :t, body = :b, edited = true, updated_at = now() WHERE id = :id"),
@@ -233,7 +353,7 @@ class CommentIn(BaseModel):
     parent_id: UUID | None = None
 
 
-@router.post("/posts/{post_id}/comments", status_code=201)
+@router.post("/posts/{post_id}/comments", status_code=201, response_model=list[Comment])
 def add_comment(post_id: UUID, body: CommentIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     c.get_post(db, reader, str(post_id))  # 404 for a missing or hidden post
     parent = body.parent_id
@@ -250,7 +370,7 @@ def add_comment(post_id: UUID, body: CommentIn, reader: Reader = Depends(get_mem
     return c.comments(db, reader, str(post_id))
 
 
-@router.put("/comments/{comment_id}")
+@router.put("/comments/{comment_id}", response_model=list[Comment])
 def edit_comment(comment_id: UUID, body: CommentIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     owners.changeable(db, "comments", str(comment_id), reader, owner="author_email", admin_may=False)
     post_id = db.execute(text("""UPDATE comments SET body = :b, spoiler = :s, edited = true, updated_at = now()
@@ -295,7 +415,7 @@ class ListIn(BaseModel):
     items: list[ListItemIn] = Field(default=[], max_length=50)
 
 
-@router.get("/lists")
+@router.get("/lists", response_model=list[TopList])
 def all_lists(owner: str | None = None, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     return c.lists(db, reader, owner_email=c.email_for(db, owner) if owner else None)
 
@@ -307,12 +427,12 @@ def _one_list(db: Session, reader: Reader, list_id: str) -> dict:
     return found[0]
 
 
-@router.get("/lists/{list_id}")
+@router.get("/lists/{list_id}", response_model=TopList)
 def one_list(list_id: UUID, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     return _one_list(db, reader, str(list_id))
 
 
-@router.post("/lists", status_code=201)
+@router.post("/lists", status_code=201, response_model=TopList)
 def create_list(body: ListIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     list_id = str(db.execute(text("INSERT INTO lists (owner_email, title, description) VALUES (:e, :t, :d) RETURNING id"),
                              {"e": reader.email, "t": body.title.strip(), "d": body.description}).scalar())
@@ -321,7 +441,7 @@ def create_list(body: ListIn, reader: Reader = Depends(get_member), db: Session 
     return _one_list(db, reader, list_id)
 
 
-@router.put("/lists/{list_id}")
+@router.put("/lists/{list_id}", response_model=TopList)
 def edit_list(list_id: UUID, body: ListIn, reader: Reader = Depends(get_member), db: Session = Depends(get_db)):
     owners.changeable(db, "lists", str(list_id), reader, owner="owner_email", admin_may=False)
     db.execute(text("UPDATE lists SET title = :t, description = :d, updated_at = now() WHERE id = :id"),
