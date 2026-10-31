@@ -28,7 +28,7 @@ from pathlib import Path
 
 from pico_core import stardict
 from pico_core.formats import DICT_PACKAGE_TYPES, TEXT_FORMATS
-from readertool import client, markdown, metadata, quarto, sync
+from readertool import client, markdown, metadata, projects, quarto, service, sync
 from readertool.client import Api, ToolError
 
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
@@ -121,28 +121,28 @@ def login(args) -> None:
 
 def sync_folder(args) -> None:
     if args.uninstall:
-        return sync.uninstall()
+        return service.uninstall()
     if args.install:
         Api()  # signed in?
-        return sync.install(args.folder, args.interval)
+        return service.install(args.folder, args.interval)
     with contextlib.suppress(KeyboardInterrupt):
         sync.run(Api(), args.folder, args.interval, args.once)
 
 
 def project(args) -> None:
     if args.action == "add":
-        p = sync.project_add(Api(), args.path, args.name)
+        p = projects.project_add(Api(), args.path, args.name)
         print(f"project “{p['name']}” ({p['notes']} notes) ⇄ {p['path']}/notes, things sent to it → {p['path']}/inbox")
-        if not sync.service_installed():
+        if not service.service_installed():
             print("the sync isn't running as a service: reader sync --install (or run reader sync)")
     elif args.action == "list":
-        projects = sync.project_list(Api())
-        for p in projects:
+        linked = projects.project_list(Api())
+        for p in linked:
             print(f"{p['name']:30} {p['notes']:4} notes  {p['path'] or '(not on this computer)'}")
-        if not projects:
+        if not linked:
             print("no projects yet: cd into a folder and run `reader project add`")
     else:
-        gone = sync.project_remove(Api(), args.path, args.delete)
+        gone = projects.project_remove(Api(), args.path, args.delete)
         print(f"stopped syncing {gone['path']}" + (f"; “{gone['name']}” removed in the app, its notes kept" if args.delete else ""))
 
 

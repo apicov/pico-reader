@@ -8,9 +8,12 @@ from pathlib import Path
 import pytest
 import requests
 
+from readertool import projects as projects_module
+from readertool import service as service_module
 from readertool import sync as sync_module
 from readertool.client import ToolError
-from readertool.sync import SOURCES_MARK, Sync, drop_file
+from readertool.notefiles import SOURCES_MARK, drop_file
+from readertool.sync import Sync
 
 T0 = 1_800_000_000.0
 
@@ -312,20 +315,20 @@ def test_install_writes_a_user_service_and_uninstall_removes_it(tmp_path, monkey
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     calls = []
     monkeypatch.setattr(subprocess, "run", lambda args, check: calls.append(args))
-    sync_module.install(Path("~/pico"), 15)
+    service_module.install(Path("~/pico"), 15)
     unit = tmp_path / "systemd" / "user" / "pico-reader-sync.service"
     text = unit.read_text()
     assert f'sync --folder "{Path.home() / 'pico'}" --interval 15' in text and "Restart=on-failure" in text
     assert "PYTHONUNBUFFERED=1" in text  # the log reaches journalctl as it happens
     assert ["systemctl", "--user", "enable", "--now", "pico-reader-sync.service"] in calls
-    sync_module.uninstall()
+    service_module.uninstall()
     assert not unit.exists() and ["systemctl", "--user", "disable", "--now", "pico-reader-sync.service"] in calls
 
 
 def test_install_quotes_a_folder_with_spaces_and_percent(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr(subprocess, "run", lambda args, check: None)
-    sync_module.install(Path("/home/me/My Notes 100%"), 15)
+    service_module.install(Path("/home/me/My Notes 100%"), 15)
     text = (tmp_path / "systemd" / "user" / "pico-reader-sync.service").read_text()
     assert '--folder "/home/me/My Notes 100%%" --interval' in text
 
@@ -346,7 +349,7 @@ def project(env, tmp_path):
     api, sync, *_ = env
     folder = tmp_path / "code" / "rust-book"
     folder.mkdir(parents=True)
-    p = sync_module.project_add(api, folder, projects_path=tmp_path / "projects.json")
+    p = projects_module.project_add(api, folder, projects_path=tmp_path / "projects.json")
     return p["id"], folder
 
 
@@ -354,15 +357,15 @@ def test_adding_a_project_links_the_folder_and_reuses_the_apps_project(env, tmp_
     api, *_ = env
     pid, folder = project
     assert api.projects == {pid: "rust-book"} and (folder / "notes").is_dir() and (folder / "inbox").is_dir()
-    again = sync_module.project_add(api, folder, name="Rust Book", projects_path=tmp_path / "projects.json")
+    again = projects_module.project_add(api, folder, name="Rust Book", projects_path=tmp_path / "projects.json")
     assert again["id"] == pid and api.projects == {pid: "Rust Book"}  # the same folder: renamed
     other = tmp_path / "laptop-copy"
     other.mkdir()
-    assert sync_module.project_add(api, other, name="rust book", projects_path=tmp_path / "projects.json")["id"] == pid
-    listed = sync_module.project_list(api, tmp_path / "projects.json")
+    assert projects_module.project_add(api, other, name="rust book", projects_path=tmp_path / "projects.json")["id"] == pid
+    listed = projects_module.project_list(api, tmp_path / "projects.json")
     assert listed == [{"id": pid, "name": "Rust Book", "notes": 0, "path": str(other.resolve())}]
     with pytest.raises(ToolError):
-        sync_module.project_add(api, tmp_path / "nowhere", projects_path=tmp_path / "projects.json")
+        projects_module.project_add(api, tmp_path / "nowhere", projects_path=tmp_path / "projects.json")
 
 
 def test_a_projects_notes_and_sent_items_live_in_its_folder(env, project):
@@ -405,12 +408,12 @@ def test_removing_a_project_brings_its_notes_back_to_the_general_folder(env, tmp
     pid, proj = project
     api.add_note("Ownership", "Moves.", project_id=pid)
     sync.run_once()
-    sync_module.project_remove(api, proj, delete=True, projects_path=tmp_path / "projects.json")
+    projects_module.project_remove(api, proj, delete=True, projects_path=tmp_path / "projects.json")
     assert api.projects == {} and api.notes["note-1"]["project_id"] is None
     sync.run_once()
     assert (folder / "notes" / "Ownership.md").exists()
     with pytest.raises(ToolError):
-        sync_module.project_remove(api, proj, projects_path=tmp_path / "projects.json")
+        projects_module.project_remove(api, proj, projects_path=tmp_path / "projects.json")
 
 
 def test_notes_are_fetched_only_when_something_changed(env):

@@ -18,156 +18,32 @@ file saved here starts a round within a few seconds. A failure in one part is lo
 What was synced last is kept in ~/.local/state/pico-reader/sync.json.
 """
 
-import hashlib
 import json
 import os
-import re
 import shutil
-import subprocess
 import time
-import uuid
 from datetime import datetime
 from pathlib import Path
 
 import requests
 
-from readertool.client import CONFIG, ToolError
+from readertool.client import ToolError
+from readertool.notefiles import (
+    JOURNAL,
+    TEXT_SUFFIXES,
+    digest,
+    drop_file,
+    journal_entry,
+    note_file,
+    parse_front_matter,
+    read_note_file,
+    safe_name,
+    unique_path,
+)
+from readertool.projects import PROJECTS, load_projects
 
 STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "pico-reader" / "sync.json"
-PROJECTS = CONFIG.parent / "projects.json"  # project id → {name, path}: the folders `reader project add` linked
-SOURCES_MARK = "<!-- sources from the app: changes below this line are not synced -->"
 STABLE_SECONDS = 2  # a file younger than this may still be being written: next round
-TEXT_SUFFIXES = {".md", ".markdown", ".txt"}
-
-# a snippet's language → file extension and line comment ('' = no header: the format has no comments)
-LANGUAGES = {
-    "python": ("py", "#"), "py": ("py", "#"), "javascript": ("js", "//"), "js": ("js", "//"),
-    "typescript": ("ts", "//"), "ts": ("ts", "//"), "tsx": ("tsx", "//"), "jsx": ("jsx", "//"),
-    "rust": ("rs", "//"), "go": ("go", "//"), "c": ("c", "//"), "cpp": ("cpp", "//"), "c++": ("cpp", "//"),
-    "java": ("java", "//"), "kotlin": ("kt", "//"), "swift": ("swift", "//"), "csharp": ("cs", "//"),
-    "bash": ("sh", "#"), "sh": ("sh", "#"), "shell": ("sh", "#"), "zsh": ("sh", "#"), "fish": ("fish", "#"),
-    "ruby": ("rb", "#"), "r": ("r", "#"), "julia": ("jl", "#"), "perl": ("pl", "#"), "yaml": ("yaml", "#"),
-    "toml": ("toml", "#"), "sql": ("sql", "--"), "lua": ("lua", "--"), "haskell": ("hs", "--"),
-    "elixir": ("ex", "#"), "nix": ("nix", "#"), "makefile": ("mk", "#"), "dockerfile": ("Dockerfile", "#"),
-    "html": ("html", ""), "css": ("css", ""), "json": ("json", ""), "markdown": ("md", ""), "latex": ("tex", "%"),
-}
-
-
-def safe_name(name: str, limit: int = 80) -> str:
-    """A file name from a title: no slashes or control characters, not hidden, not too long."""
-    name = re.sub(r"[/\\\x00-\x1f]+", " ", name).strip().lstrip(".")
-    return re.sub(r"\s+", " ", name)[:limit].strip() or "untitled"
-
-
-def unique_path(folder: Path, stem: str, suffix: str) -> Path:
-    path = folder / f"{stem}{suffix}"
-    n = 2
-    while path.exists():
-        path = folder / f"{stem} ({n}){suffix}"
-        n += 1
-    return path
-
-
-def front_matter(fields: dict) -> str:
-    lines = [f"{k}: {v}" for k, v in fields.items() if v not in (None, "")]
-    return "---\n" + "\n".join(lines) + "\n---\n"
-
-
-def parse_front_matter(text: str) -> tuple[dict, str]:
-    """({key: value}, the rest) for a file starting with a `---` block; ({}, text) otherwise."""
-    if not text.startswith("---\n"):
-        return {}, text
-    end = text.find("\n---\n", 4)
-    if end < 0:
-        return {}, text
-    fields = {}
-    for line in text[4:end].splitlines():
-        key, sep, value = line.partition(":")
-        if sep:
-            fields[key.strip()] = value.strip()
-    return fields, text[end + 5:]
-
-
-def _where(meta: dict) -> str:
-    parts = [meta.get("heading") or ""]
-    if meta.get("progress") is not None:
-        parts.append(f"{round(meta['progress'] * 100)}%")
-    return ", ".join(p for p in parts if p)
-
-
-def drop_file(drop: dict) -> tuple[str, str, str]:
-    """(file name stem, suffix, content) for something sent from the app."""
-    meta = drop.get("meta") or {}
-    sent = datetime.fromisoformat(drop["created_at"]).astimezone()
-    label = meta.get("book_title") or drop.get("title") or drop["kind"]
-    kind_word = {"snippet": "code", "highlight": "highlight", "note": "note", "text": "text"}[drop["kind"]]
-    stem = safe_name(f"{sent:%Y-%m-%d %H%M} {label} – {kind_word}")
-    if drop["kind"] == "snippet":
-        ext, comment = LANGUAGES.get(drop.get("language", "").lower(), ("txt", ""))
-        header = ""
-        if comment:
-            source = " · ".join(p for p in (meta.get("book_title"), _where(meta), drop.get("title")) if p)
-            header = f"{comment} {source or 'From the reader'}\n{comment} sent {sent:%Y-%m-%d %H:%M}\n\n"
-        return stem, f".{ext}", header + drop["body"].rstrip("\n") + "\n"
-    head = front_matter({"kind": drop["kind"], "book": meta.get("book_title"), "where": _where(meta),
-                         "sent": f"{sent:%Y-%m-%d %H:%M}"})
-    title = f"# {drop['title']}\n\n" if drop.get("title") else ""
-    body = drop["body"].strip()
-    if drop["kind"] == "highlight":
-        body = "\n".join(f"> {line}" if line else ">" for line in body.splitlines())
-    return stem, ".md", f"{head}\n{title}{body}\n"
-
-
-JOURNAL = "journal.md"  # the inbox's running file: what's sent "to the running file" is added at its end
-
-
-def journal_entry(drop: dict) -> str:
-    """One item for the running file: a heading line (when, from where, what), then the text; code fenced."""
-    meta = drop.get("meta") or {}
-    sent = datetime.fromisoformat(drop["created_at"]).astimezone()
-    kind = {"snippet": "code", "highlight": "highlight", "note": "note", "text": "text"}[drop["kind"]]
-    if drop["kind"] == "snippet" and drop.get("language"):
-        kind += f" ({drop['language']})"
-    head = " · ".join(p for p in (f"{sent:%Y-%m-%d %H:%M}", meta.get("book_title"), _where(meta), drop.get("title"), kind) if p)
-    body = drop["body"].strip("\n")
-    if drop["kind"] == "snippet":
-        fence = "````" if "```" in body else "```"
-        body = f"{fence}{drop.get('language', '')}\n{body}\n{fence}"
-    elif drop["kind"] == "highlight":
-        body = "\n".join(f"> {line}" if line else ">" for line in body.splitlines())
-    return f"\n---\n\n## {head}\n\n{body}\n"
-
-
-def note_file(note: dict) -> str:
-    sources = note.get("sources") or []
-    listed = "".join(f"\n[{i}] {s.get('title', '')}{', ' + s['heading'] if s.get('heading') else ''}: "
-                     f"“{s.get('text', '')[:300]}”\n" for i, s in enumerate(sources, 1))
-    tail = f"\n{SOURCES_MARK}\n{listed}" if sources else ""
-    head = front_matter({"id": note["id"], "title": note["title"], "book": note.get("book_title"),
-                         "updated": note["updated_at"]})
-    return f"{head}\n{note['markdown'].strip()}\n{tail}"
-
-
-def read_note_file(path: Path) -> tuple[dict, str, str]:
-    """(front matter, title, Markdown without the sources) of a file in notes/."""
-    fields, rest = parse_front_matter(path.read_text(encoding="utf-8"))
-    body = rest.split(SOURCES_MARK, 1)[0].strip()
-    return fields, fields.get("title") or path.stem, body
-
-
-def load_projects(path: Path = PROJECTS) -> dict[str, dict]:
-    return json.loads(path.read_text()) if path.exists() else {}
-
-
-def save_projects(projects: dict[str, dict], path: Path = PROJECTS) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(projects, indent=2))
-
-
-def digest(title: str, markdown: str) -> str:
-    return hashlib.sha256(f"{title}\0{markdown.strip()}".encode()).hexdigest()
-
-
 class Sync:
     def __init__(self, api, folder: Path, state_path: Path = STATE, log=print, clock=time.time,
                  projects_path: Path = PROJECTS):
@@ -414,93 +290,3 @@ def run(api, folder: Path, interval: float, once: bool) -> None:
 
 
 # --- projects: folders here with their own notes/ and inbox/ ---
-
-def project_add(api, path: Path, name: str | None = None, projects_path: Path = PROJECTS) -> dict:
-    """Links `path` to a project in the app (the one of that name, or a new one); the running sync picks it up."""
-    path = path.expanduser().resolve()
-    if not path.is_dir():
-        raise ToolError(f"{path} isn't a folder")
-    projects = load_projects(projects_path)
-    linked = next((pid for pid, p in projects.items() if Path(p["path"]) == path), None)
-    name = " ".join((name or path.name).split())[:60]
-    existing = {p["name"].lower(): p for p in api.get("/api/projects")}
-    if linked and name.lower() in existing and existing[name.lower()]["id"] != linked:
-        raise ToolError(f"You have another project called {name!r} already")
-    if not linked and name.lower() in existing:  # the app's project of that name (made on another computer)
-        saved = existing[name.lower()]
-    else:  # a new project, or this folder's under a new name
-        saved = api.put(f"/api/projects/{linked or f'proj-{uuid.uuid4()}'}", {"name": name})
-    pid = saved["id"]
-    projects[pid] = {"name": saved["name"], "path": str(path)}
-    save_projects(projects, projects_path)
-    for sub in ("notes", "inbox"):
-        (path / sub).mkdir(exist_ok=True)
-    return {"id": pid, "name": saved["name"], "path": str(path), "notes": saved["notes"]}
-
-
-def project_remove(api, path: Path, delete: bool = False, projects_path: Path = PROJECTS) -> dict:
-    """Stops syncing `path` (its files stay); `delete` also removes the project in the app (its notes stay there)."""
-    path = path.expanduser().resolve()
-    projects = load_projects(projects_path)
-    pid = next((pid for pid, p in projects.items() if Path(p["path"]) == path), None)
-    if pid is None:
-        raise ToolError(f"{path} isn't a project (reader project list shows them)")
-    gone = projects.pop(pid)
-    if delete:
-        api.delete(f"/api/projects/{pid}")
-    save_projects(projects, projects_path)
-    return gone
-
-
-def project_list(api, projects_path: Path = PROJECTS) -> list[dict]:
-    """The app's projects, with their folder on this computer (or None)."""
-    here = load_projects(projects_path)
-    return [{**p, "path": here.get(p["id"], {}).get("path")} for p in api.get("/api/projects")]
-
-
-SERVICE = "pico-reader-sync.service"
-
-
-def _unit() -> Path:
-    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd" / "user" / SERVICE
-
-
-def service_installed() -> bool:
-    return _unit().exists()
-
-
-def _unit_arg(value: object) -> str:
-    """One argument on a systemd ExecStart line, quoted (a folder may have spaces, % and $ mean something there)."""
-    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$")
-    return f'"{escaped}"'
-
-
-def install(folder: Path, interval: float) -> None:
-    """A systemd user service: starts with the session, restarts after a failure."""
-    reader = Path(__file__).resolve().parent.parent / "reader"
-    unit = _unit()
-    unit.parent.mkdir(parents=True, exist_ok=True)
-    unit.write_text(f"""[Unit]
-Description=Pico Reader: sync the study computer's folder with the app
-After=network-online.target
-
-[Service]
-ExecStart={_unit_arg(reader)} sync --folder {_unit_arg(folder.expanduser())} --interval {interval:g}
-Environment=PYTHONUNBUFFERED=1
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=default.target
-""")
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "--user", "enable", "--now", SERVICE], check=True)
-    print(f"installed {unit}; logs: journalctl --user -u {SERVICE} -f")
-
-
-def uninstall() -> None:
-    unit = _unit()
-    subprocess.run(["systemctl", "--user", "disable", "--now", SERVICE], check=False)
-    unit.unlink(missing_ok=True)
-    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
-    print("removed the sync service")
