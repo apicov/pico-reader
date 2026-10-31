@@ -1,35 +1,5 @@
-from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import text
-
-from app.db import get_engine
-from tests.test_library import upload
-
-TZ = "Europe/Berlin"
-
-
-def today_at(hour: int, days_ago: int = 0) -> str:
-    from zoneinfo import ZoneInfo
-    local = datetime.now(ZoneInfo(TZ)).replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=days_ago)
-    return local.astimezone(UTC).isoformat()
-
-
-def session(sid, book_id, days_ago, seconds, start=0.1, end=0.2, hour=9):
-    return {"id": f"sess-{sid:08d}", "book_id": book_id, "format": "epub", "started_at": today_at(hour, days_ago),
-            "ended_at": today_at(hour, days_ago), "seconds": seconds, "progress_start": start, "progress_end": end}
-
-
-def lookup(lid, book_id, word, days_ago=0, found=True, matched=""):
-    return {"id": f"look-{lid:08d}", "book_id": book_id, "language": "de", "word": word, "matched": matched,
-            "dictionaries": ["duden"] if found else [], "found": found, "created_at": today_at(10, days_ago)}
-
-
-def make_book(client, headers, words=10000):
-    book_id = upload(client, headers, {"pdf": (b"%PDF x", "application/pdf")}, title="Die Wolke", language="de")
-    client.post(f"/api/admin/books/{book_id}/commit", headers=headers)
-    with get_engine().begin() as c:
-        c.execute(text("UPDATE books SET word_count = :n WHERE id = :id"), {"n": words, "id": book_id})
-    return book_id
+from tests.helpers import TZ, lookup, make_book, session
 
 
 def test_minutes_streak_speed_density(client, admin_headers, bucket):

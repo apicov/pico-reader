@@ -3,7 +3,7 @@ import json
 import re
 
 from tests.conftest import add_reader, sign_in
-from tests.test_stats import make_book
+from tests.helpers import make_book
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 

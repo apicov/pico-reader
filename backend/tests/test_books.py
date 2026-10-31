@@ -1,57 +1,13 @@
 import gzip
-import hashlib
-import io
 import json
-import zipfile
 
-import httpx
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from app import indexer
 from app.db import get_engine
 from tests.conftest import add_reader, sign_in
-from tests.test_search import fake_embed  # noqa: F401 (fixture: deterministic embeddings)
-
-
-def tiny_epub() -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("mimetype", "application/epub+zip")
-        z.writestr("META-INF/container.xml", """<?xml version="1.0"?><container version="1.0"
-            xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles>
-            <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
-        z.writestr("OEBPS/content.opf", """<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-            <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Kleines Buch</dc:title><dc:language>de</dc:language></metadata>
-            <manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest>
-            <spine><itemref idref="c1"/></spine></package>""")
-        z.writestr("OEBPS/c1.xhtml", "<html><body><h1>Erstes Kapitel</h1>"
-                   + "".join(f"<p>Die Wolke zog über das Land, Absatz {i}, und die Kinder liefen nach Hause.</p>" for i in range(30))
-                   + "</body></html>")
-    return buf.getvalue()
-
-
-EPUB = tiny_epub()
-
-
-def info(data: bytes, ct: str) -> dict:
-    return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "content_type": ct}
-
-
-def upload_epub(client, headers, data=EPUB, **meta) -> str:
-    r = client.post("/api/books", headers=headers, json={"title": "Kleines Buch", "language": "de", **meta,
-                                                         "files": {"epub": info(data, "application/epub+zip")}})
-    assert r.status_code == 200, r.text
-    assert httpx.put(r.json()["uploads"]["epub"], content=data, headers={"Content-Type": "application/epub+zip"}).status_code == 200
-    assert client.post(f"/api/books/{r.json()['id']}/commit", headers=headers).status_code == 200
-    return r.json()["id"]
-
-
-def run_queue():
-    db = sessionmaker(bind=get_engine())()
-    while (job := indexer.claim(db)) is not None:
-        indexer.run_job(db, job)
-    db.close()
+from tests.helpers import EPUB, info, run_queue, tiny_epub, upload_epub
 
 
 def test_a_reader_uploads_and_the_server_indexes(client, auth_headers, bucket):

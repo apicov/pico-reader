@@ -1,4 +1,5 @@
-from tests.test_stats import make_book
+
+from tests.helpers import make_book
 
 
 def put_progress(client, headers, book_id, progress, when="2026-10-24T10:00:00Z"):

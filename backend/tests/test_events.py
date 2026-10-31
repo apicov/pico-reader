@@ -1,7 +1,7 @@
 from sqlalchemy import text
 
 from app.db import get_engine
-from tests.test_library import upload
+from tests.helpers import upload
 
 SESSION = {"id": "sess-00000001", "book_id": "b", "format": "epub", "started_at": "2026-10-24T08:00:00Z",
            "ended_at": "2026-10-24T08:20:00Z", "seconds": 1200, "progress_start": 0.10, "progress_end": 0.15}

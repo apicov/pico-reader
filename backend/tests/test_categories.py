@@ -1,8 +1,7 @@
 import pytest
 
 from app import categories, llm
-from tests.test_books import run_queue, upload_epub
-from tests.test_search import fake_embed, indexed_book  # noqa: F401 (fixtures)
+from tests.helpers import run_queue, upload_epub
 
 
 @pytest.fixture

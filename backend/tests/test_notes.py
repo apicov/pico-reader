@@ -1,12 +1,11 @@
 from app import notes_service
-from tests.test_chat import ask, call, groq, new, say  # noqa: F401 (fixtures)
-from tests.test_search import fake_embed, fresh_query_cache, indexed_book  # noqa: F401 (fixtures)
+from tests.helpers import ask, call, new, say
 
 DIAGRAM = "```mermaid\nflowchart LR\n  A[\"Pruning\"] --> B[\"Smaller model\"]\n```"
 
 
-def propose(client, headers, groq, tool, args, cid="conv-00000001", search=True):
-    groq.steps += ([call("search_passages", {"query": "pruning"}, "c0")] if search else []) + [
+def propose(client, headers, agent_ai, tool, args, cid="conv-00000001", search=True):
+    agent_ai.steps += ([call("search_passages", {"query": "pruning"}, "c0")] if search else []) + [
         call(tool, args), say("I proposed a note.")]
     new(client, headers, cid)
     evs = ask(client, headers, cid, "Make me a note")
@@ -17,9 +16,9 @@ def confirm(client, headers, cid, action):
     return client.post(f"/api/conversations/{cid}/actions/{action['id']}", headers=headers, json={"approve": True})
 
 
-def test_a_note_is_saved_only_after_confirming_with_its_sources(client, admin_headers, indexed_book, groq):
+def test_a_note_is_saved_only_after_confirming_with_its_sources(client, admin_headers, indexed_book, agent_ai):
     md = f"## Pruning\n\nIt removes small weights [1]. Not a source [7].\n\n{DIAGRAM}"
-    cid, action = propose(client, admin_headers, groq, "save_note",
+    cid, action = propose(client, admin_headers, agent_ai, "save_note",
                           {"title": "Pruning notes", "markdown": md, "book": "Efficient"})
     assert action["label"] == "Save note: Pruning notes" and action["preview"] == md
     assert client.get("/api/notes", headers=admin_headers).json() == []  # not yet
@@ -33,10 +32,10 @@ def test_a_note_is_saved_only_after_confirming_with_its_sources(client, admin_he
     assert stored["extras"]["actions"][0]["preview"] == md
 
 
-def test_appending_numbers_new_citations_after_the_old_ones(client, admin_headers, indexed_book, groq):
-    cid, action = propose(client, admin_headers, groq, "save_note", {"title": "Pruning", "markdown": "First [1]."})
+def test_appending_numbers_new_citations_after_the_old_ones(client, admin_headers, indexed_book, agent_ai):
+    cid, action = propose(client, admin_headers, agent_ai, "save_note", {"title": "Pruning", "markdown": "First [1]."})
     confirm(client, admin_headers, cid, action)
-    cid, action = propose(client, admin_headers, groq, "append_to_note",
+    cid, action = propose(client, admin_headers, agent_ai, "append_to_note",
                           {"note": "prun", "markdown": "## More\n\nAgain [1]."}, cid="conv-00000002")
     assert action["label"] == "Add to note: prun"
     confirm(client, admin_headers, cid, action)
@@ -44,20 +43,20 @@ def test_appending_numbers_new_citations_after_the_old_ones(client, admin_header
     assert note["markdown"] == "First [1].\n\n## More\n\nAgain [2].\n" and len(note["sources"]) == 2
 
 
-def test_the_agent_lists_and_reads_notes(client, admin_headers, indexed_book, groq):
+def test_the_agent_lists_and_reads_notes(client, admin_headers, indexed_book, agent_ai):
     import json
     with _db() as db:
         notes_service.create_note(db, "boss@example.com", "Pruning", "It removes weights [1].", None, [{"x": 1}])
-    groq.steps += [call("list_notes", {}), call("read_note", {"note": "pruning"}, "c2"), say("You have one note.")]
+    agent_ai.steps += [call("list_notes", {}), call("read_note", {"note": "pruning"}, "c2"), say("You have one note.")]
     new(client, admin_headers)
     ask(client, admin_headers, "conv-00000001", "What notes do I have?")
-    listed, read = [json.loads(m["content"]) for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"]
+    listed, read = [json.loads(m["content"]) for m in agent_ai.agent_calls[-1]["messages"] if m["role"] == "tool"]
     assert listed["notes"][0]["title"] == "Pruning"
     assert read["markdown"] == "It removes weights."  # the note's own citations aren't offered for citing
 
 
-def test_edit_delete_and_privacy(client, admin_headers, auth_headers, indexed_book, groq):
-    cid, action = propose(client, admin_headers, groq, "save_note", {"title": "Mine", "markdown": "Text"}, search=False)
+def test_edit_delete_and_privacy(client, admin_headers, auth_headers, indexed_book, agent_ai):
+    cid, action = propose(client, admin_headers, agent_ai, "save_note", {"title": "Mine", "markdown": "Text"}, search=False)
     confirm(client, admin_headers, cid, action)
     [note] = client.get("/api/notes", headers=admin_headers).json()
     assert client.get("/api/notes", headers=auth_headers).json() == []
@@ -72,13 +71,13 @@ def test_edit_delete_and_privacy(client, admin_headers, auth_headers, indexed_bo
     assert client.get("/api/notes", headers=admin_headers).json() == []
 
 
-def test_limits_reach_the_reader_as_a_failed_action(client, admin_headers, indexed_book, groq, monkeypatch):
+def test_limits_reach_the_reader_as_a_failed_action(client, admin_headers, indexed_book, agent_ai, monkeypatch):
     monkeypatch.setattr(notes_service, "MAX_NOTES", 0)
-    cid, action = propose(client, admin_headers, groq, "save_note", {"title": "One", "markdown": "Text"}, search=False)
+    cid, action = propose(client, admin_headers, agent_ai, "save_note", {"title": "One", "markdown": "Text"}, search=False)
     assert confirm(client, admin_headers, cid, action).json()["content"].startswith("Couldn't do it: You have 0 notes")
 
 
-def test_filter_by_book_and_book_deletion_keeps_the_note(client, admin_headers, indexed_book, groq):
+def test_filter_by_book_and_book_deletion_keeps_the_note(client, admin_headers, indexed_book, agent_ai):
     with _db() as db:
         notes_service.create_note(db, "boss@example.com", "About it", "x", indexed_book, [])
         notes_service.create_note(db, "boss@example.com", "Loose", "y", None, [])
@@ -95,8 +94,8 @@ def _db():
     return sessionmaker(bind=get_engine())()
 
 
-def test_a_note_about_a_book_deleted_before_confirming_fails_cleanly(client, admin_headers, indexed_book, groq):
-    cid, action = propose(client, admin_headers, groq, "save_note",
+def test_a_note_about_a_book_deleted_before_confirming_fails_cleanly(client, admin_headers, indexed_book, agent_ai):
+    cid, action = propose(client, admin_headers, agent_ai, "save_note",
                           {"title": "Gone", "markdown": "Text", "book": "Efficient"}, search=False)
     client.delete(f"/api/books/{indexed_book}", headers=admin_headers)
     r = confirm(client, admin_headers, cid, action)

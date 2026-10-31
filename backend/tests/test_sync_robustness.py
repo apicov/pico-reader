@@ -1,8 +1,7 @@
 """Sync between devices when clocks are wrong and pulls overlap with writes."""
 from datetime import UTC, datetime, timedelta
 
-from tests.test_annotations import HL
-from tests.test_learning import CARD
+from tests.helpers import CARD, HL
 
 
 def iso(dt: datetime) -> str:

@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
-HL = {"book_id": "b1", "kind": "highlight", "format": "epub", "location": "epubcfi(/6/8!/4/2,/1:0,/1:20)",
-      "progress": 0.12, "text": "Sie hatten Mühe", "color": "yellow", "client_updated_at": "2026-10-24T10:00:00Z"}
+from tests.helpers import HL
 
 
 def test_create_and_pull(client, auth_headers):

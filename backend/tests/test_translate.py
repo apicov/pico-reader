@@ -1,38 +1,9 @@
 import json
 
 import httpx
-import pytest
 
 from app import llm
-from app.config import get_settings
-
-GOOD = {"translation": "Janna-Berta vio cómo le hablaba a su marido.", "notes": "«einreden»: insistir.",
-        "vocabulary": [{"term": "einreden", "meaning": "hablar con insistencia"}], "detected_language": "de"}
-
-
-@pytest.fixture
-def groq(monkeypatch):
-    """A fake Groq: replies in turn with the queued contents (dicts become JSON); records the requests."""
-    monkeypatch.setenv("GROQ_API_KEY", "test-key")
-    get_settings.cache_clear()
-    calls, replies = [], []
-
-    def post(url, json=None, headers=None, timeout=None):
-        calls.append(json)
-        reply = replies.pop(0) if replies else GOOD
-        if isinstance(reply, httpx.Response):
-            return reply
-        content = reply if isinstance(reply, str) else __import__("json").dumps(reply)
-        return httpx.Response(200, json={"choices": [{"message": {"content": content}}], "model": json["model"],
-                                         "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
-
-    monkeypatch.setattr(llm.httpx, "post", post)
-    yield calls, replies
-    get_settings.cache_clear()
-
-
-BODY = {"text": "Janna-Berta sah noch, wie sie auf ihren Mann einredete.", "context": "…", "source_lang": "de",
-        "target_lang": "es", "book_id": "die-wolke", "location": "epubcfi(/6/8)"}
+from tests.helpers import BODY, GOOD
 
 
 def test_translates_and_stores(client, auth_headers, groq):

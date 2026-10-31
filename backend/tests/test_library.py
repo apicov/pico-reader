@@ -2,23 +2,10 @@ import hashlib
 
 import httpx
 
+from tests.helpers import info, upload
+
 PDF = b"%PDF-1.4 fake book"
 COVER = b"\x89PNG fake cover"
-
-
-def info(data: bytes, content_type: str) -> dict:
-    return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "content_type": content_type}
-
-
-def upload(client, headers, files: dict[str, tuple[bytes, str]], **meta):
-    body = {"title": "Der Prozess", "author": "Franz Kafka", "language": "de", **meta,
-            "files": {kind: info(data, ct) for kind, (data, ct) in files.items()}}
-    r = client.post("/api/admin/books", headers=headers, json=body)
-    assert r.status_code == 200, r.text
-    for kind, url in r.json()["uploads"].items():
-        data, ct = files[kind]
-        assert httpx.put(url, content=data, headers={"Content-Type": ct}).status_code == 200
-    return r.json()["id"]
 
 
 def test_book_is_listed_only_after_commit(client, admin_headers, bucket):

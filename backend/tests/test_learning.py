@@ -1,7 +1,5 @@
-from tests.test_stats import TZ, lookup, make_book, session
 
-CARD = {"language": "de", "term": "die Mühe", "meaning": "el esfuerzo", "example": "Sie hatten Mühe.",
-        "state": {"stability": 1.2, "reps": 1}, "due": "2026-10-25T10:00:00Z", "client_updated_at": "2026-10-24T10:00:00Z"}
+from tests.helpers import CARD, TZ, lookup, make_book, session
 
 
 def test_known_words_leave_lists(client, admin_headers, bucket):

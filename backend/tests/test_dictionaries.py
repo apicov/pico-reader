@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app import indexer
 from app.db import get_engine
 from tests.conftest import add_reader, sign_in
-from tests.test_books import info
+from tests.helpers import info
 
 ENTRIES = [("Haus", "das Gebäude, in dem man wohnt"), ("Wolke", "sichtbare Ansammlung von Wassertröpfchen")]
 

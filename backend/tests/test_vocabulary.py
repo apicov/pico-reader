@@ -3,7 +3,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from tests.test_translate import BODY, groq  # noqa: F401 (fixture)
+from tests.helpers import BODY
 
 
 def test_no_vocabulary_yet(client, auth_headers):

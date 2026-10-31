@@ -18,6 +18,8 @@ for var in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"):
 os.environ["R2_BUCKET"] = "test-library"
 
 import boto3
+import httpx
+import numpy as np
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -25,10 +27,12 @@ from fastapi.testclient import TestClient
 from moto.server import ThreadedMotoServer
 from sqlalchemy import text
 
-from app import r2
+from app import llm, r2
 from app.config import get_settings
 from app.db import get_engine
 from app.main import app
+from pico_core import embed
+from tests.helpers import GOOD, PASSAGES, FakeAgentAI, fake_vector, upload
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -52,7 +56,10 @@ def clean_tables(schema):
     with get_engine().begin() as conn:
         conn.execute(text("TRUNCATE categories RESTART IDENTITY CASCADE"))
         _category_seed()(conn)
-        conn.execute(text("TRUNCATE readers, login_codes, books, dictionaries, translations, reading_state, book_index, book_chunks, annotations, conversations, messages, reading_sessions, lookups, reader_settings, known_words, review_cards, chat_actions, shelf, my_shelf, collections, collection_books, notes, drops, computers, projects, llm_usage, book_events, index_jobs, dict_jobs, profiles, reviews, posts, comments, likes, lists CASCADE"))
+        # every table but alembic's own and the categories (seeded again above): a new table is emptied too
+        tables = conn.execute(text("""SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+                                      AND tablename NOT IN ('alembic_version', 'categories')""")).scalars().all()
+        conn.execute(text(f"TRUNCATE {', '.join(tables)} CASCADE"))
 
 
 @pytest.fixture(scope="session")
@@ -117,3 +124,56 @@ def auth_headers(client, sent_codes):
 def admin_headers(client, sent_codes):
     add_reader("boss@example.com", "Boss", is_admin=True)
     return sign_in(client, sent_codes, "boss@example.com")
+
+
+# --- fakes many test modules use: deterministic embeddings, the AI ---
+
+@pytest.fixture
+def agent_ai(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    get_settings.cache_clear()
+    fake = FakeAgentAI()
+    monkeypatch.setattr(llm.httpx, "post", fake.post)
+    yield fake
+    get_settings.cache_clear()
+
+@pytest.fixture(autouse=True)
+def fake_embed(monkeypatch):
+    monkeypatch.setattr(embed, "embed", lambda texts, kind="passage", batch=32: np.vstack([fake_vector(t) for t in texts]))
+
+@pytest.fixture
+def indexed_book(client, admin_headers, bucket):
+    book_id = upload(client, admin_headers, {"pdf": (b"%PDF-1.4 x", "application/pdf")}, title="Efficient ML", language="en")
+    client.post(f"/api/admin/books/{book_id}/commit", headers=admin_headers)
+    r = client.post(f"/api/admin/books/{book_id}/index/start", headers=admin_headers,
+                    json={"format": "reflow", "sha256": "a" * 64, "model": embed.MODEL})
+    assert r.status_code == 200, r.text
+    chunks = [{"seq": i, "location": f"c{i}:0.0000", "progress": i / 3, "heading": h, "text": t,
+               "embedding": fake_vector(t).tolist()} for i, (h, t) in enumerate(PASSAGES)]
+    assert client.post(f"/api/admin/books/{book_id}/index/chunks", headers=admin_headers, json=chunks).json() == {"added": 3}
+    return book_id
+
+@pytest.fixture(autouse=True)
+def fresh_query_cache():
+    from app import search_service as search
+    search._translated.cache_clear()
+
+@pytest.fixture
+def groq(monkeypatch):
+    """A fake Groq: replies in turn with the queued contents (dicts become JSON); records the requests."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    get_settings.cache_clear()
+    calls, replies = [], []
+
+    def post(url, json=None, headers=None, timeout=None):
+        calls.append(json)
+        reply = replies.pop(0) if replies else GOOD
+        if isinstance(reply, httpx.Response):
+            return reply
+        content = reply if isinstance(reply, str) else __import__("json").dumps(reply)
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}], "model": json["model"],
+                                         "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
+
+    monkeypatch.setattr(llm.httpx, "post", post)
+    yield calls, replies
+    get_settings.cache_clear()

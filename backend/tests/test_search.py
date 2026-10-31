@@ -1,44 +1,6 @@
-import hashlib
 
-import numpy as np
-import pytest
 
 from pico_core import embed
-from tests.test_library import upload
-from tests.test_translate import groq  # noqa: F401 (fixture)
-
-PASSAGES = [
-    ("1 Pruning", "Pruning removes the weights with the smallest magnitude from the network."),
-    ("2 Quantization", "Quantization stores each weight as an 8-bit integer instead of a float."),
-    ("3 Distillation", "A small student network learns to imitate the outputs of a large teacher."),
-]
-
-
-def fake_vector(text: str) -> np.ndarray:
-    """Letter trigrams hashed into 384 dimensions: texts sharing words get close vectors."""
-    v = np.zeros(embed.DIMENSIONS)
-    t = text.lower()
-    for i in range(len(t) - 2):
-        v[int(hashlib.md5(t[i:i + 3].encode()).hexdigest(), 16) % embed.DIMENSIONS] += 1
-    return v / (np.linalg.norm(v) or 1)
-
-
-@pytest.fixture(autouse=True)
-def fake_embed(monkeypatch):
-    monkeypatch.setattr(embed, "embed", lambda texts, kind="passage", batch=32: np.vstack([fake_vector(t) for t in texts]))
-
-
-@pytest.fixture
-def indexed_book(client, admin_headers, bucket):
-    book_id = upload(client, admin_headers, {"pdf": (b"%PDF-1.4 x", "application/pdf")}, title="Efficient ML", language="en")
-    client.post(f"/api/admin/books/{book_id}/commit", headers=admin_headers)
-    r = client.post(f"/api/admin/books/{book_id}/index/start", headers=admin_headers,
-                    json={"format": "reflow", "sha256": "a" * 64, "model": embed.MODEL})
-    assert r.status_code == 200, r.text
-    chunks = [{"seq": i, "location": f"c{i}:0.0000", "progress": i / 3, "heading": h, "text": t,
-               "embedding": fake_vector(t).tolist()} for i, (h, t) in enumerate(PASSAGES)]
-    assert client.post(f"/api/admin/books/{book_id}/index/chunks", headers=admin_headers, json=chunks).json() == {"added": 3}
-    return book_id
 
 
 def test_library_reports_the_index(client, admin_headers, indexed_book):
@@ -66,12 +28,6 @@ def test_index_refuses_another_model(client, admin_headers, indexed_book):
     r = client.post(f"/api/admin/books/{indexed_book}/index/start", headers=admin_headers,
                     json={"format": "reflow", "sha256": "c" * 64, "model": "other/model"})
     assert r.status_code == 422
-
-
-@pytest.fixture(autouse=True)
-def fresh_query_cache():
-    from app import search_service as search
-    search._translated.cache_clear()
 
 
 def test_ask_answers_from_sources(client, admin_headers, indexed_book, groq):

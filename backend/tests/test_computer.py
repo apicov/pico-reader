@@ -2,8 +2,7 @@ from sqlalchemy import text
 
 from app import computer_service as computer
 from app.db import get_engine
-from tests.test_chat import ask, call, groq, new, say  # noqa: F401 (fixtures)
-from tests.test_search import fake_embed, fresh_query_cache, indexed_book  # noqa: F401 (fixtures)
+from tests.helpers import ask, call, new, say
 
 SNIPPET = {"kind": "snippet", "title": "List comprehension", "language": "Python",
            "body": "squares = [x * x for x in range(10)]", "meta": {"heading": "2 Lists", "progress": 0.2}}
@@ -70,9 +69,9 @@ def test_notes_from_the_computer_and_the_conflict_check(client, admin_headers, i
     assert client.get(f"/api/notes/{note['id']}", headers=admin_headers).json()["markdown"] == "# Edited"
 
 
-def test_the_agent_sends_to_the_computer_after_confirming(client, admin_headers, indexed_book, groq):
-    groq.steps += [call("send_to_computer", {"title": "Pruning code", "text": "prune(model, 0.5)", "kind": "snippet",
-                                             "language": "python"}), say("Proposed.")]
+def test_the_agent_sends_to_the_computer_after_confirming(client, admin_headers, indexed_book, agent_ai):
+    agent_ai.steps += [call("send_to_computer", {"title": "Pruning code", "text": "prune(model, 0.5)", "kind": "snippet",
+                                                 "language": "python"}), say("Proposed.")]
     cid = new(client, admin_headers)
     action = next(d for n, d in ask(client, admin_headers, cid, "Send the pruning code to my computer") if n == "action")
     assert action["label"] == "Send to your computer: Pruning code" and action["preview"] == "prune(model, 0.5)"
@@ -138,12 +137,12 @@ def test_the_poll_is_small_and_its_stamp_changes_with_any_note_change(client, ad
     assert client.get("/api/computer/poll", headers=admin_headers).json()["projects"] == [{"id": P1, "name": "p", "notes": 0}]
 
 
-def test_the_agent_saves_and_sends_into_a_project(client, admin_headers, indexed_book, groq):
+def test_the_agent_saves_and_sends_into_a_project(client, admin_headers, indexed_book, agent_ai):
     client.put(f"/api/projects/{P1}", headers=admin_headers, json={"name": "rust-book"})
-    groq.steps += [call("send_to_computer", {"title": "Borrowing", "text": "fn main() {}", "kind": "snippet",
-                                             "language": "rust", "project": "rust"}),
-                   call("save_note", {"title": "Lifetimes", "markdown": "## Lifetimes", "project": "Rust-Book"}, "c2"),
-                   call("list_notes", {"project": "nope"}, "c3"), say("Proposed.")]
+    agent_ai.steps += [call("send_to_computer", {"title": "Borrowing", "text": "fn main() {}", "kind": "snippet",
+                                                 "language": "rust", "project": "rust"}),
+                       call("save_note", {"title": "Lifetimes", "markdown": "## Lifetimes", "project": "Rust-Book"}, "c2"),
+                       call("list_notes", {"project": "nope"}, "c3"), say("Proposed.")]
     cid = new(client, admin_headers)
     evs = ask(client, admin_headers, cid, "Send this to my rust project and keep a note there")
     actions = [d for n, d in evs if n == "action"]
@@ -154,7 +153,7 @@ def test_the_agent_saves_and_sends_into_a_project(client, admin_headers, indexed
     assert client.get("/api/drops", headers=admin_headers).json()[0]["project_id"] == P1
     [note] = client.get("/api/notes", headers=admin_headers).json()
     assert note["project"] == "rust-book"
-    listed = [m for m in groq.agent_calls[-1]["messages"] if m["role"] == "tool"][-1]["content"]
+    listed = [m for m in agent_ai.agent_calls[-1]["messages"] if m["role"] == "tool"][-1]["content"]
     assert "No project 'nope'" in listed and "rust-book" in listed
 
 
