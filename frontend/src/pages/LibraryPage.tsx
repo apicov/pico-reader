@@ -17,7 +17,7 @@ import { BookCategoryDialog, CategoryBrowser } from '@/components/categories';
 interface IndexJob { book_id: string; status: 'queued' | 'running' | 'failed'; position?: number; error: string }
 import { Link as RouterLink } from 'react-router-dom';
 import { localPosition } from '@/reader/position';
-import { cachedStats, formatMinutes, getReadingGoal, getStats, type ReadingGoal } from '@/services/stats';
+import { cachedStats, getReadingGoal, getStats, type ReadingGoal } from '@/services/stats';
 import SearchIcon from '@mui/icons-material/Search';
 import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import DownloadDoneIcon from '@mui/icons-material/DownloadDone';
@@ -31,6 +31,9 @@ import type { CachedFile } from '@/services/bookCache';
 import { languageName } from '@/services/languages';
 import type { Book } from '@/services/types';
 import { formatLabel } from '@/reader/formats';
+import { formatMinutes } from '@/utils/time';
+import { foldForSearch } from '@/utils/text';
+import { readerPath } from '@/reader/jump';
 
 
 type LibraryTab = 'mine' | 'reading' | 'all' | 'finished';
@@ -53,7 +56,7 @@ function BookCard({ book, files, online, shelf, mine, collections, badge, job, r
   const available = online || downloaded;
   return (
     <Card sx={{ border: 0, bgcolor: 'transparent', opacity: available ? 1 : 0.45, position: 'relative', overflow: 'visible' }}>
-      <CardActionArea disabled={!available} onClick={() => navigate(`/read/${encodeURIComponent(book.id)}`)} sx={{ p: 0.5, borderRadius: 1 }}>
+      <CardActionArea disabled={!available} onClick={() => navigate(readerPath(book.id))} sx={{ p: 0.5, borderRadius: 1 }}>
         <Box sx={{ position: 'relative' }}>
           <BookCover book={book} src={cover} />
           {badge && (shelf?.status === 'reading' || shelf?.status === 'finished') && (
@@ -158,7 +161,7 @@ function GoalBar() {
 }
 
 function matches(book: Book, q: string): boolean {
-  const hay = `${book.title} ${book.author}`.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const hay = foldForSearch(`${book.title} ${book.author}`);
   return hay.includes(q);
 }
 
@@ -253,7 +256,7 @@ export default function LibraryPage() {
   const showFolders = asFolders && !folder && !query.trim();
 
   const books = useMemo(() => {
-    const q = query.trim().normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    const q = foldForSearch(query.trim());
     const all = (library?.books ?? []).filter((b) => !q || matches(b, q));
     if (current === 'all') return all.filter(inCategory(tree, typeof category === 'number' && !tree.some((c) => c.id === category) ? null : category));
     const order = new Map((current === 'mine' ? mine : shelf.filter((e) => e.status === current)).map((e, i) => [e.book_id, i]));

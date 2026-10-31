@@ -4,10 +4,8 @@
  */
 import Dexie, { type Table } from 'dexie';
 import { createEmptyCard, fsrs, Rating, type Card as FsrsCard, type Grade } from 'ts-fsrs';
-import { api } from '@/services/api';
-import { isOnline } from '@/services/connectivity';
-import { getPref, setPref } from '@/services/prefs';
-import { dropRejected, rejectedForGood } from '@/services/syncQueue';
+import { syncedTable } from '@/services/syncedTable';
+import { createSignal } from '@/utils/signal';
 
 export interface ReviewCard {
   id: string;
@@ -35,13 +33,10 @@ class ReviewDb extends Dexie {
 const db = new ReviewDb();
 const scheduler = fsrs({ enable_fuzz: true });
 const CURSOR = 'review_cursor';
-const listeners = new Set<() => void>();
-const changed = () => listeners.forEach((l) => l());
+const changes = createSignal();
+const changed = () => changes.emit();
 
-export function subscribeReview(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+export const subscribeReview = changes.subscribe;
 
 function toFsrs(state: Record<string, unknown>): FsrsCard {
   if (!state || !('stability' in state)) return createEmptyCard(new Date());
@@ -101,42 +96,7 @@ export async function deleteCardsFor(language: string, term: string): Promise<vo
   for (const c of cards) await put({ ...c, deleted: true });
 }
 
-let syncing: Promise<void> | null = null;
+export const syncReview = syncedTable<ReviewCard>({ table: db.cards, path: '/api/review-cards', listKey: 'cards',
+  cursorKey: CURSOR, what: 'review card', onPulled: changed });
 
-export function syncReview(): Promise<void> {
-  if (!isOnline()) return Promise.resolve();
-  syncing ??= (async () => {
-    try {
-      for (const c of await db.cards.where('dirty').equals(1).toArray()) {
-        const { id, dirty: _, ...body } = c;
-        let saved: ReviewCard;
-        try {
-          saved = await api<ReviewCard>(`/api/review-cards/${encodeURIComponent(id)}`, { method: 'PUT', body });
-        } catch (e) {
-          if (!rejectedForGood(e)) throw e;
-          dropRejected('review card', id, e);
-          await db.cards.update(id, { dirty: 0 }); // kept on this device, not sent again
-          continue;
-        }
-        const now = await db.cards.get(id);
-        if (now && now.client_updated_at === c.client_updated_at) await db.cards.put({ ...saved, dirty: 0 });
-      }
-      const cursor = await getPref<string>(CURSOR);
-      const res = await api<{ cards: ReviewCard[]; cursor: string | null }>(
-        `/api/review-cards${cursor ? `?since=${encodeURIComponent(cursor)}` : ''}`);
-      for (const remote of res.cards) {
-        const local = await db.cards.get(remote.id);
-        if (!local || remote.client_updated_at > local.client_updated_at || (!local.dirty && local.client_updated_at <= remote.client_updated_at)) {
-          await db.cards.put({ ...remote, dirty: 0 });
-        }
-      }
-      if (res.cursor) await setPref(CURSOR, res.cursor);
-      if (res.cards.length) changed();
-    } finally {
-      syncing = null;
-    }
-  })();
-  return syncing;
-}
-
-export { Rating };
+export { Rating }; // the grades, so the review page needn't know ts-fsrs

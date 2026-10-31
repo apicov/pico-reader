@@ -8,8 +8,7 @@ import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { deleteTranslation, localTranslations, subscribeTranslations, syncTranslations, type Translation } from '@/services/translations';
 import { READING_FONT } from '@/theme/readingThemes';
-
-const plain = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+import { foldForSearch } from '@/utils/text';
 
 /** Every translation made, newest first; readable offline (the Dictionary page's second tab). */
 export function TranslationHistory() {
@@ -41,9 +40,9 @@ export function TranslationHistory() {
 
   const titles = useMemo(() => new Map((library?.books ?? []).map((b) => [b.id, b.title])), [library]);
   const books = [...new Set(items.map((t) => t.book_id).filter((b): b is string => !!b))];
-  const q = plain(query.trim());
+  const q = foldForSearch(query.trim());
   const shown = items.filter((t) => (book === 'all' || t.book_id === book)
-    && (!q || plain(`${t.source_text} ${t.translation} ${t.vocabulary.map((v) => v.term).join(' ')}`).includes(q)));
+    && (!q || foldForSearch(`${t.source_text} ${t.translation} ${t.vocabulary.map((v) => v.term).join(' ')}`).includes(q)));
 
   return (
     <Box>

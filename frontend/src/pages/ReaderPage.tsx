@@ -31,7 +31,7 @@ import { deleteAnnotation, saveAnnotation, type Annotation } from '@/services/an
 import { ensureSearchFile } from '@/services/bookCache';
 import { setShelfStatus } from '@/services/shelf';
 import type { BookFormat } from '@/services/types';
-import { wordsIn } from '@/services/words';
+import { wordsIn } from '@/reader/seenWords';
 import { READING_THEMES, readingVars } from '@/theme/readingThemes';
 
 /** A bookmark this close (in progress through the book) to the place is the place's bookmark */

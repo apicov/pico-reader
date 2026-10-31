@@ -17,6 +17,8 @@ import { droppedFiles, groupBooks, guessLanguage, markerCover, nameToMeta, picke
 import { buildReflowBundle } from '@/upload/markdown';
 import { epubMeta, pdfMeta } from '@/upload/metadata';
 import { uploadBook, type Kind } from '@/upload/upload';
+import { foldForSearch } from '@/utils/text';
+import { readerPath } from '@/reader/jump';
 
 interface Item {
   source: BookSource;
@@ -42,7 +44,7 @@ const ACTIONS: Record<string, string> = {
   indexed: 'indexed', index_failed: 'failed to index',
 };
 
-const plain = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const plain = (s: string) => foldForSearch(s).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /** What a book's file says about it (title, author, language, cover), read before uploading. */
 async function readMeta(source: BookSource): Promise<Pick<Item, 'title' | 'author' | 'language' | 'cover' | 'note'>> {
@@ -202,10 +204,10 @@ export default function UploadPage() {
         </Stack>
       )}
       {items.map((item) => (
-        <BookCard key={item.source.key} item={item} tree={tree} mine={mine} locked={sending}
+        <UploadItemCard key={item.source.key} item={item} tree={tree} mine={mine} locked={sending}
           onChange={(patch) => change(item.source.key, patch)}
           onRemove={() => setItems((l) => l.filter((i) => i.source.key !== item.source.key))}
-          onOpen={() => item.bookId && navigate(`/read/${encodeURIComponent(item.bookId)}`)} />
+          onOpen={() => item.bookId && navigate(readerPath(item.bookId))} />
       ))}
 
       {history.length > 0 && (
@@ -225,7 +227,7 @@ export default function UploadPage() {
   );
 }
 
-function BookCard({ item, tree, mine, locked, onChange, onRemove, onOpen }: {
+function UploadItemCard({ item, tree, mine, locked, onChange, onRemove, onOpen }: {
   item: Item; tree: Category[]; mine: { id: string; title: string }[]; locked: boolean;
   onChange: (patch: Partial<Item>) => void; onRemove: () => void; onOpen: () => void;
 }) {

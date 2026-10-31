@@ -8,6 +8,7 @@ import { fileBlob } from '@/services/bookCache';
 import type { Book } from '@/services/types';
 import { float16ToFloat32 } from './float16';
 import { embedTexts } from './localModel';
+import { foldForSearch } from '@/utils/text';
 
 
 export interface LocalPassage {
@@ -47,7 +48,7 @@ export async function loadBookIndex(book: Book): Promise<BookIndex> {
   return index;
 }
 
-const words = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().match(/\p{L}{3,}/gu) ?? [];
+const words = (s: string) => foldForSearch(s).match(/\p{L}{3,}/gu) ?? [];
 
 /** Best passages in the given (downloaded, indexed) books. `wordsOnly`: without the model, by words alone. */
 export async function searchOffline(query: string, books: Book[], wordsOnly = false, limit = 10): Promise<LocalPassage[]> {

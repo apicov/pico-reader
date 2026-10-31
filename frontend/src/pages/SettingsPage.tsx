@@ -12,7 +12,7 @@ import { OfflineSearchSettings } from '@/components/OfflineSearchSettings';
 import { ComputerSettings } from '@/components/ComputerSettings';
 import { useSettings } from '@/contexts/SettingsContext';
 import { LANGUAGES } from '@/services/languages';
-import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
+import { READING_FONT, READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
 import { NightDim } from '@/reader/ReadingSettings';
 
 export default function SettingsPage() {
@@ -45,7 +45,7 @@ export default function SettingsPage() {
               <Box key={name} component="button" onClick={() => update({ theme: name })} aria-pressed={selected}
                 sx={{ width: 72, height: 72, borderRadius: 2, cursor: 'pointer', bgcolor: t.swatch?.background ?? t.background, color: t.swatch?.text ?? t.text,
                   border: 2, borderColor: selected ? 'primary.main' : t.divider, fontFamily: 'inherit', fontSize: 13 }}>
-                <Box sx={{ fontSize: 22, fontFamily: 'Literata, serif' }}>Aa</Box>{t.label}
+                <Box sx={{ fontSize: 22, fontFamily: READING_FONT }}>Aa</Box>{t.label}
               </Box>
             );
           })}

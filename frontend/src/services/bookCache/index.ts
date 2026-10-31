@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { api } from '@/services/api';
 import { getPref, setPref } from '@/services/prefs';
 import type { Book, BookFormat, FileRef } from '@/services/types';
+import { createSignal } from '@/utils/signal';
 import { nativeStore } from './native';
 import { webStore } from './web';
 
@@ -37,7 +38,7 @@ const INDEX_KEY = 'book_cache_index';
 export const store: FileStore = Capacitor.isNativePlatform() ? nativeStore : webStore;
 
 let index: Record<string, CachedFile> | null = null;
-const listeners = new Set<() => void>();
+const changes = createSignal();
 
 const fileName = (bookId: string, kind: FileKind) => `${bookId}/${kind}`;
 
@@ -48,14 +49,11 @@ async function loadIndex(): Promise<Record<string, CachedFile>> {
 
 async function saveIndex(): Promise<void> {
   await setPref(INDEX_KEY, index);
-  listeners.forEach((l) => l());
+  changes.emit();
 }
 
 /** Re-render on cache changes (downloads, removals) */
-export function subscribeCache(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
+export const subscribeCache = changes.subscribe;
 
 export async function cachedFiles(): Promise<CachedFile[]> {
   return Object.values(await loadIndex());

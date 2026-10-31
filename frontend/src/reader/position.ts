@@ -4,7 +4,7 @@
  */
 import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
-import { getPref, setPref } from '@/services/prefs';
+import { getPref, setPref, updatePref } from '@/services/prefs';
 
 export interface Position {
   book_id: string;
@@ -41,17 +41,29 @@ export async function loadPosition(bookId: string): Promise<Position | null> {
 export async function savePosition(pos: Omit<Position, 'updated_at'>): Promise<void> {
   const full: Position = { ...pos, updated_at: new Date().toISOString() };
   await setPref(key(pos.book_id), full);
-  const pending = (await getPref<Record<string, Position>>(PENDING)) ?? {};
-  pending[pos.book_id] = full;
-  await setPref(PENDING, pending);
+  await updatePref<Record<string, Position>>(PENDING, (pending) => ({ ...pending, [pos.book_id]: full }));
 }
 
-/** Send positions saved while offline (or not yet sent). */
-export async function flushPositions(): Promise<void> {
-  const pending = (await getPref<Record<string, Position>>(PENDING)) ?? {};
-  for (const [bookId, pos] of Object.entries(pending)) {
-    await api('/api/progress', { method: 'PUT', body: pos });
-    delete pending[bookId];
-    await setPref(PENDING, pending);
-  }
+let flushing: Promise<void> | null = null;
+
+/** Send positions saved while offline (or not yet sent), one flush at a time. A book's place saved again while its
+ *  last one was on the way stays queued, and goes next. */
+export function flushPositions(): Promise<void> {
+  flushing ??= (async () => {
+    try {
+      for (;;) {
+        const [next] = Object.values((await getPref<Record<string, Position>>(PENDING)) ?? {});
+        if (!next) return;
+        await api('/api/progress', { method: 'PUT', body: next });
+        await updatePref<Record<string, Position>>(PENDING, (pending) => {
+          const rest = { ...pending };
+          if (JSON.stringify(rest[next.book_id]) === JSON.stringify(next)) delete rest[next.book_id];
+          return rest;
+        });
+      }
+    } finally {
+      flushing = null;
+    }
+  })();
+  return flushing;
 }

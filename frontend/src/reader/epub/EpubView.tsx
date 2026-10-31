@@ -5,7 +5,7 @@ import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
 import { Overlayer } from 'foliate-js/overlayer.js';
 import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
-import { seenWordRanges } from '@/services/words';
+import { seenWordRanges } from '../seenWords';
 import { highlightColor } from '../highlightColors';
 import { tappedImage } from '../images';
 import { LinkBackButton } from '../LinkBackButton';

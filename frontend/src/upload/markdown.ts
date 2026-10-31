@@ -28,7 +28,7 @@ const ALLOWED = new Set(('a abbr b big blockquote br caption center cite code co
   + 'figcaption figure font h1 h2 h3 h4 h5 h6 hr i img ins kbd li mark math mi mn mo mrow msub msup mfrac ol p picture '
   + 'pre q s samp section small source span strike strong sub summary sup table tbody td tfoot th thead tr tt u ul var').split(' '));
 
-export function tameHtml(html: string): string {
+function tameHtml(html: string): string {
   return html.replace(/<(\/?)([a-zA-Z][\w:-]*)/g, (whole, slash: string, tag: string) =>
     (ALLOWED.has(tag.toLowerCase()) ? whole : `&lt;${slash}${tag}`));
 }

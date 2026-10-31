@@ -9,6 +9,7 @@ import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined';
 import { DictResults } from '@/dict/DictResults';
 import type { TextSelection } from './selection';
 import { TranslationCard } from './TranslationCard';
+import { READING_FONT } from '@/theme/readingThemes';
 
 const isWord = (text: string) => !/\s/.test(text) && text.length <= 48;
 
@@ -56,7 +57,7 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
             <ArrowBackIcon sx={{ fontSize: { xs: 22, sm: 26 } }} />
           </IconButton>
         )}
-        <Typography sx={{ flex: 1, pl: term || sentence ? 0 : 1, fontFamily: 'Literata, serif', fontSize: { xs: 16, sm: 18 },
+        <Typography sx={{ flex: 1, pl: term || sentence ? 0 : 1, fontFamily: READING_FONT, fontSize: { xs: 16, sm: 18 },
           fontWeight: showDict ? 600 : 400 }} noWrap>
           {showDict ?? `“${passage}”`}
         </Typography>

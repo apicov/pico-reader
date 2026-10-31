@@ -26,14 +26,14 @@ import { downloadExport } from '@/services/download';
 import BuildCircleOutlinedIcon from '@mui/icons-material/BuildCircleOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
-import { READING_FONT } from '@/theme/readingThemes';
+import { READING_FONT, UI_FONT } from '@/theme/readingThemes';
 import { OfflineSearchPanel } from '@/search/OfflineSearchPanel';
+import { markdownSnippet } from '@/utils/text';
+import { readerPath } from '@/reader/jump';
 
 const SIDEBAR = 300;
 
 /** The last message without Markdown marks and citations, for the list */
-const plainSnippet = (s = '') => s.replace(/\[\d+\]/g, '').replace(/[*_#>`]+/g, '').replace(/\s+/g, ' ').trim();
-
 /** The conversation list: search, new, pick, rename, delete. */
 function ConversationList({ current, onPick, onNew, refreshKey, online }: {
   current: string | null; onPick: (id: string) => void; onNew: () => void; refreshKey: number; online: boolean;
@@ -75,7 +75,7 @@ function ConversationList({ current, onPick, onNew, refreshKey, online }: {
           <ListItemButton key={c.id} selected={c.id === current} onClick={() => onPick(c.id)}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ el: e.currentTarget, c }); }}
             sx={{ pr: 5, position: 'relative' }}>
-            <ListItemText primary={c.title || 'New chat'} secondary={plainSnippet(c.snippet)}
+            <ListItemText primary={c.title || 'New chat'} secondary={markdownSnippet(c.snippet)}
               slotProps={{ primary: { noWrap: true }, secondary: { noWrap: true } }} />
             <IconButton size="small" aria-label="Chat actions" disabled={!online}
               sx={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)' }}
@@ -208,11 +208,7 @@ export default function AskPage() {
   const openLink = (l: ChatLink) => {
     if (l.kind === 'download' && l.path) { void downloadExport(l.path, l.filename ?? 'download').catch((e) => setError((e as Error).message)); return; }
     if (!l.book_id) return;
-    const q = new URLSearchParams();
-    if (l.format) q.set('format', l.format);
-    if (l.location) q.set('location', l.location);
-    if (l.progress !== undefined) q.set('progress', String(l.progress));
-    navigate(`/read/${encodeURIComponent(l.book_id)}${q.toString() ? `?${q}` : ''}`);
+    navigate(readerPath(l.book_id, l));
   };
 
   const decide = async (messageId: number, actionId: string, approve: boolean) => {
@@ -227,8 +223,7 @@ export default function AskPage() {
     }
   };
 
-  const openPassage = (p: Passage) => navigate(`/read/${encodeURIComponent(p.book_id)}?${new URLSearchParams({
-    format: p.format, location: p.location, progress: String(p.progress) })}`);
+  const openPassage = (p: Passage) => navigate(readerPath(p.book_id, p));
 
   const activeScope = conversation ? conversation.book_ids : scope;
   const scopeLabel = activeScope?.length
@@ -379,7 +374,7 @@ export default function AskPage() {
                       </Stack>
                     ) : null}
                     {m.extras?.actions?.map((a) => (
-                      <Card key={a.id} sx={{ mt: 1.5, fontFamily: 'Inter, sans-serif' }}>
+                      <Card key={a.id} sx={{ mt: 1.5, fontFamily: UI_FONT }}>
                         <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                           <Typography variant="body2" sx={{ mb: a.status === 'pending' ? 1 : 0 }}>{a.label}</Typography>
                           {a.preview && <NotePreview markdown={a.preview} onCite={(n) => m.sources[n - 1] && openPassage(m.sources[n - 1])} />}

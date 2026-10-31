@@ -16,6 +16,7 @@ import { bookCommunity, deleteReview, saveReview, setHidden, type Review } from 
 import type { Book } from '@/services/types';
 import { BookNotes } from '@/pages/NotesPage';
 import { loadCategories, pretty, type Category } from '@/services/categories';
+import { readerPath } from '@/reader/jump';
 
 function Cover({ book }: { book: Book }) {
   const online = useOnlineStatus();
@@ -140,7 +141,7 @@ function BookView({ bookId }: { bookId: string }) {
               : 'No reviews yet'}
           </Typography>
           {data.book.available && (
-            <Button variant="outlined" size="small" sx={{ mt: 1 }} onClick={() => navigate(`/read/${encodeURIComponent(bookId)}`)}>Open</Button>
+            <Button variant="outlined" size="small" sx={{ mt: 1 }} onClick={() => navigate(readerPath(bookId))}>Open</Button>
           )}
         </Box>
       </Stack>

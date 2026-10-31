@@ -4,6 +4,7 @@
  */
 import Dexie, { type Table } from 'dexie';
 import { api } from '@/services/api';
+import { createSignal } from '@/utils/signal';
 
 export interface Translation {
   id: number;
@@ -31,13 +32,10 @@ class TranslationsDb extends Dexie {
 }
 
 const db = new TranslationsDb();
-const listeners = new Set<() => void>();
-const changed = () => listeners.forEach((l) => l());
+const changes = createSignal();
+const changed = () => changes.emit();
 
-export function subscribeTranslations(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+export const subscribeTranslations = changes.subscribe;
 
 export async function translate(req: {
   text: string; context: string; source_lang: string; target_lang: string; book_id: string; location: string;

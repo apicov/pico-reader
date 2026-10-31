@@ -16,12 +16,7 @@ export async function downloadExport(path: string, filename: string): Promise<vo
   }
   const res = await authFetch(path);
   if (!res.ok) throw await errorFrom(res, 'Download failed');
-  const url = URL.createObjectURL(await res.blob());
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  saveInBrowser(await res.blob(), filename);
 }
 
 /** Text made on the device (a note as .md): saved by the browser, or handed to Android's share sheet. */
@@ -31,10 +26,15 @@ export async function exportText(text: string, filename: string, type = 'text/ma
     await Share.share({ title: filename, files: [uri] });
     return;
   }
-  const url = URL.createObjectURL(new Blob([text], { type }));
+  saveInBrowser(new Blob([text], { type }), filename);
+}
+
+/** The browser saves the file (its download) */
+function saveInBrowser(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000); // after the browser has taken it
 }

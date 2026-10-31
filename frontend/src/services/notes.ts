@@ -7,6 +7,7 @@ import Dexie, { type Table } from 'dexie';
 import { api, ApiError } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import type { Passage } from '@/services/chat';
+import { createSignal } from '@/utils/signal';
 
 export interface Note {
   id: string;
@@ -30,14 +31,11 @@ class NotesDb extends Dexie {
 }
 
 const db = new NotesDb();
-const listeners = new Set<() => void>();
+const changes = createSignal();
 
-export function subscribeNotes(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+export const subscribeNotes = changes.subscribe;
 
-const changed = () => listeners.forEach((l) => l());
+const changed = () => changes.emit();
 
 export async function cachedNotes(bookId?: string): Promise<Note[]> {
   const all = await db.notes.orderBy('updated_at').reverse().toArray();

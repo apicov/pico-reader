@@ -1,6 +1,7 @@
 /** Statistics and the server-side settings (reading goal), with the last answers kept for offline use. */
 import { api } from '@/services/api';
 import { getPref, setPref } from '@/services/prefs';
+import { deviceTimeZone } from '@/utils/time';
 
 export interface ReadingGoal {
   enabled: boolean;
@@ -28,7 +29,7 @@ export interface Stats {
   translations: { start: string; count: number; avg_chars: number }[];
 }
 
-const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+const TZ = deviceTimeZone();
 
 export async function getStats(period: string, bookId?: string): Promise<Stats> {
   const q = new URLSearchParams({ period, tz: TZ, ...(bookId ? { book_id: bookId } : {}) });
@@ -53,11 +54,6 @@ export async function saveReadingGoal(goal: ReadingGoal): Promise<ReadingGoal> {
   const s = await api<{ reading_goal: ReadingGoal }>('/api/settings', { method: 'PUT', body: { reading_goal: goal } });
   await setPref('reading_goal', s.reading_goal);
   return s.reading_goal;
-}
-
-export function formatMinutes(seconds: number): string {
-  const m = Math.round(seconds / 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
 }
 
 export interface Usage {

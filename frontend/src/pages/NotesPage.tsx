@@ -15,15 +15,12 @@ import { cachedNotes, changeNote, createNote, deleteNote, getNote, loadNotes, No
 import { getPref, setPref } from '@/services/prefs';
 import { cachedProjects, loadProjects, type Project } from '@/services/projects';
 import { READING_FONT } from '@/theme/readingThemes';
+import { markdownSnippet } from '@/utils/text';
+import { readerPath } from '@/reader/jump';
 
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 /** The first words of a note, without Markdown marks or diagrams */
-function snippet(md: string): string {
-  return md.replace(/```[\s\S]*?```/g, ' ').replace(/^\s*[-*+]\s+/gm, ' ').replace(/[#*_>`|]+/g, ' ')
-    .replace(/\s?\[\d+\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 160);
-}
-
 /** The reader's notes, or those about one book; read offline from the device's copy. */
 function useNotes(bookId?: string): Note[] | null {
   const online = useOnlineStatus();
@@ -48,7 +45,7 @@ function NoteCards({ notes, showBook }: { notes: Note[]; showBook: boolean }) {
               <Typography variant="caption" color="text.secondary" component="div">
                 {showBook && n.project ? `${n.project} · ` : ''}{showBook && n.book_title ? `${n.book_title} · ` : ''}{day(n.updated_at)}
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }} noWrap>{snippet(n.markdown)}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }} noWrap>{markdownSnippet(n.markdown)}</Typography>
             </CardContent>
           </CardActionArea>
         </Card>
@@ -222,8 +219,7 @@ export function NotePage() {
     return () => clearInterval(timer);
   }, [online, draft, noteId, shownVersion]);
 
-  const openPassage = (p: Passage) => navigate(`/read/${encodeURIComponent(p.book_id)}?${new URLSearchParams({
-    format: p.format, location: p.location, progress: String(p.progress) })}`);
+  const openPassage = (p: Passage) => navigate(readerPath(p.book_id, p));
 
   const save = async (overwrite = false) => {
     if (!note || !draft) return;

@@ -13,7 +13,7 @@ import { chapterPlace, fractionDown, progressAt } from '../locations';
 import type { ChapterHighlight } from '../highlightText';
 import type { ViewedImage } from '@/components/ImageViewer';
 import { useThrottledScroll } from '../useThrottledScroll';
-import { markSeenWords } from '@/services/words';
+import { markSeenWords } from '../seenWords';
 import { scopeCss } from './scopeCss';
 
 const REPORT_EVERY_MS = 500;

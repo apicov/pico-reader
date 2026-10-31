@@ -3,8 +3,8 @@
  * Space opera. Kept on the device for offline browsing. Books carry a main and an optional second category.
  */
 import { api } from '@/services/api';
-import { isOnline } from '@/services/connectivity';
-import { getPref, setPref } from '@/services/prefs';
+import { fetchCached } from '@/services/cachedFetch';
+import { getPref } from '@/services/prefs';
 import type { Book } from '@/services/types';
 
 export interface Category {
@@ -25,16 +25,7 @@ export async function cachedCategories(): Promise<Category[]> {
   return (await getPref<Category[]>(KEY)) ?? [];
 }
 
-export async function loadCategories(): Promise<Category[]> {
-  if (!isOnline()) return cachedCategories();
-  try {
-    const tree = await api<Category[]>('/api/categories');
-    await setPref(KEY, tree);
-    return tree;
-  } catch {
-    return cachedCategories();
-  }
-}
+export const loadCategories = () => fetchCached<Category[]>('/api/categories', KEY, []);
 
 /** Shown with › between levels */
 export const pretty = (path: string) => path.replaceAll(' > ', ' › ');

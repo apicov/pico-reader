@@ -9,6 +9,7 @@ import { getPref, setPref } from '@/services/prefs';
 import type { Dictionary } from '@/services/types';
 import { nativeDictStore } from './sqliteStore';
 import { WEB_STORE_VERSION, webDictStore } from './webStore';
+import { createSignal } from '@/utils/signal';
 
 export interface DictEntry {
   headword: string;
@@ -44,11 +45,8 @@ export const backend: DictBackend = Capacitor.isNativePlatform() ? nativeDictSto
 /** The package this platform installs */
 export const PACKAGE: 'sqlite' | 'jsonl' = Capacitor.isNativePlatform() ? 'sqlite' : 'jsonl';
 
-const listeners = new Set<() => void>();
-export function subscribeDicts(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+const changes = createSignal();
+export const subscribeDicts = changes.subscribe;
 
 export async function installedDicts(): Promise<Record<string, InstalledDict>> {
   return (await getPref<Record<string, InstalledDict>>(KEY)) ?? {};
@@ -61,7 +59,7 @@ export function isCurrent(d: InstalledDict): boolean {
 
 async function saveInstalled(all: Record<string, InstalledDict>): Promise<void> {
   await setPref(KEY, all);
-  listeners.forEach((l) => l());
+  changes.emit();
 }
 
 export async function installDict(dict: Dictionary, onProgress: (fraction: number) => void): Promise<void> {

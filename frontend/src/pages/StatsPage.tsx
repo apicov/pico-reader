@@ -5,8 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart, DataTable, GoalRing, Heatmap, LineChart } from '@/components/charts';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { languageName } from '@/services/languages';
-import { cachedStats, cachedUsage, formatMinutes, getStats, getUsage, type Stats, type Usage } from '@/services/stats';
+import { cachedStats, cachedUsage, getStats, getUsage, type Stats, type Usage } from '@/services/stats';
 import { READING_FONT } from '@/theme/readingThemes';
+import { formatMinutes } from '@/utils/time';
+import { readerPath } from '@/reader/jump';
 
 type Period = 'week' | 'month' | 'year' | 'all';
 
@@ -168,7 +170,7 @@ export default function StatsPage() {
         {stats.books.length === 0 && <Typography variant="body2" color="text.secondary">No reading in this period yet.</Typography>}
         <Stack spacing={1.5}>
           {stats.books.map((b) => (
-            <Box key={b.book_id} sx={{ cursor: 'pointer' }} onClick={() => navigate(`/read/${encodeURIComponent(b.book_id)}`)}>
+            <Box key={b.book_id} sx={{ cursor: 'pointer' }} onClick={() => navigate(readerPath(b.book_id))}>
               <Stack direction="row" justifyContent="space-between" sx={{ gap: 1 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{b.title}</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ flex: 'none' }}>{formatMinutes(b.seconds)}</Typography>

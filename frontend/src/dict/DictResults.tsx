@@ -17,6 +17,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import { dictImages, lookUp, preferredDict, setPreferredDict, type Lookup } from './lookup';
 import './dict.css';
+import { READING_FONT } from '@/theme/readingThemes';
 
 /** A definition's HTML, sanitized; images from the dictionary's res zip; bword:// links look words up. */
 function Definition({ html, dictId, onWord }: { html: string; dictId: string; onWord: (w: string) => void }) {
@@ -154,7 +155,7 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
         {d === 'failed' && <Typography variant="body2" color="text.secondary">The AI couldn't define it right now.</Typography>}
         {typeof d === 'object' && (
           <>
-            <Typography sx={{ fontWeight: 600, fontFamily: 'Literata, serif' }}>
+            <Typography sx={{ fontWeight: 600, fontFamily: READING_FONT }}>
               {d.lemma}{d.part_of_speech ? <Typography component="span" variant="body2" color="text.secondary"> · {d.part_of_speech}</Typography> : null}
             </Typography>
             <Typography className="dict-def" lang={answerIn || undefined}>{d.meaning}</Typography>
@@ -203,7 +204,7 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
           </Stack>
           {entries.slice(0, 6).map((e, i) => (
             <Box key={i} sx={{ mb: 1.5 }}>
-              <Typography sx={{ fontWeight: 600, fontFamily: 'Literata, serif' }}>{e.headword}</Typography>
+              <Typography sx={{ fontWeight: 600, fontFamily: READING_FONT }}>{e.headword}</Typography>
               <Definition html={e.def} dictId={dict.id} onWord={setCurrent} />
             </Box>
           ))}

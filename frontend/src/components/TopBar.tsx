@@ -6,6 +6,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { readingNow } from '@/reader/readingNow';
 import { READING_FONT } from '@/theme/readingThemes';
 import { ToolLinks } from './ToolLinks';
+import { readerPath } from '@/reader/jump';
 
 /** The app's bar, the same at the top of every page (Library and the tools); a page's own bar goes under it.
  *  `bookId`: in the book (a chat started from it asks about it). On the other pages, the open book is one tap away. */
@@ -27,7 +28,7 @@ export function TopBar({ bookId }: { bookId?: string }) {
       )}
       {open && (
         <Tooltip title={`Back to the book: ${open.title}`}>
-          <IconButton component={RouterLink} to={`/read/${encodeURIComponent(open.id)}`} aria-label="Back to the book"
+          <IconButton component={RouterLink} to={readerPath(open.id)} aria-label="Back to the book"
             color="primary">
             <MenuBookOutlinedIcon />
           </IconButton>

@@ -5,6 +5,7 @@
 import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import { getPref, setPref } from '@/services/prefs';
+import { createSignal } from '@/utils/signal';
 
 export interface DictPrefs {
   disabled: string[];
@@ -17,12 +18,9 @@ const DIRTY = 'dict_prefs_dirty';
 const OLD_PREFERRED = 'dict_preferred'; // before: the ★ per language, on one device only
 /** A new one each time: the result is changed in place (`prefs.order[lang] = …`) */
 const empty = (): DictPrefs => ({ disabled: [], order: {} });
-const listeners = new Set<() => void>();
+const changes = createSignal();
 
-export function subscribeDictPrefs(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+export const subscribeDictPrefs = changes.subscribe;
 
 export async function dictPrefs(): Promise<DictPrefs> {
   const prefs = (await getPref<DictPrefs>(KEY)) ?? empty();
@@ -46,7 +44,7 @@ async function push(): Promise<void> {
 export async function saveDictPrefs(prefs: DictPrefs): Promise<void> {
   await setPref(KEY, prefs);
   await setPref(DIRTY, true);
-  listeners.forEach((l) => l());
+  changes.emit();
   await push().catch(() => undefined);
 }
 
@@ -61,7 +59,7 @@ export async function syncDictPrefs(): Promise<DictPrefs> {
     }
     const remote = (await api<{ dictionaries?: DictPrefs }>('/api/settings')).dictionaries ?? empty();
     await setPref(KEY, remote);
-    if (JSON.stringify(remote) !== JSON.stringify(local)) listeners.forEach((l) => l());
+    if (JSON.stringify(remote) !== JSON.stringify(local)) changes.emit();
     return remote;
   } catch {
     return local;

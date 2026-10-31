@@ -6,6 +6,7 @@ import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
 import { getPref, setPref, updatePref } from '@/services/prefs';
 import { dropRejected, rejectedForGood } from '@/services/syncQueue';
+import { createSignal } from '@/utils/signal';
 
 export type ShelfStatus = 'reading' | 'finished' | 'removed';
 
@@ -40,12 +41,9 @@ type CollectionOp =
   | { op: 'save'; id: string; name: string; position: number }
   | { op: 'delete'; id: string }
   | { op: 'add' | 'remove'; id: string; book_id: string };
-const listeners = new Set<() => void>();
+const changes = createSignal();
 
-export function subscribeShelf(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+export const subscribeShelf = changes.subscribe;
 
 export async function cachedShelf(): Promise<ShelfEntry[]> {
   return (await getPref<ShelfEntry[]>(KEY)) ?? [];
@@ -135,7 +133,7 @@ export async function setShelfStatus(bookId: string, status: ShelfStatus, onlyIf
   if (entry) entry.status = status;
   else shelf.unshift({ book_id: bookId, status, progress: 0, last_read: now });
   await setPref(KEY, shelf);
-  listeners.forEach((l) => l());
+  changes.emit();
   await updatePref<Record<string, StatusChange>>(PENDING, (pending) => ({ ...pending, [bookId]: { status, only_if_new: onlyIfNew } }));
   if (isOnline()) void flush().catch(() => undefined);
 }
@@ -165,7 +163,7 @@ export async function setOnMyShelf(bookId: string, on: boolean): Promise<void> {
     await setPref(COLLECTIONS, (await cachedCollections()).map((c) => ({ ...c, book_ids: c.book_ids.filter((b) => b !== bookId) })));
     await updatePref<CollectionOp[]>(COLLECTIONS_PENDING, (ops) => (ops ?? []).filter((o) => !(o.op === 'add' && o.book_id === bookId)));
   }
-  listeners.forEach((l) => l());
+  changes.emit();
   await updatePref<Record<string, boolean>>(MINE_PENDING, (pending) => ({ ...pending, [bookId]: on }));
   if (isOnline()) void flush().catch(() => undefined);
 }
@@ -190,7 +188,7 @@ export async function loadCollections(): Promise<Collection[]> {
 async function changeCollections(change: (cs: Collection[]) => Collection[], op: CollectionOp): Promise<void> {
   await setPref(COLLECTIONS, change(await cachedCollections()).sort((a, b) => a.position - b.position));
   await updatePref<CollectionOp[]>(COLLECTIONS_PENDING, (ops) => [...(ops ?? []), op]);
-  listeners.forEach((l) => l());
+  changes.emit();
   if (isOnline()) void flush().catch(() => undefined);
 }
 

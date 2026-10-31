@@ -1,6 +1,6 @@
 /** The pieces community pages are made of: who wrote it, likes, scores, quotes, spoilers, a Markdown editor. */
 import { useState, type ReactNode } from 'react';
-import { Alert, Avatar, Box, Button, Card, CardActionArea, Chip, IconButton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { Alert, Avatar, Box, Button, Card, CardActionArea, Chip, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -9,8 +9,9 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { Markdown } from '@/components/Markdown';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { ago, avatarSrc, quoteLink, setLike, type Author, type BookStub, type LikeKind, type PostSummary, type Quote } from '@/services/community';
+import { avatarSrc, quoteLink, setLike, type Author, type BookStub, type LikeKind, type PostSummary, type Quote } from '@/services/community';
 import { READING_FONT } from '@/theme/readingThemes';
+import { ago } from '@/utils/time';
 
 export function MemberAvatar({ author, size = 32 }: { author: Author; size?: number }) {
   return (
@@ -188,10 +189,4 @@ export function NeedsConnection({ children }: { children: ReactNode }) {
 export function Loading({ error, retry }: { error?: string; retry?: () => void }) {
   if (error) return <Alert severity="error" action={retry && <Button color="inherit" onClick={retry}>Retry</Button>}>{error}</Alert>;
   return <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading…</Typography>;
-}
-
-export function IconAction({ label, onClick, children, color }: {
-  label: string; onClick: () => void; children: ReactNode; color?: 'error' | 'inherit';
-}) {
-  return <IconButton size="small" aria-label={label} title={label} onClick={onClick} color={color}>{children}</IconButton>;
 }

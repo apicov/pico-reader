@@ -3,6 +3,7 @@
  * top lists, shared by everyone signed in. Online only: there's nothing to discuss without a connection.
  */
 import { api, apiUrl } from '@/services/api';
+import { readerPath } from '@/reader/jump';
 
 export interface Author {
   handle: string;
@@ -195,20 +196,7 @@ export const setHidden = (kind: HideKind, id: string, hidden: boolean) =>
 
 /** The jump into the reader that search results use (ReaderPage reads these parameters once). */
 export const quoteLink = (q: { book: BookStub; format: string; location: string; progress: number }) =>
-  `/read/${enc(q.book.id)}?${new URLSearchParams({ format: q.format, location: q.location, progress: String(q.progress) })}`;
-
-/** "3 min ago", "yesterday", "12 Oct" */
-export function ago(iso: string, now = Date.now()): string {
-  const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
-  if (s < 2 * 86400) return 'yesterday';
-  if (s < 7 * 86400) return `${Math.floor(s / 86400)} days ago`;
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short',
-    year: d.getFullYear() === new Date(now).getFullYear() ? undefined : 'numeric' });
-}
+  readerPath(q.book.id, q);
 
 /** A square JPEG avatar (256 px, center crop) from a picked image, as base64 for saveAvatar. */
 export async function avatarFromFile(file: File, size = 256): Promise<string> {

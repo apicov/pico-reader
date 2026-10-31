@@ -3,10 +3,8 @@
  * The newest edit of an annotation wins on the server; deleting leaves a tombstone so other devices learn of it.
  */
 import Dexie, { type Table } from 'dexie';
-import { api } from '@/services/api';
-import { isOnline } from '@/services/connectivity';
-import { getPref, setPref } from '@/services/prefs';
-import { dropRejected, rejectedForGood } from '@/services/syncQueue';
+import { syncedTable } from '@/services/syncedTable';
+import { createSignal } from '@/utils/signal';
 
 export interface Annotation {
   id: string;
@@ -20,7 +18,7 @@ export interface Annotation {
   color: string;
   deleted: boolean;
   client_updated_at: string;
-  dirty?: 0 | 1; // changed here, not yet on the server
+  dirty?: 0 | 1; // changed here, not yet on the server (syncedTable)
 }
 
 class AnnotationsDb extends Dexie {
@@ -36,13 +34,10 @@ const MAX_TEXT = 5000; // what the server takes (routes/annotations.py)
 const capped = <T extends { text?: string; note?: string }>(a: T): T => ({ ...a,
   ...(a.text !== undefined && { text: a.text.slice(0, MAX_TEXT) }), ...(a.note !== undefined && { note: a.note.slice(0, MAX_TEXT) }) });
 const CURSOR = 'annotations_cursor';
-const listeners = new Set<() => void>();
-const changed = () => listeners.forEach((l) => l());
+const changes = createSignal();
+const changed = () => changes.emit();
 
-export function subscribeAnnotations(l: () => void): () => void {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-}
+export const subscribeAnnotations = changes.subscribe;
 
 export async function annotationsFor(bookId: string): Promise<Annotation[]> {
   return (await db.items.where('book_id').equals(bookId).toArray())
@@ -69,42 +64,6 @@ export async function updateAnnotation(id: string, patch: Partial<Pick<Annotatio
 
 export const deleteAnnotation = (id: string) => updateAnnotation(id, { deleted: true });
 
-let syncing: Promise<void> | null = null;
-
 /** Push local changes, then pull the others' (one sync at a time). */
-export function syncAnnotations(): Promise<void> {
-  if (!isOnline()) return Promise.resolve();
-  syncing ??= (async () => {
-    try {
-      for (const a of await db.items.where('dirty').equals(1).toArray()) {
-        const { id, dirty: _, ...body } = a;
-        let saved: Annotation;
-        try {
-          saved = await api<Annotation>(`/api/annotations/${encodeURIComponent(id)}`, { method: 'PUT', body });
-        } catch (e) {
-          if (!rejectedForGood(e)) throw e;
-          dropRejected('highlight', id, e);
-          await db.items.update(id, { dirty: 0 }); // kept on this device, not sent again
-          continue;
-        }
-        const now = await db.items.get(id);
-        // keep it dirty if it changed again meanwhile
-        if (now && now.client_updated_at === a.client_updated_at) await db.items.put({ ...saved, dirty: 0 });
-      }
-      const cursor = await getPref<string>(CURSOR);
-      const res = await api<{ annotations: Annotation[]; cursor: string | null }>(
-        `/api/annotations${cursor ? `?since=${encodeURIComponent(cursor)}` : ''}`);
-      for (const remote of res.annotations) {
-        const local = await db.items.get(remote.id);
-        if (!local || (!local.dirty && local.client_updated_at <= remote.client_updated_at) || remote.client_updated_at > local.client_updated_at) {
-          await db.items.put({ ...remote, dirty: 0 });
-        }
-      }
-      if (res.cursor) await setPref(CURSOR, res.cursor);
-      if (res.annotations.length) changed();
-    } finally {
-      syncing = null;
-    }
-  })();
-  return syncing;
-}
+export const syncAnnotations = syncedTable<Annotation>({ table: db.items, path: '/api/annotations', listKey: 'annotations',
+  cursorKey: CURSOR, what: 'highlight', onPulled: changed });

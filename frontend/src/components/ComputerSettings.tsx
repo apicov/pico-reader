@@ -3,14 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { computerStatus, type ComputerStatus } from '@/services/computer';
 import { loadProjects, type Project } from '@/services/projects';
-
-function ago(iso: string): string {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (minutes < 2) return 'just now';
-  if (minutes < 120) return `${minutes} minutes ago`;
-  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} hours ago`;
-  return new Date(iso).toLocaleDateString();
-}
+import { ago } from '@/utils/time';
 
 /** The study computer: when it last synced, what waits for it, how to set it up */
 export function ComputerSettings() {

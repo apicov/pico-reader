@@ -1,6 +1,6 @@
 import { Box, Popover, Slider, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography, FormControlLabel } from '@mui/material';
 import { useSettings, type Settings } from '@/contexts/SettingsContext';
-import { READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
+import { READING_FONT, READING_THEMES, type ReadingThemeName } from '@/theme/readingThemes';
 
 /** Night theme brightness: goes below the phone's lowest setting */
 export function NightDim() {
@@ -28,7 +28,7 @@ export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | nul
               <Box key={name} component="button" aria-label={t.label} aria-pressed={settings.theme === name}
                 onClick={() => update({ theme: name })}
                 sx={{ flex: 1, height: 44, borderRadius: 1.5, cursor: 'pointer', bgcolor: t.swatch?.background ?? t.background, color: t.swatch?.text ?? t.text,
-                  border: 2, borderColor: settings.theme === name ? 'primary.main' : t.divider, fontFamily: 'Literata, serif' }}>
+                  border: 2, borderColor: settings.theme === name ? 'primary.main' : t.divider, fontFamily: READING_FONT }}>
                 Aa
               </Box>
             );

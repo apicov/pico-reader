@@ -4,6 +4,7 @@
  */
 import Dexie, { type Table } from 'dexie';
 import { api, authFetch, errorFrom } from '@/services/api';
+import { deviceTimeZone } from '@/utils/time';
 
 export interface Passage {
   book_id: string;
@@ -132,8 +133,7 @@ export interface StreamHandlers {
 
 /** Confirm (or cancel) a change the agent proposed; returns the chat message saying what happened. */
 export async function decideAction(conversationId: string, actionId: string, approve: boolean): Promise<Message> {
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  return api<Message>(`/api/conversations/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}?tz=${encodeURIComponent(tz)}`,
+  return api<Message>(`/api/conversations/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}?tz=${encodeURIComponent(deviceTimeZone())}`,
     { method: 'POST', body: { approve } });
 }
 
@@ -170,7 +170,7 @@ export async function sendMessage(conversationId: string, content: string, h: St
   const res = await authFetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST', signal,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
+    body: JSON.stringify({ content, tz: deviceTimeZone() }),
   });
   if (!res.ok || !res.body) throw await errorFrom(res, "The question couldn't be sent");
   const reader = res.body.getReader();
