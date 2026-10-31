@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { flushEvents } from '@/services/events';
 import { flushComputer } from '@/services/computer';
 import { syncDictPrefs } from '@/dict/prefs';
@@ -21,10 +21,10 @@ import { createAppTheme, READING_THEMES } from '@/theme/readingThemes';
 import { NightFilter } from '@/theme/NightFilter';
 
 const UploadPage = lazy(() => import('@/pages/UploadPage'));
-const NotesPage = lazy(() => import('@/pages/NotesPage'));
-const NotePage = lazy(() => import('@/pages/NotesPage').then((m) => ({ default: m.NotePage })));
+const NotesPage = lazy(() => import('@/pages/notes/NotesPage'));
+const NotePage = lazy(() => import('@/pages/notes/NotePage'));
 const ManualPage = lazy(() => import('@/pages/ManualPage'));
-const NewNotePage = lazy(() => import('@/pages/NotesPage').then((m) => ({ default: m.NewNotePage })));
+const NewNotePage = lazy(() => import('@/pages/notes/NewNotePage'));
 const CommunityPage = lazy(() => import('@/pages/CommunityPage'));
 const PostPage = lazy(() => import('@/pages/PostPage'));
 const PostEditorPage = lazy(() => import('@/pages/PostEditorPage'));
@@ -34,6 +34,36 @@ const MyProfilePage = lazy(() => import('@/pages/MyProfilePage'));
 const CategoriesPage = lazy(() => import('@/pages/CategoriesPage'));
 const ListPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListPage })));
 const ListEditorPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListEditorPage })));
+
+/** The pages in the app's frame (its bar and menu). The ones loaded on first use (lazy above) show a spinner meanwhile. */
+const PAGES: [string, ReactNode][] = [
+  ['/', <LibraryPage />],
+  ['/settings', <SettingsPage />],
+  ['/dictionaries', <DictionariesPage />],
+  ['/dictionary', <DictionaryPage />],
+  ['/stats', <StatsPage />],
+  ['/review', <ReviewPage />],
+  ['/upload', <UploadPage />],
+  ['/manual', <ManualPage />],
+  ['/notes', <NotesPage />],
+  ['/notes/new', <NewNotePage />],
+  ['/notes/:noteId', <NotePage />],
+  // the community: online pages
+  ['/community', <CommunityPage />],
+  ['/community/new', <PostEditorPage />],
+  ['/community/post/:postId', <PostPage />],
+  ['/community/post/:postId/edit', <PostEditorPage />],
+  ['/book/:bookId', <BookCommunityPage />],
+  ['/u/:handle', <ProfilePage />],
+  ['/profile', <MyProfilePage />],
+  ['/categories', <CategoriesPage />],
+  ['/lists/new', <ListEditorPage />],
+  ['/lists/:listId', <ListPage />],
+  ['/lists/:listId/edit', <ListEditorPage />],
+];
+
+/** Sending what was recorded on the device (reading, lookups, things for the computer, dictionary settings) */
+const FLUSH_EVERY_MS = 180_000;
 
 function Routed() {
   const { reader, loading } = useAuth();
@@ -46,7 +76,7 @@ function Routed() {
       void syncDictPrefs();
     };
     flush();
-    const timer = setInterval(flush, 180_000);
+    const timer = setInterval(flush, FLUSH_EVERY_MS);
     const unsubscribe = subscribeOnline((online) => { if (online) flush(); });
     return () => { clearInterval(timer); unsubscribe(); };
   }, [reader]);
@@ -59,35 +89,11 @@ function Routed() {
     <Routes>
       {/* the book is shown by ReaderHost, which keeps it open while the other pages are shown */}
       <Route path="/read/:bookId" element={null} />
-      <Route path="/" element={<AppShell><LibraryPage /></AppShell>} />
-      <Route path="/settings" element={<AppShell><SettingsPage /></AppShell>} />
-      <Route path="/dictionaries" element={<AppShell><DictionariesPage /></AppShell>} />
-      <Route path="/dictionary" element={<AppShell><DictionaryPage /></AppShell>} />
-      {/* the translations are the Dictionary page's second tab */}
-      <Route path="/translations" element={<Navigate to="/dictionary?tab=history" replace />} />
-      <Route path="/stats" element={<AppShell><StatsPage /></AppShell>} />
-      <Route path="/review" element={<AppShell><ReviewPage /></AppShell>} />
-      <Route path="/upload" element={<AppShell><Suspense fallback={spinner}><UploadPage /></Suspense></AppShell>} />
-      <Route path="/manual" element={<AppShell><Suspense fallback={spinner}><ManualPage /></Suspense></AppShell>} />
-      <Route path="/notes" element={<AppShell><Suspense fallback={spinner}><NotesPage /></Suspense></AppShell>} />
-      <Route path="/notes/new" element={<AppShell><Suspense fallback={spinner}><NewNotePage /></Suspense></AppShell>} />
-      <Route path="/notes/:noteId" element={<AppShell><Suspense fallback={spinner}><NotePage /></Suspense></AppShell>} />
-      {/* the community: online pages, loaded on first use */}
-      {([
-        ['/community', <CommunityPage />],
-        ['/community/new', <PostEditorPage />],
-        ['/community/post/:postId', <PostPage />],
-        ['/community/post/:postId/edit', <PostEditorPage />],
-        ['/book/:bookId', <BookCommunityPage />],
-        ['/u/:handle', <ProfilePage />],
-        ['/profile', <MyProfilePage />],
-        ['/categories', <CategoriesPage />],
-        ['/lists/new', <ListEditorPage />],
-        ['/lists/:listId', <ListPage />],
-        ['/lists/:listId/edit', <ListEditorPage />],
-      ] as const).map(([path, page]) => (
+      {PAGES.map(([path, page]) => (
         <Route key={path} path={path} element={<AppShell><Suspense fallback={spinner}>{page}</Suspense></AppShell>} />
       ))}
+      {/* the translations are the Dictionary page's second tab */}
+      <Route path="/translations" element={<Navigate to="/dictionary?tab=history" replace />} />
       {/* the chat has its own full-screen layout */}
       <Route path="/ask" element={<AskPage />} />
       <Route path="/ask/:conversationId" element={<AskPage />} />

@@ -13,6 +13,7 @@ import { installDict, isCurrent, PACKAGE, removeDict, type InstalledDict } from 
 import { useInstalledDicts } from '@/hooks/useInstalledDicts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { usePolledJobs } from '@/hooks/usePolledJobs';
 import { api } from '@/services/api';
 import { LANGUAGES, languageName } from '@/services/languages';
 import type { Dictionary } from '@/services/types';
@@ -105,26 +106,8 @@ export default function DictionariesPage() {
   const [busy, setBusy] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [jobs, setJobs] = useState<DictJob[]>([]);
-
-  // Admins: dictionaries being converted, polled while any is waiting
-  const [pollKey, setPollKey] = useState(0);
-  useEffect(() => {
-    if (!admin || !online) return;
-    let timer = 0;
-    let cancelled = false;
-    let waiting = 0;
-    const poll = () => void api<DictJob[]>('/api/admin/dict-jobs').then((list) => {
-      if (cancelled) return;
-      const active = list.filter((j) => j.status !== 'failed').length;
-      if (active < waiting) void refresh(); // one finished: it's in the library now
-      waiting = active;
-      setJobs(list);
-      if (active) timer = window.setTimeout(poll, 15_000);
-    }).catch(() => undefined);
-    poll();
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [admin, online, refresh, pollKey]);
+  // Admins: dictionaries being converted; one finished: it's in the list now
+  const { jobs, pollNow } = usePolledJobs<DictJob>(admin && online ? '/api/admin/dict-jobs' : null, () => void refresh());
 
   const install = async (d: Dictionary) => {
     setError('');
@@ -252,7 +235,7 @@ export default function DictionariesPage() {
         </List>
       )}
       {library && all.length === 0 && <Typography color="text.secondary">No dictionaries in the library yet.</Typography>}
-      <DictionaryUpload open={uploading} onClose={() => setUploading(false)} onQueued={() => setPollKey((k) => k + 1)} />
+      <DictionaryUpload open={uploading} onClose={() => setUploading(false)} onQueued={pollNow} />
     </Box>
   );
 }

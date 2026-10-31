@@ -14,7 +14,7 @@ import { useLoad } from '@/hooks/useLoad';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { bookCommunity, deleteReview, saveReview, setHidden, type Review } from '@/services/community';
 import type { Book } from '@/services/types';
-import { BookNotes } from '@/pages/NotesPage';
+import { BookNotes } from '@/pages/notes/NoteParts';
 import { loadCategories, pretty, type Category } from '@/services/categories';
 import { readerPath } from '@/reader/jump';
 

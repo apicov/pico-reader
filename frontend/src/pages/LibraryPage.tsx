@@ -1,164 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Card, CardActionArea, Chip, IconButton, InputAdornment, LinearProgress, Menu, MenuItem, Stack, Tab, Tabs,
-  TextField, Typography } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Alert, Box, Button, IconButton, InputAdornment, LinearProgress, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import BookmarkIcon from '@mui/icons-material/Bookmark';
-import { cachedCollections, cachedMyShelf, cachedShelf, loadCollections, loadMyShelf, loadShelf, setOnMyShelf, setShelfStatus,
-  shelfFolders, subscribeShelf, type Collection, type MyShelfEntry, type ShelfEntry, type ShelfStatus } from '@/services/shelf';
-import { BookCollections, CollectionChips, CollectionFolder, ManageCollectionsTile, ShelfViewToggle, type CollectionFilter,
-  type ShelfView } from '@/components/collections';
-import { getPref, setPref } from '@/services/prefs';
-import { api } from '@/services/api';
-import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
-import { cachedCategories, inCategory, loadCategories, type Category, type CategoryFilter } from '@/services/categories';
-import { BookCategoryDialog, CategoryBrowser } from '@/components/categories';
-
-interface IndexJob { book_id: string; status: 'queued' | 'running' | 'failed'; position?: number; error: string }
-import { Link as RouterLink } from 'react-router-dom';
-import { localPosition } from '@/reader/position';
-import { cachedStats, getReadingGoal, getStats, type ReadingGoal } from '@/services/stats';
 import SearchIcon from '@mui/icons-material/Search';
-import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
-import DownloadDoneIcon from '@mui/icons-material/DownloadDone';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { BookCover } from '@/components/BookCover';
+import { CategoryBrowser } from '@/components/categories';
+import { CollectionChips, CollectionFolder, ManageCollectionsTile, ShelfViewToggle, type CollectionFilter,
+  type ShelfView } from '@/components/collections';
 import { useBookCache } from '@/hooks/useBookCache';
-import { useCoverUrl } from '@/hooks/useCoverUrl';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import type { CachedFile } from '@/services/bookCache';
-import { languageName } from '@/services/languages';
+import { usePolledJobs } from '@/hooks/usePolledJobs';
+import { cachedCategories, inCategory, loadCategories, type Category, type CategoryFilter } from '@/services/categories';
+import { ratings as fetchRatings, type RatingSummary } from '@/services/community';
+import { getPref, setPref } from '@/services/prefs';
+import { cachedCollections, cachedMyShelf, cachedShelf, loadCollections, loadMyShelf, loadShelf, shelfFolders, subscribeShelf,
+  type Collection, type MyShelfEntry, type ShelfEntry } from '@/services/shelf';
 import type { Book } from '@/services/types';
-import { formatLabel } from '@/reader/formats';
-import { formatMinutes } from '@/utils/time';
 import { foldForSearch } from '@/utils/text';
-import { readerPath } from '@/reader/jump';
+import { BookCard, type IndexJob } from './library/BookCard';
+import { GoalBar } from './library/GoalBar';
+import { emptyMessage, shownOnShelf, type LibraryTab } from './library/libraryView';
 
-
-type LibraryTab = 'mine' | 'reading' | 'all' | 'finished';
-
-function BookCard({ book, files, online, shelf, mine, collections, badge, job, rating, category, canDelete, onDeleted, onChanged }: {
-  book: Book; files: Record<string, CachedFile>; online: boolean; shelf?: ShelfEntry;
-  /** on My shelf; `badge`: show the reading status on the cover (where the tab doesn't already say it) */
-  mine: boolean; collections: Collection[]; badge: boolean; job?: IndexJob; rating?: RatingSummary; category?: string; canDelete: boolean; onDeleted: () => void; onChanged: () => void;
-}) {
-  const [menu, setMenu] = useState<HTMLElement | null>(null);
-  const [categoryOpen, setCategoryOpen] = useState(false);
-  const [collectionsOpen, setCollectionsOpen] = useState(false);
-  const choose = (status: ShelfStatus) => { setMenu(null); void setShelfStatus(book.id, status); };
-  const navigate = useNavigate();
-  const cover = useCoverUrl(book, files[`${book.id}/cover`], online);
-  const [progress, setProgress] = useState(0);
-  useEffect(() => { void localPosition(book.id).then((p) => setProgress(p?.progress ?? 0)); }, [book.id]);
-  const downloaded = Object.keys(book.formats).some((k) => files[`${book.id}/${k}`]);
-  // Offline, only downloaded books open
-  const available = online || downloaded;
-  return (
-    <Card sx={{ border: 0, bgcolor: 'transparent', opacity: available ? 1 : 0.45, position: 'relative', overflow: 'visible' }}>
-      <CardActionArea disabled={!available} onClick={() => navigate(readerPath(book.id))} sx={{ p: 0.5, borderRadius: 1 }}>
-        <Box sx={{ position: 'relative' }}>
-          <BookCover book={book} src={cover} />
-          {badge && (shelf?.status === 'reading' || shelf?.status === 'finished') && (
-            <Chip size="small" color={shelf.status === 'finished' ? 'success' : 'primary'}
-              label={shelf.status === 'finished' ? 'Finished ✓' : `Reading · ${Math.max(1, Math.round(progress * 100))}%`}
-              sx={{ position: 'absolute', left: 6, top: 6, height: 20, fontSize: 11, maxWidth: 'calc(100% - 48px)' }} />
-          )}
-          {progress > 0 && (
-            <Box sx={{ position: 'absolute', left: 4, right: 4, bottom: 2, height: 3, borderRadius: 2, bgcolor: 'action.hover' }}>
-              <Box sx={{ width: `${Math.round(progress * 100)}%`, height: '100%', borderRadius: 2, bgcolor: 'primary.main' }} />
-            </Box>
-          )}
-          {(downloaded || !available) && (
-            <Box sx={{ position: 'absolute', right: 6, bottom: 6, bgcolor: 'background.paper', borderRadius: '50%',
-              width: 26, height: 26, display: 'grid', placeItems: 'center', border: 1, borderColor: 'divider' }}
-              title={downloaded ? 'On this device' : 'Not downloaded'}>
-              {downloaded ? <DownloadDoneIcon sx={{ fontSize: 16 }} /> : <CloudOffOutlinedIcon sx={{ fontSize: 16 }} />}
-            </Box>
-          )}
-        </Box>
-        <Typography variant="body2" sx={{ mt: 1, fontWeight: 500, lineHeight: 1.3 }} noWrap title={book.title}>
-          {mine && <BookmarkIcon color="primary" titleAccess="On My shelf" sx={{ fontSize: 14, mr: 0.25, verticalAlign: '-2px' }} />}
-          {book.title}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap component="div">{book.author || '\u00a0'}</Typography>
-        {category && <Typography variant="caption" color="text.secondary" noWrap component="div" sx={{ fontStyle: 'italic' }}>{category}</Typography>}
-        {rating && rating.review_count > 0 && (
-          <Typography variant="caption" color="text.secondary" component="div"
-            title={`${rating.review_count} review${rating.review_count === 1 ? '' : 's'}`}>
-            ★ {rating.avg_score}/10 · {rating.review_count}
-          </Typography>
-        )}
-        {job && (
-          <Typography variant="caption" color={job.status === 'failed' ? 'error' : 'text.secondary'} component="div"
-            title={job.error || undefined}>
-            {job.status === 'queued' ? `Queued for search (${job.position})` : job.status === 'running' ? 'Making it searchable…' : 'Search index failed'}
-          </Typography>
-        )}
-        {!badge && shelf?.status === 'reading' && progress > 0 && (
-          <Typography variant="caption" color="text.secondary" component="div">{Math.max(1, Math.round(progress * 100))}% read</Typography>
-        )}
-        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
-          <Chip size="small" variant="outlined" label={languageName(book.language)} />
-          {Object.keys(book.formats).map((f) => <Chip key={f} size="small" variant="outlined" label={formatLabel(f)} />)}
-        </Stack>
-      </CardActionArea>
-      <IconButton size="small" aria-label={`${book.title}: shelf`} onClick={(e) => setMenu(e.currentTarget)}
-        sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'background.paper', border: 1, borderColor: 'divider',
-          '&:hover': { bgcolor: 'background.paper' } }}>
-        <MoreVertIcon fontSize="small" />
-      </IconButton>
-      <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
-        <MenuItem disabled={!online} onClick={() => { setMenu(null); navigate(`/book/${encodeURIComponent(book.id)}`); }}>
-          Reviews & discussion
-        </MenuItem>
-        {canDelete && <MenuItem disabled={!online} onClick={() => { setMenu(null); setCategoryOpen(true); }}>Category…</MenuItem>}
-        <MenuItem onClick={() => { setMenu(null); setCollectionsOpen(true); }}>Collections…</MenuItem>
-        <MenuItem onClick={() => { setMenu(null); void setOnMyShelf(book.id, !mine); }}>
-          {mine ? 'Remove from My shelf' : 'Add to My shelf'}
-        </MenuItem>
-        {shelf?.status !== 'reading' && <MenuItem onClick={() => choose('reading')}>{shelf?.status === 'finished' ? 'Read again' : 'Add to Currently reading'}</MenuItem>}
-        {shelf?.status !== 'finished' && <MenuItem onClick={() => choose('finished')}>Mark as finished</MenuItem>}
-        {shelf && shelf.status !== 'removed' && <MenuItem onClick={() => choose('removed')}>Remove from my lists</MenuItem>}
-        {canDelete && (
-          <MenuItem disabled={!online} sx={{ color: 'error.main' }} onClick={() => {
-            setMenu(null);
-            if (window.confirm(`Delete “${book.title}” from the library for everyone? Its files are removed.`)) {
-              void api(`/api/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' }).then(onDeleted)
-                .catch((e) => window.alert((e as Error).message));
-            }
-          }}>Delete book…</MenuItem>
-        )}
-      </Menu>
-      {collectionsOpen && <BookCollections bookId={book.id} title={book.title} collections={collections} open
-        onClose={() => setCollectionsOpen(false)} />}
-      {canDelete && <BookCategoryDialog book={book} open={categoryOpen} onClose={() => setCategoryOpen(false)} onSaved={onChanged} />}
-    </Card>
-  );
-}
-
-/** Today's reading against the goal, when the goal is on */
-function GoalBar() {
-  const online = useOnlineStatus();
-  const [goal, setGoal] = useState<ReadingGoal | null>(null);
-  const [today, setToday] = useState(0);
-  useEffect(() => {
-    void getReadingGoal().then(setGoal);
-    void cachedStats('week').then((s) => s && setToday(s.today_seconds));
-    if (online) void getStats('week').then((s) => setToday(s.today_seconds)).catch(() => undefined);
-  }, [online]);
-  if (!goal?.enabled) return null;
-  const done = today >= goal.minutes * 60;
-  return (
-    <Box component={RouterLink} to="/stats" sx={{ display: 'block', mb: 2, color: 'inherit', textDecoration: 'none' }}>
-      <Stack direction="row" justifyContent="space-between">
-        <Typography variant="body2">Today {formatMinutes(today)} of {goal.minutes} min{done ? ' ✓' : ''}</Typography>
-        <Typography variant="body2" color="primary">Statistics</Typography>
-      </Stack>
-      <LinearProgress variant="determinate" value={Math.min(100, (today / (goal.minutes * 60)) * 100)} sx={{ mt: 0.5, height: 6, borderRadius: 3 }} />
-    </Box>
-  );
-}
 
 function matches(book: Book, q: string): boolean {
   const hay = foldForSearch(`${book.title} ${book.author}`);
@@ -173,24 +35,9 @@ export default function LibraryPage() {
   // Readers' average scores, from the community
   const [ratings, setRatings] = useState<Record<string, RatingSummary>>({});
   useEffect(() => { if (online) void fetchRatings().then(setRatings).catch(() => undefined); }, [online]);
-  // Books waiting for (or failing) their search index; polled while anything is waiting
-  const [jobs, setJobs] = useState<Map<string, IndexJob>>(new Map());
-  useEffect(() => {
-    if (!online) return;
-    let timer = 0;
-    let cancelled = false;
-    let waiting = 0;
-    const poll = () => void api<IndexJob[]>('/api/index-jobs').then((list) => {
-      if (cancelled) return;
-      const busy = list.filter((j) => j.status !== 'failed').length;
-      if (busy < waiting) void refresh(); // something finished: the library gains its search file
-      waiting = busy;
-      setJobs(new Map(list.map((j) => [j.book_id, j])));
-      if (busy) timer = window.setTimeout(poll, 15_000);
-    }).catch(() => undefined);
-    poll();
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [online, refresh]);
+  // Books waiting for (or failing) their search index; one finished: the library gains its search file
+  const { jobs: jobList } = usePolledJobs<IndexJob>(online ? '/api/index-jobs' : null, () => void refresh());
+  const jobs = useMemo(() => new Map(jobList.map((j) => [j.book_id, j])), [jobList]);
 
   // The reader's shelf: "Currently reading" first when there's anything on it
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
@@ -198,6 +45,7 @@ export default function LibraryPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [tab, setTab] = useState<LibraryTab | null>(null);
   const [collection, setCollection] = useState<CollectionFilter>('all');
+  const [shelfView, setShelfView] = useState<ShelfView>('folders');
   useEffect(() => {
     const load = () => { void cachedShelf().then(setShelf); void cachedMyShelf().then(setMine); void cachedCollections().then(setCollections); };
     load();
@@ -213,7 +61,6 @@ export default function LibraryPage() {
   }, []);
   const pickCollection = (c: CollectionFilter) => { setCollection(c); void setPref('shelf_collection', c); };
   // My shelf as folders: the open one is in the address, so Back (Android's too) closes it
-  const [shelfView, setShelfView] = useState<ShelfView>('folders');
   const pickShelfView = (v: ShelfView) => { setShelfView(v); void setPref('shelf_view', v); };
   const [params, setParams] = useSearchParams();
   const location = useLocation();
@@ -260,12 +107,9 @@ export default function LibraryPage() {
     const all = (library?.books ?? []).filter((b) => !q || matches(b, q));
     if (current === 'all') return all.filter(inCategory(tree, typeof category === 'number' && !tree.some((c) => c.id === category) ? null : category));
     const order = new Map((current === 'mine' ? mine : shelf.filter((e) => e.status === current)).map((e, i) => [e.book_id, i]));
-    const inShown = current !== 'mine' ? () => true
-      : asFolders ? (folder ? (b: Book) => folder.books.includes(b.id) : showFolders ? (b: Book) => !inSomeCollection.has(b.id) : () => true)
-      : shownCollection === 'all' ? () => true
-      : shownCollection === 'none' ? (b: Book) => !inSomeCollection.has(b.id)
-      : (b: Book) => !!collections.find((c) => c.id === shownCollection)?.book_ids.includes(b.id);
-    return all.filter((b) => order.has(b.id) && inShown(b)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    const shown = current !== 'mine' ? () => true : shownOnShelf({ asFolders, folder, topLevel: showFolders,
+      collection: shownCollection, collections, inSomeCollection });
+    return all.filter((b) => order.has(b.id) && shown(b.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
   }, [library, query, shelf, mine, current, tree, category, collections, shownCollection, inSomeCollection, asFolders, folder, showFolders]);
 
   return (
@@ -306,14 +150,8 @@ export default function LibraryPage() {
       )}
       {library && books.length === 0 && !(showFolders && mine.length) && (
         <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 6 }}>
-          {library.books.length === 0 ? 'No books yet. Add some with the desktop tool.'
-            : query ? 'No book matches.'
-            : folder ? 'No book in this collection yet: ⋮ → Collections… on a book.'
-            : current === 'mine' && mine.length && shownCollection === 'none' ? 'Every book on your shelf is in a collection.'
-            : current === 'mine' && mine.length ? 'No book in this collection yet: ⋮ → Collections… on a book.'
-            : current === 'mine' ? 'Nothing on your shelf yet: use ⋮ → Add to My shelf on any book.'
-            : current === 'reading' ? 'Nothing here yet: books you open appear here.'
-            : current === 'finished' ? 'No finished books yet.' : 'No book matches.'}
+          {emptyMessage({ libraryEmpty: library.books.length === 0, searching: !!query, inFolder: !!folder, tab: current,
+            onShelf: mine.length, collection: shownCollection })}
         </Typography>
       )}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
