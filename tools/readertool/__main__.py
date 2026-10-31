@@ -26,7 +26,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from readertool import client, markdown, metadata, passages, quarto, stardict, sync
+from pico_core import stardict
+from pico_core.formats import DICT_PACKAGE_TYPES, TEXT_FORMATS
+from readertool import client, markdown, metadata, quarto, sync
 from readertool.client import Api, ToolError
 
 _IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
@@ -97,7 +99,7 @@ def main() -> None:
          "delete": delete, "index": index_books,
          "dict-add": dict_add, "dict-add-all": dict_add_all, "dict-list": dict_list, "dict-delete": dict_delete,
          "sync": sync_folder, "project": project}[args.cmd](args)
-    except ToolError as e:
+    except (ToolError, stardict.StarDictError) as e:
         sys.exit(f"error: {e}")
 
 
@@ -227,13 +229,13 @@ def delete(args) -> None:
     print(f"deleted {args.id}")
 
 
-INDEX_FORMATS = ["reflow", "epub", "pdf"]  # the best text first
+CHUNKS_PER_REQUEST = 100
 
 
 def index_books(args) -> None:
     import requests
 
-    from readertool import embed
+    from pico_core import embed, indexing
 
     api = Api()
     books = api.get("/api/library")["books"]
@@ -242,7 +244,7 @@ def index_books(args) -> None:
     elif not args.all:
         raise ToolError("name book ids, or pass --all")
     for book in books:
-        fmt = next((f for f in INDEX_FORMATS if f in book["formats"]), None)
+        fmt = next((f for f in TEXT_FORMATS if f in book["formats"]), None)
         if not fmt:
             continue
         sha = book["formats"][fmt]["sha256"]
@@ -262,20 +264,16 @@ def index_books(args) -> None:
                 with path.open("wb") as f:
                     for chunk in r.iter_content(1 << 20):
                         f.write(chunk)
-            found = passages.EXTRACTORS[fmt](path)
+            found = indexing.read_passages(path, fmt)
         if not found:
             print("  no text found (a scanned PDF needs a text version first)")
             continue
         print(f"  {len(found)} passages, embedding…")
-        vectors = embed.embed([p.text for p in found])
-        words = sum(len(p.text.split()) for p in found)
         api.post(f"/api/admin/books/{book['id']}/index/start",
-                 {"format": fmt, "sha256": sha, "model": embed.MODEL, "word_count": words})
-        for start in range(0, len(found), 100):
-            batch = [{"seq": start + i, "location": p.location, "progress": round(p.progress, 5), "heading": p.heading,
-                      "text": p.text, "embedding": [round(float(x), 6) for x in vectors[start + i]]}
-                     for i, p in enumerate(found[start:start + 100])]
-            api.post_list(f"/api/admin/books/{book['id']}/index/chunks", batch)
+                 {"format": fmt, "sha256": sha, "model": embed.MODEL, "word_count": indexing.word_count(found)})
+        for rows in indexing.index_rows(found, CHUNKS_PER_REQUEST):
+            api.post_list(f"/api/admin/books/{book['id']}/index/chunks",
+                          [{**row, "embedding": [round(float(x), 6) for x in row["embedding"]]} for row in rows])
         api.post(f"/api/admin/books/{book['id']}/index/finish")  # the offline search file + history
         print("  indexed")
 
@@ -285,9 +283,6 @@ def _visibility(parser) -> None:
     g.add_argument("--private", dest="visibility", action="store_const", const="private",
                    help="only you (and admins) see it; default for a new one: everyone; an update keeps its setting")
     g.add_argument("--public", dest="visibility", action="store_const", const="everyone", help="every reader sees it")
-
-
-_DICT_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}
 
 
 def _upload_dictionary(folder: Path, from_lang: str, to_lang: str, name: str | None, visibility: str | None = None) -> None:
@@ -302,7 +297,7 @@ def _upload_dictionary(folder: Path, from_lang: str, to_lang: str, name: str | N
         Api().upload("dictionaries", {"id": dict_id, "name": name or d.name, "from_lang": from_lang,
                                       "to_lang": to_lang, "entry_count": len(d.entries),
                                       **({"visibility": visibility} if visibility else {})},
-                     {kind: (path, _DICT_TYPES[kind]) for kind, path in files.items()})
+                     {kind: (path, DICT_PACKAGE_TYPES[kind]) for kind, path in files.items()})
     print(f"  added as {dict_id}")
 
 

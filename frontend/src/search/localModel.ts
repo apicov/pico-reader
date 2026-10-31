@@ -1,10 +1,12 @@
 /**
  * The embedding model on the device (transformers.js in a Web Worker, embedWorker.ts): multilingual-e5-small,
- * the same quantized ONNX file the server uses (backend/app/embed.py), so a question embedded here matches the
+ * the same quantized ONNX file the server uses (shared/pico_core/embed.py), so a question embedded here matches the
  * passages embedded there. Loaded only when offline search is switched on; the files (~135 MB) are kept by the
  * browser.
  */
 export const MODEL = 'Xenova/multilingual-e5-small';
+/** The commit the server's model is from (pico_core/embed.py REVISION): the vectors must stay comparable */
+export const MODEL_REVISION = '761b726dd34fb83930e26aab4e9ac3899aa1fa78';
 
 let worker: Worker | null = null;
 let ready: Promise<void> | null = null;
@@ -38,13 +40,13 @@ export function loadModel(onProgress?: (fraction: number) => void): Promise<void
       if (e.data.type === 'error' && e.data.id === undefined) { w.removeEventListener('message', listener); reject(new Error(e.data.message)); }
     };
     w.addEventListener('message', listener);
-    w.postMessage({ type: 'load', model: MODEL, wasmPaths: new URL('ort/', `${window.location.origin}/`).href });
+    w.postMessage({ type: 'load', model: MODEL, revision: MODEL_REVISION, wasmPaths: new URL('ort/', `${window.location.origin}/`).href });
   });
   ready.catch(() => { ready = null; });
   return ready;
 }
 
-/** L2-normalised vectors, mean-pooled like app/embed.py; kind "query" (questions) or "passage" (book text). */
+/** L2-normalised vectors, mean-pooled like pico_core/embed.py; kind "query" (questions) or "passage" (book text). */
 export async function embedTexts(texts: string[], kind: 'query' | 'passage'): Promise<Float32Array[]> {
   await loadModel(progressListener);
   const id = ++nextId;

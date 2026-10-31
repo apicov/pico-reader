@@ -17,4 +17,4 @@ ignore = [
 "**/tests/**" = ["F811", "E402", "E501"]  # test data lines may be long
 
 [lint.isort]
-known-first-party = ["app", "readertool", "tests"]
+known-first-party = ["app", "pico_core", "readertool", "tests"]

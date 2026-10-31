@@ -1,7 +1,6 @@
 """Book text → passages of about a paragraph or three (~1000 characters), each with the place the reader opens
 for it: reflow `c<chapter>:<fraction>`, EPUB a progress through the book (as foliate measures it: section
-file sizes), PDF `p<page>:<fraction>`. Used by the indexer (app/indexer.py);
-tools/readertool/passages.py is the same code for `reader index` (keep the two equal)."""
+file sizes), PDF `p<page>:<fraction>`. Used by the server's indexer and by `reader index` (see indexing.py)."""
 
 import posixpath
 import re

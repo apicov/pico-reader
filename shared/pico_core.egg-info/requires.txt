@@ -1,0 +1,5 @@
+numpy
+onnxruntime
+tokenizers
+pymupdf
+beautifulsoup4

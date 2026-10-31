@@ -17,10 +17,11 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app import categories, embed, passages, r2
+from app import categories, r2
 from app import dictionary_service as dicts
 from app import library_service as books
 from app.db import get_engine
+from pico_core import embed, indexing
 
 logger = logging.getLogger("indexer")
 MAX_ATTEMPTS = 3
@@ -56,17 +57,13 @@ def process(db: Session, job) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / f"book.{job.format}"
         r2.get_client().download_file(r2.get_settings().r2_bucket, f["key"], str(path))
-        found = passages.EXTRACTORS[job.format](path)
+        found = indexing.read_passages(path, job.format)
     if not found:
         raise RuntimeError("No text found (a scanned PDF needs a text version)")
-    words = sum(len(p.text.split()) for p in found)
+    words = indexing.word_count(found)
     books.start_index(db, job.book_id, job.format, f["sha256"], embed.MODEL, words)
-    for start in range(0, len(found), BATCH):
-        part = found[start:start + BATCH]
-        vectors = embed.embed([p.text for p in part])
-        books.add_chunks(db, job.book_id, [
-            {"seq": start + i, "location": p.location, "progress": round(p.progress, 5), "heading": p.heading,
-             "text": p.text, "embedding": vectors[i]} for i, p in enumerate(part)])
+    for rows in indexing.index_rows(found, BATCH):
+        books.add_chunks(db, job.book_id, rows)
     db.commit()
     books.write_search_file(db, job.book_id)
     books.record(db, job.book_id, book.title, "indexed", "indexer", {"job": job.id, "passages": len(found), "words": words})

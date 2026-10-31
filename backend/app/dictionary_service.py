@@ -11,12 +11,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import assets, r2, stardict
+from app import assets, r2
 from app.auth import Reader
+from pico_core import stardict
+from pico_core.formats import DICT_PACKAGE_TYPES
 
 MAX_SOURCE_BYTES = 300_000_000  # a whole StarDict is read into memory while converting (the server has 2 GB)
 MAX_UNPACKED_BYTES = 1_000_000_000  # unzipped: a real StarDict is a few times its zip; a zip bomb is not
-PACKAGE_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}
 
 
 def visible(alias: str = "d") -> str:
@@ -132,7 +133,7 @@ def convert(db: Session, dict_id: str) -> int:
         packages = {}
         for kind, path in stardict.write_packages(d, dict_id, out).items():
             sha = hashlib.sha256(path.read_bytes()).hexdigest()
-            info = assets.FileInfo(size=path.stat().st_size, sha256=sha, content_type=PACKAGE_TYPES[kind])
+            info = assets.FileInfo(size=path.stat().st_size, sha256=sha, content_type=DICT_PACKAGE_TYPES[kind])
             pending, _ = assets.plan_uploads("dictionaries", dict_id, assets.DICT_KINDS, {kind: info})
             r2.get_client().upload_file(str(path), bucket, pending[kind]["key"], ExtraArgs={"ContentType": info.content_type})
             packages[kind] = pending[kind]

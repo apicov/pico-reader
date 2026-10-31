@@ -20,7 +20,9 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from readertool.client import ToolError
+
+class StarDictError(ValueError):
+    """The folder isn't a StarDict dictionary that can be read."""
 
 
 def key_of(word: str) -> str:
@@ -58,7 +60,7 @@ def read(folder: Path) -> Dictionary:
     idx = _find(folder, ".idx", ".idx.gz")
     dict_file = _find(folder, ".dict.dz", ".dict")
     if not (ifo and idx and dict_file):
-        raise ToolError(f"{folder} is not a StarDict dictionary (.ifo, .idx and .dict needed)")
+        raise StarDictError(f"{folder} is not a StarDict dictionary (.ifo, .idx and .dict needed)")
     info = {}
     for line in ifo.read_text(encoding="utf-8", errors="replace").splitlines()[1:]:
         if "=" in line:

@@ -51,8 +51,8 @@ Committing a book whose reading text changed queues an `index_jobs` row. The `pi
 (`app/indexer.py`) takes one job at a time:
 
 1. download the file from R2;
-2. cut it into passages (`app/passages.py`);
-3. embed them (`app/embed.py`, one thread);
+2. cut it into passages (`shared/pico_core/passages.py`);
+3. embed them (`shared/pico_core/embed.py`, one thread);
 4. write `book_chunks` / `book_index`, the book's word count, and its **search file**;
 5. record the result in the history.
 

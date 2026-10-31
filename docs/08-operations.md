@@ -14,6 +14,7 @@ Then on the server, depending on what changed:
 |---|---|
 | backend code | `systemctl restart pico-reader pico-reader-indexer` (the indexer runs the same code: indexing, dictionary conversion, categories) |
 | `backend/requirements.txt` | as tsp in `backend/`: `.venv/bin/pip install -r requirements.txt`, then `restorecon -R .venv/bin` and restart both |
+| `shared/` code | restart both (installed editable: live without reinstalling); a change to `shared/pyproject.toml` needs the `pip install` above |
 | a migration | as tsp in `backend/`: `.venv/bin/alembic upgrade head`, then restart both |
 | frontend | build and publish as in [06](06-web-app.md) |
 | `deploy/*.conf` | copy to `/etc/httpd/conf.d/`, `apachectl configtest && systemctl reload httpd` |

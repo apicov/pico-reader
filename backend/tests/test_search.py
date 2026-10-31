@@ -3,7 +3,7 @@ import hashlib
 import numpy as np
 import pytest
 
-from app import embed
+from pico_core import embed
 from tests.test_library import upload
 from tests.test_translate import groq  # noqa: F401 (fixture)
 

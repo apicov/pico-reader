@@ -1,3 +1,5 @@
+# shared with the server: reading books, embeddings, dictionaries (../shared, installed editable)
+-e ../shared
 requests==2.32.3
 beautifulsoup4==4.13.4
 PyYAML==6.0.2

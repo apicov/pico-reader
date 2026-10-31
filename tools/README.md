@@ -73,7 +73,7 @@ added here (faster on a desktop) and for rebuilding.
   about 1000 characters, each with the place the reader opens for it. A scanned PDF has no text: add a text
   version first (`--reflow` / `--reflow-from`).
 - Embeddings: multilingual-e5-small (int8 ONNX, downloaded once to `~/.cache/pico-reader/models`). The server
-  embeds questions with the same model (`backend/app/embed.py`, the same code as `readertool/embed.py`),
+  embeds questions with the same model (both use `shared/pico_core/embed.py`),
   so changing the model means changing both and indexing everything again.
 - Run `index --all` after adding books; it skips books that are up to date.
 

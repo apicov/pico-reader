@@ -1,5 +1,5 @@
-"""Text embeddings with multilingual-e5-small (int8 ONNX, ~120 MB): small enough for the 2 GB server, which
-embeds questions with the same model (tools/readertool/embed.py is the same code; keep the two equal).
+"""Text embeddings with multilingual-e5-small (int8 ONNX, ~120 MB): small enough for the 2 GB server. Books are
+embedded by the server's indexer or by `reader index` on a computer, questions by the server: all with this model.
 
 e5 expects "passage: " before indexed text and "query: " before questions.
 """
@@ -12,7 +12,8 @@ from pathlib import Path
 import numpy as np
 
 MODEL = "Xenova/multilingual-e5-small"
-REVISION = "761b726dd34fb83930e26aab4e9ac3899aa1fa78"  # a fixed commit, not main: the vectors must stay comparable
+# a fixed commit, not main: the vectors must stay comparable (the app's offline search pins the same: localModel.ts)
+REVISION = "761b726dd34fb83930e26aab4e9ac3899aa1fa78"
 # local name → (file in the model's repository, its sha256)
 FILES = {
     "model.onnx": ("onnx/model_quantized.onnx", "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"),

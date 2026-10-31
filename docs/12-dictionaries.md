@@ -53,8 +53,8 @@ optional `.syn` and a `res` folder of images), a folder, or a zip of them. The a
 the `.ifo`; choose the languages and who sees it (default: only you).
 
 The app sends one zip (`source`) straight to R2 and the server queues a conversion (`dict_jobs`). The indexer
-service ([04 §6b](04-backend.md)) takes it: it unzips, reads the dictionary (`app/stardict.py`, the same
-converter as the desktop tool's `tools/readertool/stardict.py`; keep the two the same), writes the packages,
+service ([04 §6b](04-backend.md)) takes it: it unzips, reads the dictionary (`shared/pico_core/stardict.py`,
+the converter the desktop tool uses too), writes the packages,
 uploads them, lists the dictionary and deletes the `source` zip. Uploads up to 300 MB; the whole dictionary is
 in memory while it's converted. A file that isn't a StarDict fails at once with the reason; other errors are
 retried up to 3 times. The page shows *waiting / converting… / failed: reason* while it works.

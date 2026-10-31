@@ -3,12 +3,12 @@
 import type { FeatureExtractionPipeline } from '@huggingface/transformers';
 
 type Request =
-  | { type: 'load'; model: string; wasmPaths: string }
+  | { type: 'load'; model: string; revision: string; wasmPaths: string }
   | { type: 'embed'; id: number; texts: string[]; kind: 'query' | 'passage' };
 
 let pipe: Promise<FeatureExtractionPipeline> | null = null;
 
-async function load(model: string, wasmPaths: string): Promise<FeatureExtractionPipeline> {
+async function load(model: string, revision: string, wasmPaths: string): Promise<FeatureExtractionPipeline> {
   const { pipeline, env } = await import('@huggingface/transformers');
   env.allowLocalModels = false;
   env.useBrowserCache = true;
@@ -24,6 +24,7 @@ async function load(model: string, wasmPaths: string): Promise<FeatureExtraction
   const make = pipeline as unknown as (task: string, model: string, options: object) => Promise<FeatureExtractionPipeline>;
   return make('feature-extraction', model, {
     dtype: 'q8',
+    revision,
     progress_callback: (p: { status: string; file?: string; loaded?: number; total?: number }) => {
       if (p.status === 'progress' && p.file && p.total) {
         loaded[p.file] = p.loaded ?? 0;
@@ -38,7 +39,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   const msg = e.data;
   try {
     if (msg.type === 'load') {
-      pipe ??= load(msg.model, msg.wasmPaths);
+      pipe ??= load(msg.model, msg.revision, msg.wasmPaths);
       await pipe;
       self.postMessage({ type: 'loaded' });
       return;

@@ -14,10 +14,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import categories, embed, groq_client
+from app import categories, groq_client
 from app import library_service as books
 from app.auth import Reader, get_current_admin, get_current_reader
 from app.db import get_db
+from pico_core import embed
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["search"])

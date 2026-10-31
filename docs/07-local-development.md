@@ -50,6 +50,7 @@ npx tsc -b                    # type check, as the build does
 | Backend coverage | `.venv/bin/pytest --cov=app` | Line coverage per module |
 | Frontend | `cd frontend && npm test` | Services and helpers (vitest, jsdom, `fake-indexeddb`): the offline queues, sync, the book cache, offline search, notes and their conflicts, collections, sending to the computer, Markdown import and grouping chosen files into books |
 | Frontend coverage | `npm run coverage` | Summary in the terminal, details in `frontend/coverage/index.html` |
+| Shared code | `backend/.venv/bin/pytest shared/tests` (from the repository root) | `pico_core`: StarDict conversion, books → index rows |
 | Desktop tool | `cd tools && PYTHONPATH=. .venv/bin/python -m pytest tests` | `reader sync` against a stand-in server: inbox, outbox, notes both ways, conflicts, projects, the live loop |
 | Frontend lint | `cd frontend && npm run lint && npm run typecheck` | ESLint (TypeScript, the rules of hooks and their dependencies), no warnings allowed; the type check |
 | Python lint | `backend/.venv/bin/ruff check .` (from the repository root) | ruff over backend, tools and e2e (`ruff.toml`): pyflakes, pycodestyle, sorted imports, bugbear, pyupgrade |

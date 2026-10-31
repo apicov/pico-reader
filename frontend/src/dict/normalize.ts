@@ -1,4 +1,4 @@
-/** Lookup keys, the same rules as the converter (tools/readertool/stardict.py key_of / fold). */
+/** Lookup keys, the same rules as the converter (shared/pico_core/stardict.py key_of / fold). */
 
 /** NFC + lower case: the exact key */
 export function keyOf(word: string): string {

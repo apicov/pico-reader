@@ -10,11 +10,13 @@ httpx==0.28.1
 anthropic==2.3.0  # LLM_PROVIDER=anthropic (app/anthropic_llm.py)
 requests==2.32.3
 boto3==1.35.99
-# question embeddings for search (app/embed.py)
+# shared with the desktop tool: reading books, embeddings, dictionaries (../shared, installed editable)
+-e ../shared
+# question embeddings for search (pico_core.embed)
 onnxruntime==1.22.1
 tokenizers==0.21.2
 numpy==2.2.6
 genanki==0.13.1
-# reading books for the indexer (app/passages.py)
+# reading books for the indexer (pico_core.passages)
 pymupdf==1.26.7
 beautifulsoup4==4.13.4
