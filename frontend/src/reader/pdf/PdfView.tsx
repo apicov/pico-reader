@@ -9,6 +9,7 @@ import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist/type
 import './pdf.css';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
 import { watchSelection } from '../selection';
+import { markSpans, NO_HIGHLIGHTS, type PageHighlight } from './markSpans';
 
 // The legacy build runs in older Android WebViews too
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -20,35 +21,12 @@ const MAX_CANVAS_PIXELS = 12_000_000; // mobile WebViews refuse bigger canvases
 
 interface Size { w: number; h: number }
 
-const NO_HIGHLIGHTS: { text: string; color: string }[] = [];
-
-/** Tint the text-layer spans that hold a highlight's text (pdf.js spans are runs of a line, so this
- *  marks whole runs: close enough to see what was highlighted). */
-function markSpans(layer: HTMLElement, highlights: { text: string; color: string }[]) {
-  const spans = [...layer.querySelectorAll<HTMLElement>('span:not(.markedContent)')];
-  let text = '';
-  const bounds = spans.map((span) => {
-    const start = text.length;
-    text += `${(span.textContent ?? '').replace(/\s+/g, ' ')} `;
-    return [start, text.length] as const;
-  });
-  const flat = text.replace(/\s+/g, ' ');
-  for (const h of highlights) {
-    const needle = h.text.replace(/\s+/g, ' ').trim();
-    const at = flat.indexOf(needle);
-    if (at < 0 || !needle) continue;
-    spans.forEach((span, i) => {
-      if (bounds[i][0] < at + needle.length && bounds[i][1] > at) span.classList.add('hl', `hl-${h.color || 'yellow'}`);
-    });
-  }
-}
-
 /** A link on a page: where (CSS px on the page) and to what (a web address, or a place in the PDF) */
 interface PageLink { left: number; top: number; width: number; height: number; url?: string; dest?: OutlineNode['dest'] }
 
 function Page({ doc, index, size, scale, visible, highlights, onLink }: {
   doc: PDFDocumentProxy; index: number; size: Size; scale: number; visible: boolean;
-  highlights: { text: string; color: string }[]; onLink: (link: PageLink) => void;
+  highlights: PageHighlight[]; onLink: (link: PageLink) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -95,7 +73,7 @@ function Page({ doc, index, size, scale, visible, highlights, onLink }: {
 
   const highlightsRef = useRef(highlights);
   highlightsRef.current = highlights;
-  const highlightKey = highlights.map((h) => `${h.color}:${h.text}`).join('\u0000');
+  const highlightKey = highlights.map((h) => `${h.color}:${h.fraction}:${h.text}`).join('\u0000');
   useEffect(() => {
     const layer = textRef.current;
     if (!layer || !visible) return;
@@ -263,10 +241,12 @@ export const PdfView = forwardRef<ViewHandle, ViewProps & { blob: Blob }>(functi
   }, () => pagesRef.current), [onSelection, sizes.length]);
 
   const pageHighlights = useMemo(() => {
-    const byPage = new Map<number, { text: string; color: string }[]>();
+    const byPage = new Map<number, PageHighlight[]>();
     for (const h of highlights) {
-      const m = /^p(\d+):/.exec(h.location);
-      if (m) byPage.set(Number(m[1]) - 1, [...(byPage.get(Number(m[1]) - 1) ?? []), { text: h.text, color: h.color }]);
+      const m = /^p(\d+):([\d.]+)/.exec(h.location);
+      if (!m) continue;
+      const page = Number(m[1]) - 1;
+      byPage.set(page, [...(byPage.get(page) ?? []), { text: h.text, color: h.color, fraction: Number(m[2]) }]);
     }
     return byPage;
   }, [highlights]);

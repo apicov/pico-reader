@@ -4,6 +4,7 @@ the signed-in reader only, with compact JSON results.
 Tools marked `changes=True` don't run when the model calls them: the chat proposes them, and they run only
 after the reader confirms (chat.py)."""
 
+import inspect
 import json
 import logging
 import re
@@ -61,7 +62,11 @@ def resolve_book(ctx: Context, book: str | None) -> dict | None:
             return dict(r._mapping)
     wanted = _plain(book)
     matches = [r for r in rows if wanted in _plain(r.title) or _plain(r.title) in wanted]
-    return dict(matches[0]._mapping) if matches else None
+    if not matches:
+        return None
+    # the closest title: the same one, then one that starts with it, then the shortest (ties by id: always the same)
+    best = min(matches, key=lambda r: (_plain(r.title) != wanted, not _plain(r.title).startswith(wanted), len(r.title), r.id))
+    return dict(best._mapping)
 
 
 def _book_or_error(ctx: Context, book: str | None):
@@ -587,9 +592,11 @@ def run(ctx: Context, name: str, raw_args: str | dict) -> Any:
     except json.JSONDecodeError:
         return {"error": "Arguments must be JSON"}
     try:
-        return tool.run(ctx, **args)
-    except TypeError as e:
+        inspect.signature(tool.run).bind(ctx, **args)
+    except TypeError as e:  # a missing or unknown argument; a TypeError inside the tool is a bug, handled below
         return {"error": f"Bad arguments: {e}"}
+    try:
+        return tool.run(ctx, **args)
     except Exception as e:  # a bad value from the model, a database error: the model is told and can recover
         ctx.db.rollback()
         logger.warning("Tool %s failed: %s", name, e)

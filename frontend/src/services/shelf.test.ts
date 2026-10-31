@@ -3,7 +3,7 @@ import { cachedCollections, cachedMyShelf, createCollection, deleteCollection, l
   moveCollection, renameCollection, setInCollection, setOnMyShelf, setShelfStatus, shelfFolders } from './shelf';
 
 const net = vi.hoisted(() => ({ online: false, gone: new Set<string>(), calls: [] as string[],
-  shelf: [] as object[], mine: [] as object[], collections: [] as object[] }));
+  shelf: [] as object[], mine: [] as object[], collections: [] as object[], hold: null as Promise<void> | null }));
 vi.mock('@/services/connectivity', () => ({ isOnline: () => net.online }));
 vi.mock('@/services/api', async (original) => ({
   ...(await original<typeof import('@/services/api')>()),
@@ -11,6 +11,7 @@ vi.mock('@/services/api', async (original) => ({
     const method = opts?.method ?? 'GET';
     if (method !== 'GET') {
       net.calls.push(`${method} ${path}`);
+      if (net.hold) await net.hold;
       const id = decodeURIComponent(path.split('/').pop()!);
       if (net.gone.has(id)) throw new ApiError(404, 'No such book');
       return null;
@@ -19,7 +20,7 @@ vi.mock('@/services/api', async (original) => ({
   }),
 }));
 
-beforeEach(() => { localStorage.clear(); net.online = false; net.gone.clear(); net.calls.length = 0; net.shelf = []; net.mine = []; net.collections = []; });
+beforeEach(() => { localStorage.clear(); net.online = false; net.gone.clear(); net.calls.length = 0; net.shelf = []; net.mine = []; net.collections = []; net.hold = null; });
 
 describe('shelf queue', () => {
   it('a change for a deleted book is dropped and the shelf still loads from the server', async () => {
@@ -43,6 +44,35 @@ describe('shelf queue', () => {
     net.online = true;
     await loadMyShelf();
     expect(net.calls).toEqual(['DELETE /api/shelf/mine/b1', 'PUT /api/shelf/mine/b2']);
+  });
+});
+
+describe('shelf queue: overlapping work', () => {
+  it('the three loads at once send each queued change once, none lost', async () => {
+    const uni = await createCollection('Uni');
+    await setInCollection(uni, 'b1', true);
+    await setInCollection(uni, 'b2', true);
+    net.online = true;
+    await Promise.all([loadShelf(), loadMyShelf(), loadCollections()]);
+    expect(net.calls.map((c) => c.replace(/col-[0-9a-f-]+/g, 'COL'))).toEqual([
+      'PUT /api/shelf/collections/COL', 'PUT /api/shelf/collections/COL/books/b1', 'PUT /api/shelf/collections/COL/books/b2']);
+  });
+
+  it('a change made while a flush is sending is kept and sent', async () => {
+    await setShelfStatus('a', 'reading');
+    net.online = true;
+    let release = () => {};
+    net.hold = new Promise((r) => { release = r; });
+    const loading = loadShelf();
+    await vi.waitFor(() => expect(net.calls).toEqual(['PUT /api/shelf/a']));
+    net.online = false; // queued only, so the order of the calls below is certain
+    await setShelfStatus('b', 'finished');
+    net.hold = null;
+    net.online = true;
+    release();
+    await loading;
+    await loadShelf();
+    expect(net.calls).toEqual(['PUT /api/shelf/a', 'PUT /api/shelf/b']);
   });
 });
 

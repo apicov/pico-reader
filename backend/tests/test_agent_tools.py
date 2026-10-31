@@ -112,3 +112,17 @@ def test_bad_calls_and_failures_go_back_to_the_model(wolke, monkeypatch):
         monkeypatch.setattr(agent_tools.TOOLS["reading_goal"], "run", broken)
         assert "no_such_table" in agent_tools.run(ctx, "reading_goal", {})["error"]
         assert ok(ctx, "list_books")["books"]  # rolled back: the session still works
+
+        def buggy(ctx, **_):
+            return len(None)  # a TypeError inside the tool is a bug, not the model's bad arguments
+        monkeypatch.setattr(agent_tools.TOOLS["reading_goal"], "run", buggy)
+        assert not agent_tools.run(ctx, "reading_goal", {})["error"].startswith("Bad arguments")
+
+
+def test_a_book_by_part_of_its_title_is_the_closest_title(wolke, client, admin_headers):
+    long = make_book(client, admin_headers)
+    with get_engine().begin() as c:
+        c.execute(agent_tools.text("UPDATE books SET title = 'Die Wolke und der Regen' WHERE id = :id"), {"id": long})
+    with context() as ctx:
+        assert agent_tools.resolve_book(ctx, "die wolke")["id"] != long
+        assert agent_tools.resolve_book(ctx, "Wolke und")["id"] == long

@@ -45,7 +45,8 @@ export async function markKnown(language: string, word: string): Promise<void> {
   await api('/api/known-words', { method: 'PUT', body: { language, word } });
   const key = `looked_up:${language}`;
   const cached = (await getPref<string[]>(key)) ?? [];
-  await setPref(key, cached.filter((w) => w !== word.toLowerCase()));
+  const known = word.normalize('NFC').toLowerCase(); // as addLookedUp stored it
+  await setPref(key, cached.filter((w) => w !== known));
   lookedUpListeners.forEach((l) => l(language));
   await deleteCardsFor(language, word);
 }

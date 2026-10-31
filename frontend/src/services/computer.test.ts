@@ -1,19 +1,20 @@
 import { ApiError } from '@/services/api';
 import { flushComputer, sendToComputer } from './computer';
 
-const net = vi.hoisted(() => ({ online: false, posted: [] as { id: string; body: string }[], reject: '' }));
+const net = vi.hoisted(() => ({ online: false, posted: [] as { id: string; body: string }[], reject: '', hold: null as Promise<void> | null }));
 vi.mock('@/services/connectivity', () => ({ isOnline: () => net.online }));
 vi.mock('@/services/api', async (original) => ({
   ...(await original<typeof import('@/services/api')>()),
   api: vi.fn(async (_path: string, opts: { body: { id: string; body: string } }) => {
     if (!net.online) throw new ApiError(0, 'offline');
+    if (net.hold) await net.hold;
     if (opts.body.body === net.reject) throw new ApiError(422, 'too many waiting');
     net.posted.push(opts.body);
     return { id: opts.body.id };
   }),
 }));
 
-beforeEach(() => { localStorage.clear(); net.online = false; net.posted.length = 0; net.reject = ''; });
+beforeEach(() => { localStorage.clear(); net.online = false; net.posted.length = 0; net.reject = ''; net.hold = null; });
 
 describe('send to computer', () => {
   it('offline: queued, then sent in order when back online', async () => {
@@ -24,6 +25,20 @@ describe('send to computer', () => {
     expect(net.posted.map((d) => d.body)).toEqual(['eins', 'print(2)']);
     expect(new Set(net.posted.map((d) => d.id)).size).toBe(2); // each has its own id: a resend is harmless
     expect(await sendToComputer({ kind: 'text', body: 'drei' })).toBe('sent');
+  });
+
+  it('an item added while a flush is sending is neither lost nor sent twice', async () => {
+    await sendToComputer({ kind: 'text', body: 'eins' });
+    net.online = true;
+    let release = () => {};
+    net.hold = new Promise((r) => { release = r; });
+    const flushing = flushComputer();
+    const adding = sendToComputer({ kind: 'text', body: 'zwei' });
+    await new Promise((r) => setTimeout(r, 10));
+    release();
+    await Promise.all([flushing, adding]);
+    await flushComputer();
+    expect(net.posted.map((d) => d.body)).toEqual(['eins', 'zwei']);
   });
 
   it('an item the server refuses is dropped and the rest goes on', async () => {

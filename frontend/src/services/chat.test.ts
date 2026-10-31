@@ -14,4 +14,10 @@ describe('sseParser', () => {
   it('accepts CRLF line ends', () => {
     expect(sseParser()('event: done\r\ndata: {"title":"x"}\r\n\r\n')).toEqual([{ event: 'done', data: { title: 'x' } }]);
   });
+
+  it('skips a malformed event and goes on', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(sseParser()('event: delta\ndata: {oops\n\nevent: delta\ndata: "ok"\n\n')).toEqual([{ event: 'delta', data: 'ok' }]);
+    warn.mockRestore();
+  });
 });

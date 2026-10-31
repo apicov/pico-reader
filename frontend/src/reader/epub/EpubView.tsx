@@ -81,9 +81,10 @@ const asElement = (x: unknown) => (x && typeof x === 'object' && 'closest' in x 
 /** Display math wider than its column is scaled down to fit (it ran into the next column or was cut off); again
  *  whenever the column's width or the text size changes. Math can't wrap, and scrolling sideways fights page turns. */
 const refits = new WeakMap<Document, () => void>();
-function fitDisplayMath(doc: Document) {
+/** Returns what stops it */
+function fitDisplayMath(doc: Document): () => void {
   const win = doc.defaultView;
-  if (!win) return;
+  if (!win) return () => {};
   const fit = () => doc.querySelectorAll<HTMLElement>('.katex-display, math[display="block"], mjx-container[display="true"]')
     .forEach((el) => {
       el.style.fontSize = '';
@@ -99,9 +100,11 @@ function fitDisplayMath(doc: Document) {
     const now = `${getComputedStyle(doc.documentElement).columnWidth}|${getComputedStyle(doc.body).fontSize}`;
     if (now !== last) { last = now; win.requestAnimationFrame(fit); }
   };
-  new win.ResizeObserver(check).observe(doc.documentElement);
+  const observer = new win.ResizeObserver(check);
+  observer.observe(doc.documentElement);
   refits.set(doc, check);
   void doc.fonts?.ready.then(() => win.requestAnimationFrame(fit));  // the math fonts change the widths
+  return () => observer.disconnect();
 }
 
 const EPUB_NS = 'http://www.idpf.org/2007/ops';
@@ -172,6 +175,9 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     viewRef.current = view;
     let closed = false;
     const sectionOf = new WeakMap<Document, number>();
+    // per section: what stops its observers and timers, when the view closes or foliate has dropped the section
+    const stops = new Map<Document, (() => void)[]>();
+    const stop = (doc: Document) => { stops.get(doc)?.forEach((f) => f()); stops.delete(doc); };
 
     view.addEventListener('relocate', (e) => {
       const d = (e as CustomEvent<FoliateRelocate>).detail;
@@ -187,15 +193,16 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
       if (!doc.documentElement.lang) doc.documentElement.lang = language;
       sectionOf.set(doc, index);
+      for (const old of stops.keys()) if (!old.defaultView) stop(old);
       doc.addEventListener('keydown', onKey);
       doc.addEventListener('click', (ev) => {
         const src = tappedImage(ev.target);
         if (src && !doc.getSelection()?.toString()) callbacks.current.onImage?.(src);
       });
       markSeen(doc, seenRef.current);
-      fitDisplayMath(doc);
+      const stopFitting = fitDisplayMath(doc);
       // the selection, with its CFI (for highlights)
-      watchSelection(doc, (sel) => {
+      const stopWatching = watchSelection(doc, (sel) => {
         const s = doc.getSelection();
         if (sel && s?.rangeCount) {
           try {
@@ -204,6 +211,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
         }
         callbacks.current.onSelection(sel);
       });
+      stops.set(doc, [stopFitting, stopWatching]);
     });
     // a link to a note opens it in a popup (notes in asides are hidden in the text); other links: foliate goes there
     view.addEventListener('link', (e) => {
@@ -251,6 +259,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     })();
     return () => {
       closed = true;
+      [...stops.keys()].forEach(stop);
       view.close?.();
       view.remove();
       viewRef.current = null;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getPref, setPref } from '@/services/prefs';
 import type { ReadingThemeName } from '@/theme/readingThemes';
 
@@ -30,18 +30,24 @@ const SettingsContext = createContext<SettingsState | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  // the reader's changes: saved, and kept over the saved settings when they load after a change
+  const changes = useRef<Partial<Settings> | null>(null);
 
   useEffect(() => {
-    void getPref<Partial<Settings>>(KEY).then((saved) => saved && setSettings({ ...DEFAULT_SETTINGS, ...saved }));
+    void getPref<Partial<Settings>>(KEY).then((saved) => {
+      if (saved) setSettings({ ...DEFAULT_SETTINGS, ...saved, ...changes.current });
+    });
   }, []);
+  useEffect(() => {
+    if (changes.current) void setPref(KEY, settings);
+  }, [settings]);
 
   const value = useMemo<SettingsState>(() => ({
     settings,
-    update: (patch) => setSettings((s) => {
-      const next = { ...s, ...patch };
-      void setPref(KEY, next);
-      return next;
-    }),
+    update: (patch) => {
+      changes.current = { ...changes.current, ...patch };
+      setSettings((s) => ({ ...s, ...patch }));
+    },
   }), [settings]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

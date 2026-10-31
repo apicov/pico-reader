@@ -61,7 +61,8 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   let status: number;
   let data: unknown;
   if (Capacitor.isNativePlatform()) {
-    const res = await CapacitorHttp.request({ method, url, headers, data: body, connectTimeout: TIMEOUT_MS, readTimeout: TIMEOUT_MS });
+    const res = await CapacitorHttp.request({ method, url, headers, data: body, connectTimeout: TIMEOUT_MS, readTimeout: TIMEOUT_MS })
+      .catch(() => { throw new ApiError(0, 'Cannot reach the server'); });
     status = res.status;
     data = typeof res.data === 'string' && res.data ? safeJson(res.data) : res.data;
     const tag = Object.entries(res.headers).find(([k]) => k.toLowerCase() === 'etag')?.[1];
@@ -85,11 +86,31 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 
   if (status === 304) return NOT_MODIFIED as T;
   if (status === 401 && auth) onUnauthorized();
-  if (status < 200 || status >= 300) {
-    const detail = (data as { detail?: unknown } | null)?.detail;
-    throw new ApiError(status, typeof detail === 'string' ? detail : `Request failed (${status})`);
-  }
+  if (status < 200 || status >= 300) throw errorWithDetail(status, data, `Request failed (${status})`);
   return data as T;
+}
+
+/** fetch with the reader's token, for what `api` can't do (a streamed answer, a file): a 401 signs the reader
+ *  out as in `api`, and a failure to connect is an ApiError(0). The caller checks `res.ok` (see `errorFrom`). */
+export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(API_URL + path, { ...init, headers }).catch((e: Error) => {
+    throw e.name === 'AbortError' ? e : new ApiError(0, 'Cannot reach the server');
+  });
+  if (res.status === 401) onUnauthorized();
+  return res;
+}
+
+/** The ApiError for a failed `authFetch` reply, with the server's message when it gave one */
+export async function errorFrom(res: Response, fallback: string): Promise<ApiError> {
+  return errorWithDetail(res.status, await res.json().catch(() => null), `${fallback} (${res.status})`);
+}
+
+function errorWithDetail(status: number, data: unknown, fallback: string): ApiError {
+  const detail = (data as { detail?: unknown } | null)?.detail;
+  return new ApiError(status, typeof detail === 'string' ? detail : fallback);
 }
 
 function safeJson(text: string): unknown {

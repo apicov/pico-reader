@@ -3,7 +3,7 @@ import { store as fileStore } from '@/services/bookCache';
 import { candidateForms } from './forms';
 import { byOrder, dictPrefs, setDictOrder } from './prefs';
 import { cleanWord, fold, keyOf } from './normalize';
-import { backend, installedDicts, isCurrent, type DictEntry, type InstalledDict } from './store';
+import { backend, installedDicts, isCurrent, subscribeDicts, type DictEntry, type InstalledDict } from './store';
 
 export interface DictResult {
   dict: InstalledDict;
@@ -64,18 +64,28 @@ export async function lookUp(selection: string, language?: string): Promise<Look
   return { word, results: results.filter((r) => r.entries.length), suggestions };
 }
 
-const imageMaps = new Map<string, Promise<Map<string, string>>>();
+/** By dictionary, with the images zip they were made from */
+const imageMaps = new Map<string, { res: string | undefined; urls: Promise<Map<string, string>> }>();
 
 /** blob: URLs for a dictionary's images (from its res zip), by file name */
-export function dictImages(dictId: string): Promise<Map<string, string>> {
-  let p = imageMaps.get(dictId);
-  if (!p) {
-    p = (async () => {
-      const files = unzipSync(new Uint8Array(await (await fileStore.blob(`dict-${dictId}/res`)).arrayBuffer()));
-      return new Map(Object.entries(files).map(([name, data]) => [name, URL.createObjectURL(new Blob([data as BlobPart]))]));
-    })();
-    imageMaps.set(dictId, p);
-    p.catch(() => imageMaps.delete(dictId));
-  }
-  return p;
+export async function dictImages(dictId: string): Promise<Map<string, string>> {
+  const res = (await installedDicts())[dictId]?.res;
+  const cached = imageMaps.get(dictId);
+  if (cached && cached.res === res) return cached.urls;
+  const urls = (async () => {
+    const files = unzipSync(new Uint8Array(await (await fileStore.blob(`dict-${dictId}/res`)).arrayBuffer()));
+    return new Map(Object.entries(files).map(([name, data]) => [name, URL.createObjectURL(new Blob([data as BlobPart]))]));
+  })();
+  imageMaps.set(dictId, { res, urls });
+  urls.catch(() => { if (imageMaps.get(dictId)?.urls === urls) imageMaps.delete(dictId); });
+  return urls;
 }
+
+/** A dictionary removed, or installed again with other images: its old URLs are let go */
+subscribeDicts(() => void installedDicts().then((all) => {
+  for (const [dictId, cached] of imageMaps) {
+    if (all[dictId]?.res === cached.res) continue;
+    imageMaps.delete(dictId);
+    void cached.urls.then((urls) => urls.forEach((url) => URL.revokeObjectURL(url))).catch(() => undefined);
+  }
+}));

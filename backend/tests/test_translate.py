@@ -136,3 +136,19 @@ def test_define_a_word_of_unknown_language(client, auth_headers, groq):
     replies.append({"lemma": "das Haus", "part_of_speech": "sustantivo", "meaning": "casa", "notes": "", "language": "?"})
     r = client.post("/api/define", headers=auth_headers, json={"word": "Haus", "target_lang": "es"})
     assert r.json()["language"] == "" and "dictionary into Spanish" in calls[1]["messages"][0]["content"]
+
+
+def test_a_fallback_translation_is_not_served_as_cached_later(client, auth_headers, groq, monkeypatch):
+    calls, _ = groq
+    answered_by = ["fallback"]
+    real = groq_client.chat_json_via
+
+    def via(*args, **kwargs):
+        data, model, _ = real(*args, **kwargs)
+        return data, ("fallback-model" if answered_by[0] == "fallback" else model), answered_by[0]
+    monkeypatch.setattr(groq_client, "chat_json_via", via)
+    assert client.post("/api/translate", headers=auth_headers, json=BODY).json()["via"] == "fallback"
+    answered_by[0] = "main"  # the primary is back: asked again, not the fallback's answer from the cache
+    again = client.post("/api/translate", headers=auth_headers, json=BODY).json()
+    assert again["cached"] is False and len(calls) == 2
+    assert client.post("/api/translate", headers=auth_headers, json=BODY).json()["cached"] is True

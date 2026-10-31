@@ -69,7 +69,7 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
   const book = library?.books.find((b) => b.id === bookId);
   // the other pages offer the way back here ("Continue reading")
   useEffect(() => { if (book) setReadingNow(book); }, [book]);
-  const formats = PREFERENCE.filter((f) => book?.formats[f]);
+  const formats = useMemo(() => PREFERENCE.filter((f) => book?.formats[f]), [book]);
 
   const [format, setFormat] = useState<BookFormat | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });

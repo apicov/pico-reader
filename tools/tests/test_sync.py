@@ -316,11 +316,19 @@ def test_install_writes_a_user_service_and_uninstall_removes_it(tmp_path, monkey
     sync_module.install(Path("~/pico"), 15)
     unit = tmp_path / "systemd" / "user" / "pico-reader-sync.service"
     text = unit.read_text()
-    assert f"sync --folder {Path.home() / 'pico'} --interval 15" in text and "Restart=on-failure" in text
+    assert f'sync --folder "{Path.home() / 'pico'}" --interval 15' in text and "Restart=on-failure" in text
     assert "PYTHONUNBUFFERED=1" in text  # the log reaches journalctl as it happens
     assert ["systemctl", "--user", "enable", "--now", "pico-reader-sync.service"] in calls
     sync_module.uninstall()
     assert not unit.exists() and ["systemctl", "--user", "disable", "--now", "pico-reader-sync.service"] in calls
+
+
+def test_install_quotes_a_folder_with_spaces_and_percent(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(subprocess, "run", lambda args, check: None)
+    sync_module.install(Path("/home/me/My Notes 100%"), 15)
+    text = (tmp_path / "systemd" / "user" / "pico-reader-sync.service").read_text()
+    assert '--folder "/home/me/My Notes 100%%" --interval' in text
 
 
 def test_run_once_does_one_round(tmp_path, monkeypatch):

@@ -4,6 +4,7 @@ embeds questions with the same model (backend/app/embed.py is the same code; kee
 e5 expects "passage: " before indexed text and "query: " before questions.
 """
 
+import hashlib
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -11,7 +12,12 @@ from pathlib import Path
 import numpy as np
 
 MODEL = "Xenova/multilingual-e5-small"
-FILES = {"model.onnx": "onnx/model_quantized.onnx", "tokenizer.json": "tokenizer.json"}
+REVISION = "761b726dd34fb83930e26aab4e9ac3899aa1fa78"  # a fixed commit, not main: the vectors must stay comparable
+# local name → (file in the model's repository, its sha256)
+FILES = {
+    "model.onnx": ("onnx/model_quantized.onnx", "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"),
+    "tokenizer.json": ("tokenizer.json", "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"),
+}
 DIMENSIONS = 384
 MAX_TOKENS = 512
 
@@ -21,17 +27,28 @@ def model_dir() -> Path:
     return base / MODEL.replace("/", "--")
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _download() -> Path:
     import urllib.request
 
     folder = model_dir()
     folder.mkdir(parents=True, exist_ok=True)
-    for name, remote in FILES.items():
+    for name, (remote, sha256) in FILES.items():
         target = folder / name
         if not target.exists():
             print(f"  downloading {MODEL} {remote}…")
             tmp = target.with_suffix(".part")
-            urllib.request.urlretrieve(f"https://huggingface.co/{MODEL}/resolve/main/{remote}", tmp)
+            urllib.request.urlretrieve(f"https://huggingface.co/{MODEL}/resolve/{REVISION}/{remote}", tmp)
+            if _sha256(tmp) != sha256:
+                tmp.unlink()
+                raise RuntimeError(f"{MODEL} {remote} isn't the file expected (sha256 differs): not used")
             tmp.rename(target)
     return folder
 

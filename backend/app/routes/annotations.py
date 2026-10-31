@@ -69,7 +69,11 @@ def save(annotation_id: str, body: AnnotationIn, reader: Reader = Depends(get_cu
             color = EXCLUDED.color, deleted = EXCLUDED.deleted, client_updated_at = EXCLUDED.client_updated_at,
             updated_at = clock_timestamp()
             WHERE annotations.client_updated_at < EXCLUDED.client_updated_at
+              AND annotations.reader_email = EXCLUDED.reader_email  -- the check above, also against a race
     """), {"id": annotation_id, "e": reader.email, **body.model_dump()})
-    row = db.execute(text(f"SELECT {_COLUMNS} FROM annotations WHERE id = :id"), {"id": annotation_id}).fetchone()
+    row = db.execute(text(f"SELECT {_COLUMNS} FROM annotations WHERE id = :id AND reader_email = :e"),
+                     {"id": annotation_id, "e": reader.email}).fetchone()
+    if row is None:
+        raise HTTPException(404, "Not found")
     db.commit()
     return Annotation(**row._mapping)

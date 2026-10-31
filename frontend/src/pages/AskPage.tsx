@@ -238,7 +238,11 @@ export default function AskPage() {
   const pickScope = async (bookId: string | null) => {
     setScopeMenu(null);
     if (!conversation) { setScope(bookId ? [bookId] : null); return; }
-    setConversation(await updateConversation(conversation.id, bookId ? { book_ids: [bookId] } : { all_books: true }));
+    try {
+      setConversation(await updateConversation(conversation.id, bookId ? { book_ids: [bookId] } : { all_books: true }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   const send = async (e?: FormEvent) => {

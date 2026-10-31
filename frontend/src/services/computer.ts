@@ -2,7 +2,7 @@
  *  (`reader sync`) writes them into its inbox folder. Made offline too: queued here, sent when online. */
 import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
-import { getPref, setPref } from '@/services/prefs';
+import { getPref, updatePref } from '@/services/prefs';
 import { dropRejected, rejectedForGood } from '@/services/syncQueue';
 
 export interface Drop {
@@ -20,6 +20,8 @@ export interface ComputerStatus {
   waiting: number;
 }
 
+type Queued = Drop & { id: string };
+
 const PENDING = 'computer_pending';
 const MAX_BODY = 200_000; // what the server takes
 
@@ -31,13 +33,13 @@ export function flushComputer(): Promise<void> {
   flushing ??= (async () => {
     try {
       for (;;) {
-        const queue = (await getPref<(Drop & { id: string })[]>(PENDING)) ?? [];
-        if (!queue.length) return;
-        await api('/api/drops', { method: 'POST', body: queue[0] }).catch((e) => {
+        const [next] = (await getPref<Queued[]>(PENDING)) ?? [];
+        if (!next) return;
+        await api('/api/drops', { method: 'POST', body: next }).catch((e) => {
           if (!rejectedForGood(e)) throw e;
-          dropRejected('item for the computer', queue[0].id, e);
+          dropRejected('item for the computer', next.id, e);
         });
-        await setPref(PENDING, ((await getPref<(Drop & { id: string })[]>(PENDING)) ?? []).slice(1));
+        await updatePref<Queued[]>(PENDING, (queue) => (queue ?? []).filter((q) => q.id !== next.id));
       }
     } finally {
       flushing = null;
@@ -49,7 +51,7 @@ export function flushComputer(): Promise<void> {
 /** 'sent' when it reached the server, 'queued' when it waits for a connection */
 export async function sendToComputer(d: Drop): Promise<'sent' | 'queued'> {
   const item = { ...d, body: d.body.slice(0, MAX_BODY), title: d.title?.slice(0, 200), id: `drop-${crypto.randomUUID()}` };
-  await setPref(PENDING, [...((await getPref<(Drop & { id: string })[]>(PENDING)) ?? []), item]);
+  await updatePref<Queued[]>(PENDING, (queue) => [...(queue ?? []), item]);
   if (!isOnline()) return 'queued';
   try {
     await flushComputer();

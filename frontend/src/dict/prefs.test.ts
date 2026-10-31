@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest';
-import { byOrder } from './prefs';
+import { describe, expect, it, vi } from 'vitest';
+import { byOrder, dictPrefs, setDictOrder } from './prefs';
+
+vi.mock('@/services/connectivity', () => ({ isOnline: () => false }));
+
+describe('dictPrefs', () => {
+  it('an order set before anything was saved does not stick to the defaults', async () => {
+    localStorage.clear();
+    await setDictOrder('de', ['duden']);
+    localStorage.clear();
+    expect((await dictPrefs()).order).toEqual({});
+  });
+});
 
 describe('byOrder', () => {
   const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];

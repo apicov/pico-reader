@@ -233,6 +233,10 @@ def test_a_failing_confirmed_change_is_reported_not_a_server_error(client, admin
     action = next(d for n, d in ask(client, admin_headers, cid, "Goal of thirty minutes") if n == "action")
     r = client.post(f"/api/conversations/{cid}/actions/{action['id']}", headers=admin_headers, json={"approve": True})
     assert r.status_code == 200 and r.json()["content"].startswith("Couldn't do it")
+    stored = client.get(f"/api/conversations/{cid}", headers=admin_headers).json()["messages"]
+    assert stored[1]["extras"]["actions"][0]["status"] == "failed"
+    assert client.post(f"/api/conversations/{cid}/actions/{action['id']}", headers=admin_headers,
+                       json={"approve": True}).json()["detail"] == "Already failed"
 
 
 def test_an_unexpected_failure_ends_the_stream_with_an_error(client, admin_headers, indexed_book, groq, monkeypatch):

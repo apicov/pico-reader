@@ -101,17 +101,18 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
         const given = language ?? r.results[0]?.dict.from_lang;
         let recordedAs = !!given;
         if (given) recordAs(given);
-        if (settings.autoReview && r.results.length) void cardFor(r, record).then(setCarded);
+        if (settings.autoReview && r.results.length) void cardFor(r, record).then((ok) => { if (!cancelled) setCarded(ok); });
         // no dictionary has it: ask the model, with the sentence for context (if any), once per language
         if (!r.results.length && online) {
           const targets = [...new Set(aiTargets ?? [settings.targetLanguage])];
-          setAi(Object.fromEntries(targets.map((t) => [t, 'asking' as const])));
+          if (!cancelled) setAi(Object.fromEntries(targets.map((t) => [t, 'asking' as const])));
           targets.forEach((target, i) => {
             void api<AiDefinition>('/api/define', {
               method: 'POST',
               body: { word: r.word, context: record.context.slice(0, 1500), language: language ?? '', target_lang: target },
             }).then((d) => {
-              setAi((a) => ({ ...a, [target]: d }));
+              // a late answer for a word the reader already left: still recorded and carded, not shown
+              if (!cancelled) setAi((a) => ({ ...a, [target]: d }));
               const lang = language ?? d.language;
               if (!recordedAs && lang) {
                 recordedAs = true;
@@ -119,8 +120,8 @@ export function DictResults({ word, language, dark, record, aiTargets }: {
               }
               // the review card from the first language's answer (the reader's target language)
               if (settings.autoReview && i === 0 && lang) void addCard({ language: lang, term: d.lemma, meaning: d.meaning,
-                example: record.context.slice(0, 500), source: 'lookup', book_id: record.bookId }).then(setCarded);
-            }).catch(() => setAi((a) => ({ ...a, [target]: 'failed' })));
+                example: record.context.slice(0, 500), source: 'lookup', book_id: record.bookId }).then((ok) => { if (!cancelled) setCarded(ok); });
+            }).catch(() => { if (!cancelled) setAi((a) => ({ ...a, [target]: 'failed' })); });
           });
         }
       }

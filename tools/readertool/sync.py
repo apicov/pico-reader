@@ -469,6 +469,12 @@ def service_installed() -> bool:
     return _unit().exists()
 
 
+def _unit_arg(value: object) -> str:
+    """One argument on a systemd ExecStart line, quoted (a folder may have spaces, % and $ mean something there)."""
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$")
+    return f'"{escaped}"'
+
+
 def install(folder: Path, interval: float) -> None:
     """A systemd user service: starts with the session, restarts after a failure."""
     reader = Path(__file__).resolve().parent.parent / "reader"
@@ -479,7 +485,7 @@ Description=Pico Reader: sync the study computer's folder with the app
 After=network-online.target
 
 [Service]
-ExecStart={reader} sync --folder {folder.expanduser()} --interval {interval:g}
+ExecStart={_unit_arg(reader)} sync --folder {_unit_arg(folder.expanduser())} --interval {interval:g}
 Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=30

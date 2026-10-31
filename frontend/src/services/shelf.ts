@@ -4,7 +4,7 @@
  *  is back. */
 import { api } from '@/services/api';
 import { isOnline } from '@/services/connectivity';
-import { getPref, setPref } from '@/services/prefs';
+import { getPref, setPref, updatePref } from '@/services/prefs';
 import { dropRejected, rejectedForGood } from '@/services/syncQueue';
 
 export type ShelfStatus = 'reading' | 'finished' | 'removed';
@@ -51,38 +51,66 @@ export async function cachedShelf(): Promise<ShelfEntry[]> {
   return (await getPref<ShelfEntry[]>(KEY)) ?? [];
 }
 
-async function flush(): Promise<void> {
-  const pending = (await getPref<Record<string, { status: ShelfStatus; only_if_new: boolean }>>(PENDING)) ?? {};
-  for (const [bookId, body] of Object.entries(pending)) {
-    await api(`/api/shelf/${encodeURIComponent(bookId)}`, { method: 'PUT', body }).catch((e) => {
-      if (!rejectedForGood(e)) throw e; // e.g. the book was deleted meanwhile: dropped, the rest goes on
-      dropRejected('shelf change for', bookId, e);
-    });
-    delete pending[bookId];
-    await setPref(PENDING, pending);
-  }
-  const mine = (await getPref<Record<string, boolean>>(MINE_PENDING)) ?? {};
-  for (const [bookId, on] of Object.entries(mine)) {
-    await api(`/api/shelf/mine/${encodeURIComponent(bookId)}`, { method: on ? 'PUT' : 'DELETE' }).catch((e) => {
-      if (!rejectedForGood(e)) throw e;
-      dropRejected('My shelf change for', bookId, e);
-    });
-    delete mine[bookId];
-    await setPref(MINE_PENDING, mine);
-  }
+type StatusChange = { status: ShelfStatus; only_if_new: boolean };
+
+let flushing: Promise<void> | null = null;
+
+/** Send the changes made offline, in the order they were made (one flush at a time). */
+function flush(): Promise<void> {
+  flushing ??= (async () => {
+    try {
+      await sendEach<StatusChange>(PENDING, 'shelf change for', (bookId, body) =>
+        api(`/api/shelf/${encodeURIComponent(bookId)}`, { method: 'PUT', body }));
+      await sendEach<boolean>(MINE_PENDING, 'My shelf change for', (bookId, on) =>
+        api(`/api/shelf/mine/${encodeURIComponent(bookId)}`, { method: on ? 'PUT' : 'DELETE' }));
+      await sendCollectionOps();
+    } finally {
+      flushing = null;
+    }
+  })();
+  return flushing;
+}
+
+/** A change the server refuses for good (e.g. the book was deleted meanwhile) is dropped and the rest goes on;
+ *  any other failure stops the flush, and the change is sent again next time. */
+async function orDrop(request: Promise<unknown>, what: string, id: string): Promise<void> {
+  await request.catch((e) => {
+    if (!rejectedForGood(e)) throw e;
+    dropRejected(what, id, e);
+  });
+}
+
+/** Sends a queue of the latest change per book; one changed again while it was being sent stays for another round */
+async function sendEach<V>(key: string, what: string, send: (bookId: string, change: V) => Promise<unknown>): Promise<void> {
   for (;;) {
-    const ops = (await getPref<CollectionOp[]>(COLLECTIONS_PENDING)) ?? [];
-    if (!ops.length) break;
-    const o = ops[0];
+    const [next] = Object.entries((await getPref<Record<string, V>>(key)) ?? {});
+    if (!next) return;
+    const [bookId, change] = next;
+    await orDrop(send(bookId, change), what, bookId);
+    await updatePref<Record<string, V>>(key, (queue) => {
+      const rest = { ...queue };
+      if (JSON.stringify(rest[bookId]) === JSON.stringify(change)) delete rest[bookId];
+      return rest;
+    });
+  }
+}
+
+async function sendCollectionOps(): Promise<void> {
+  for (;;) {
+    const [o] = (await getPref<CollectionOp[]>(COLLECTIONS_PENDING)) ?? [];
+    if (!o) return;
     const base = `/api/shelf/collections/${encodeURIComponent(o.id)}`;
     const request = o.op === 'save' ? api(base, { method: 'PUT', body: { name: o.name, position: o.position } })
       : o.op === 'delete' ? api(base, { method: 'DELETE' })
       : api(`${base}/books/${encodeURIComponent(o.book_id)}`, { method: o.op === 'add' ? 'PUT' : 'DELETE' });
-    await request.catch((e) => {
-      if (!rejectedForGood(e)) throw e;
-      dropRejected(`collection change (${o.op}) for`, o.id, e);
+    await orDrop(request, `collection change (${o.op}) for`, o.id);
+    // by value, not "the first one": setOnMyShelf may have taken queued ops out meanwhile
+    await updatePref<CollectionOp[]>(COLLECTIONS_PENDING, (ops) => {
+      const rest = [...(ops ?? [])];
+      const i = rest.findIndex((x) => JSON.stringify(x) === JSON.stringify(o));
+      if (i >= 0) rest.splice(i, 1);
+      return rest;
     });
-    await setPref(COLLECTIONS_PENDING, ((await getPref<CollectionOp[]>(COLLECTIONS_PENDING)) ?? []).slice(1));
   }
 }
 
@@ -108,9 +136,7 @@ export async function setShelfStatus(bookId: string, status: ShelfStatus, onlyIf
   else shelf.unshift({ book_id: bookId, status, progress: 0, last_read: now });
   await setPref(KEY, shelf);
   listeners.forEach((l) => l());
-  const pending = (await getPref<Record<string, { status: ShelfStatus; only_if_new: boolean }>>(PENDING)) ?? {};
-  pending[bookId] = { status, only_if_new: onlyIfNew };
-  await setPref(PENDING, pending);
+  await updatePref<Record<string, StatusChange>>(PENDING, (pending) => ({ ...pending, [bookId]: { status, only_if_new: onlyIfNew } }));
   if (isOnline()) void flush().catch(() => undefined);
 }
 
@@ -137,13 +163,10 @@ export async function setOnMyShelf(bookId: string, on: boolean): Promise<void> {
   if (!on) {
     // off My shelf is out of its collections (the server does the same); a queued "add" would put it back
     await setPref(COLLECTIONS, (await cachedCollections()).map((c) => ({ ...c, book_ids: c.book_ids.filter((b) => b !== bookId) })));
-    await setPref(COLLECTIONS_PENDING, ((await getPref<CollectionOp[]>(COLLECTIONS_PENDING)) ?? [])
-      .filter((o) => !(o.op === 'add' && o.book_id === bookId)));
+    await updatePref<CollectionOp[]>(COLLECTIONS_PENDING, (ops) => (ops ?? []).filter((o) => !(o.op === 'add' && o.book_id === bookId)));
   }
   listeners.forEach((l) => l());
-  const pending = (await getPref<Record<string, boolean>>(MINE_PENDING)) ?? {};
-  pending[bookId] = on;
-  await setPref(MINE_PENDING, pending);
+  await updatePref<Record<string, boolean>>(MINE_PENDING, (pending) => ({ ...pending, [bookId]: on }));
   if (isOnline()) void flush().catch(() => undefined);
 }
 
@@ -166,7 +189,7 @@ export async function loadCollections(): Promise<Collection[]> {
 /** Applied here at once (offline too) and queued for the server */
 async function changeCollections(change: (cs: Collection[]) => Collection[], op: CollectionOp): Promise<void> {
   await setPref(COLLECTIONS, change(await cachedCollections()).sort((a, b) => a.position - b.position));
-  await setPref(COLLECTIONS_PENDING, [...((await getPref<CollectionOp[]>(COLLECTIONS_PENDING)) ?? []), op]);
+  await updatePref<CollectionOp[]>(COLLECTIONS_PENDING, (ops) => [...(ops ?? []), op]);
   listeners.forEach((l) => l());
   if (isOnline()) void flush().catch(() => undefined);
 }

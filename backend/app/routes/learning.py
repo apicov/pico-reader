@@ -1,6 +1,7 @@
 """Learning aids: words marked as known, the words looked up (to mark them in the text), and review cards
 for spaced repetition (scheduled on the device with FSRS, synced here)."""
 
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -89,8 +90,6 @@ def card_changes(since: datetime | None = None, reader: Reader = Depends(get_cur
 
 @router.put("/review-cards/{card_id}", response_model=Card)
 def save_card(card_id: str, body: CardIn, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
-    import json
-
     if not 8 <= len(card_id) <= 64:
         raise HTTPException(422, "Bad id")
     owner = db.execute(text("SELECT reader_email FROM review_cards WHERE id = :id"), {"id": card_id}).scalar()
@@ -105,7 +104,11 @@ def save_card(card_id: str, body: CardIn, reader: Reader = Depends(get_current_r
             meaning = EXCLUDED.meaning, example = EXCLUDED.example, state = EXCLUDED.state, due = EXCLUDED.due,
             deleted = EXCLUDED.deleted, client_updated_at = EXCLUDED.client_updated_at, updated_at = clock_timestamp()
             WHERE review_cards.client_updated_at < EXCLUDED.client_updated_at
+              AND review_cards.reader_email = EXCLUDED.reader_email  -- the check above, also against a race
     """), {"id": card_id, "e": reader.email, **body.model_dump(), "state": json.dumps(body.state)})
-    row = db.execute(text(f"SELECT {_COLUMNS} FROM review_cards WHERE id = :id"), {"id": card_id}).fetchone()
+    row = db.execute(text(f"SELECT {_COLUMNS} FROM review_cards WHERE id = :id AND reader_email = :e"),
+                     {"id": card_id, "e": reader.email}).fetchone()
+    if row is None:
+        raise HTTPException(404, "Not found")
     db.commit()
     return Card(**row._mapping)

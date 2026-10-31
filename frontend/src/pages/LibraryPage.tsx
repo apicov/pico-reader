@@ -53,7 +53,7 @@ function BookCard({ book, files, online, shelf, mine, collections, badge, job, r
   const available = online || downloaded;
   return (
     <Card sx={{ border: 0, bgcolor: 'transparent', opacity: available ? 1 : 0.45, position: 'relative', overflow: 'visible' }}>
-      <CardActionArea disabled={!available} onClick={() => navigate(`/read/${book.id}`)} sx={{ p: 0.5, borderRadius: 1 }}>
+      <CardActionArea disabled={!available} onClick={() => navigate(`/read/${encodeURIComponent(book.id)}`)} sx={{ p: 0.5, borderRadius: 1 }}>
         <Box sx={{ position: 'relative' }}>
           <BookCover book={book} src={cover} />
           {badge && (shelf?.status === 'reading' || shelf?.status === 'finished') && (

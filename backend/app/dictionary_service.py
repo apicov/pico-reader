@@ -15,6 +15,7 @@ from app import assets, r2, stardict
 from app.auth import Reader
 
 MAX_SOURCE_BYTES = 300_000_000  # a whole StarDict is read into memory while converting (the server has 2 GB)
+MAX_UNPACKED_BYTES = 1_000_000_000  # unzipped: a real StarDict is a few times its zip; a zip bomb is not
 PACKAGE_TYPES = {"sqlite": "application/zip", "jsonl": "application/gzip", "res": "application/zip"}
 
 
@@ -118,6 +119,8 @@ def convert(db: Session, dict_id: str) -> int:
                 for member in z.namelist():  # no paths outside the folder
                     if member.startswith("/") or ".." in Path(member).parts:
                         raise ValueError(f"Unsafe path in the zip: {member}")
+                if sum(i.file_size for i in z.infolist()) > MAX_UNPACKED_BYTES:
+                    raise ValueError("The zip unpacks to more than a dictionary can be")
                 z.extractall(unpacked)
         except zipfile.BadZipFile:
             raise ValueError("The upload is not a zip file")

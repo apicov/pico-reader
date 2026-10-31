@@ -12,6 +12,7 @@ import re
 import uuid
 from collections.abc import Iterator
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -208,8 +209,6 @@ NOTE_TOOLS = {"save_note", "append_to_note"}
 
 def _valid_zone(tz: str) -> str:
     """The device's time zone, or UTC when Python doesn't know it (statistics are counted in its days)."""
-    from zoneinfo import ZoneInfo
-
     try:
         ZoneInfo(tz)
         return tz
@@ -266,7 +265,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
         session = sessionmaker(bind=get_engine())()
         try:
             ctx = agent_tools.Context(db=session, reader=reader, tz=_valid_zone(body.tz), sources=[])
-            today = datetime.now().date().isoformat()
+            today = datetime.now(ZoneInfo(ctx.tz)).date().isoformat()  # the reader's day, not the server's
             messages: list[dict] = [{"role": "system", "content": AGENT_PROMPT.format(
                 today=today, scope=_scope_note(session, book_ids), library=library_overview(session))}]
             for m in _history(earlier):
@@ -370,21 +369,27 @@ def decide(conversation_id: str, action_id: str, body: ActionDecision, tz: str =
     from app import agent_tools
 
     _own(db, reader, conversation_id)
-    action = db.execute(text("""SELECT id, tool, args, label, status FROM chat_actions
-                                WHERE id = :id AND conversation_id = :c FOR UPDATE"""),
-                        {"id": action_id, "c": conversation_id}).fetchone()
+    # taken (as done or cancelled) and committed before the tool runs: tools commit their own work, so a lock
+    # wouldn't last, and a second click would run the change twice
+    action = db.execute(text("""UPDATE chat_actions SET status = :s
+                                WHERE id = :id AND conversation_id = :c AND status = 'pending'
+                                RETURNING tool, args, label"""),
+                        {"s": "done" if body.approve else "cancelled", "id": action_id, "c": conversation_id}).fetchone()
     if action is None:
-        raise HTTPException(404, "Not found")
-    if action.status != "pending":
-        raise HTTPException(409, f"Already {action.status}")
+        taken = db.execute(text("SELECT status FROM chat_actions WHERE id = :id AND conversation_id = :c"),
+                           {"id": action_id, "c": conversation_id}).fetchone()
+        raise HTTPException(409, f"Already {taken.status}") if taken else HTTPException(404, "Not found")
+    db.commit()
     if body.approve:
         ctx = agent_tools.Context(db=db, reader=reader, tz=_valid_zone(tz), sources=[])
         result = agent_tools.run(ctx, action.tool, action.args)
-        failed = isinstance(result, dict) and "error" in result
-        status, content = ("failed", f"Couldn't do it: {result['error']}") if failed else ("done", f"Done: {action.label}.")
+        if isinstance(result, dict) and "error" in result:
+            content = f"Couldn't do it: {result['error']}"
+            db.execute(text("UPDATE chat_actions SET status = 'failed' WHERE id = :id"), {"id": action_id})
+        else:
+            content = f"Done: {action.label}."
     else:
-        status, content = "cancelled", f"Cancelled: {action.label}."
-    db.execute(text("UPDATE chat_actions SET status = :s WHERE id = :id"), {"s": status, "id": action_id})
+        content = f"Cancelled: {action.label}."
     row = db.execute(text("""INSERT INTO messages (conversation_id, role, content) VALUES (:c, 'assistant', :t)
                              RETURNING id, role, content, sources, created_at"""), {"c": conversation_id, "t": content}).fetchone()
     db.execute(text("UPDATE conversations SET updated_at = now() WHERE id = :id"), {"id": conversation_id})

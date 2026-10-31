@@ -107,10 +107,10 @@ def _row(r, cached: bool = False) -> Translation:
 
 @router.post("/translate", response_model=Translation)
 def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
-    model = groq_client.model()
-    key = _cache_key(body, model)
+    # looked up as the primary model wrote it; a fallback's answer is stored under the fallback's model, so it isn't
+    # served again once the primary is back
     stored = db.execute(text(f"SELECT {_COLUMNS} FROM translations WHERE reader_email = :e AND cache_key = :k "
-                             "ORDER BY id DESC LIMIT 1"), {"e": reader.email, "k": key}).fetchone()
+                             "ORDER BY id DESC LIMIT 1"), {"e": reader.email, "k": _cache_key(body, groq_client.model())}).fetchone()
     if stored:
         return _row(stored, cached=True)
     user = f"CONTEXT:\n{body.context or body.text}\n\nPASSAGE:\n{body.text}"
@@ -127,7 +127,7 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
         RETURNING {_COLUMNS}
     """), {"e": reader.email, "b": body.book_id, "l": body.location, "t": body.text, "c": body.context,
            "s": body.source_lang or result["detected_language"], "tl": body.target_lang, "m": model,
-           "pv": PROMPT_VERSION, "k": key, "r": json.dumps(result, ensure_ascii=False)}).fetchone()
+           "pv": PROMPT_VERSION, "k": _cache_key(body, model), "r": json.dumps(result, ensure_ascii=False)}).fetchone()
     db.commit()
     return _row(row).model_copy(update={"via": via})
 

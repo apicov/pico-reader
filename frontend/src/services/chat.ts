@@ -3,9 +3,7 @@
  * (IndexedDB) so past conversations read offline. Answers stream as server-sent events.
  */
 import Dexie, { type Table } from 'dexie';
-import { api, getToken } from '@/services/api';
-
-const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+import { api, authFetch, errorFrom } from '@/services/api';
 
 export interface Passage {
   book_id: string;
@@ -155,7 +153,12 @@ export function sseParser() {
         if (line.startsWith('event:')) event = line.slice(6).trim();
         else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
       }
-      if (data.length) out.push({ event, data: JSON.parse(data.join('\n')) });
+      if (!data.length) continue;
+      try {
+        out.push({ event, data: JSON.parse(data.join('\n')) });
+      } catch {
+        console.warn(`Skipped a malformed "${event}" event`); // one bad event doesn't end the answer
+      }
     }
     return out;
   };
@@ -164,16 +167,12 @@ export function sseParser() {
 /** Send a message; resolves when the answer is complete. Uses fetch on every platform (streams). */
 export async function sendMessage(conversationId: string, content: string, h: StreamHandlers,
                                   signal?: AbortSignal): Promise<{ title: string }> {
-  const token = await getToken();
-  const res = await fetch(`${API_URL}/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
+  const res = await authFetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content, tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
   });
-  if (!res.ok || !res.body) {
-    const detail = await res.json().then((d) => d.detail).catch(() => null);
-    throw new Error(typeof detail === 'string' ? detail : `The question couldn't be sent (${res.status})`);
-  }
+  if (!res.ok || !res.body) throw await errorFrom(res, "The question couldn't be sent");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   const feed = sseParser();

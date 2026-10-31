@@ -95,6 +95,15 @@ def test_broken_upload_fails_with_the_reason(client, admin_headers, bucket):
     assert job["status"] == "failed" and ".ifo" in job["error"]
 
 
+def test_a_zip_that_unpacks_too_big_is_refused(client, admin_headers, bucket, monkeypatch):
+    from app import dictionary_service
+    monkeypatch.setattr(dictionary_service, "MAX_UNPACKED_BYTES", 100)
+    upload_stardict(client, admin_headers, tiny_stardict())
+    run_queue()
+    [job] = client.get("/api/admin/dict-jobs", headers=admin_headers).json()
+    assert job["status"] == "failed" and "more than a dictionary" in job["error"]
+
+
 def test_only_admins_upload_and_edit(client, auth_headers, bucket):
     body = {"name": "x", "from_lang": "de", "to_lang": "de", "source": info(b"x", "application/zip")}
     assert client.post("/api/admin/dictionaries/upload", headers=auth_headers, json=body).status_code == 403
