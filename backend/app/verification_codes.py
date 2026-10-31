@@ -1,9 +1,11 @@
 """Login codes, stored in the DB so every worker process sees them.
 
 Copied from tsp-publisher (same rules as the_stitch_tracker):
-codes expire after 10 minutes, 5 attempts per code, at most 3 codes per email per hour.
+codes expire after 10 minutes, 5 attempts per code, at most 3 codes per email per hour. Only a keyed hash of a
+code is stored, so a copy of the database (a backup) can't sign anyone in.
 """
 
+import hashlib
 import hmac
 import logging
 from datetime import UTC, datetime, timedelta
@@ -11,11 +13,18 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 CODE_EXPIRATION_MINUTES = 10
 MAX_VERIFICATION_ATTEMPTS = 5
 MAX_CODES_PER_EMAIL_PER_HOUR = 3
+
+
+def _hashed(email: str, code: str) -> str:
+    """Keyed with the server's secret: six digits alone would be guessed from a hash in moments."""
+    return hmac.new(get_settings().secret_key.encode(), f"{email}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
 def store_verification_code(db: Session, email: str, code: str) -> bool:
@@ -44,7 +53,7 @@ def store_verification_code(db: Session, email: str, code: str) -> bool:
                 code = EXCLUDED.code, expires_at = EXCLUDED.expires_at, attempts = 0,
                 send_count = EXCLUDED.send_count, send_window_start = EXCLUDED.send_window_start
         """),
-        {"e": email, "code": code, "expires": now + timedelta(minutes=CODE_EXPIRATION_MINUTES),
+        {"e": email, "code": _hashed(email, code), "expires": now + timedelta(minutes=CODE_EXPIRATION_MINUTES),
          "count": send_count, "window": window_start},
     )
     db.commit()
@@ -66,7 +75,7 @@ def verify_code(db: Session, email: str, code: str) -> bool:
     if row is None:
         db.commit()
         return False
-    ok = hmac.compare_digest(row.code, code)
+    ok = hmac.compare_digest(row.code, _hashed(email, code))
     if ok:
         # Keep the row: it carries the hourly send counter
         db.execute(text("UPDATE login_codes SET code = '' WHERE email = :e"), {"e": email})

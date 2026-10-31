@@ -31,3 +31,11 @@ def test_admin_routes_need_an_admin(client, auth_headers):
     r = client.post("/api/admin/books", headers=auth_headers,
                     json={"title": "x", "language": "de", "files": {}})
     assert r.status_code == 403
+
+
+def test_codes_are_stored_hashed(client, sent_codes):
+    add_reader()
+    client.post("/api/auth/send-code", json={"email": "me@example.com"})
+    with get_engine().begin() as conn:
+        stored = conn.execute(text("SELECT code FROM login_codes WHERE email = 'me@example.com'")).scalar()
+    assert stored != sent_codes["me@example.com"] and len(stored) == 64

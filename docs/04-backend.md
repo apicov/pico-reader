@@ -198,3 +198,17 @@ dump to R2 (`backups/`, 30 days, `app/offsite_backup.py`). Run it daily from tsp
 
 Run it once by hand to check it: `~/code/pico-reader/deploy/backup-db.sh`. Restoring is in
 [08](08-operations.md).
+
+The dumps hold every reader's data, so give them their own bucket and token: then the app's R2 key can't read
+or delete them. In Cloudflare, create a bucket (e.g. `pico-reader-backups`) and an API token with Object Read &
+Write on that bucket only, and add to `/etc/pico-reader/reader.env`:
+
+```
+BACKUP_BUCKET=pico-reader-backups
+BACKUP_ACCESS_KEY_ID=…
+BACKUP_SECRET_ACCESS_KEY=…
+```
+
+Without them the dumps go to the library's bucket (`backups/`), as before. After setting them, run the script
+by hand once and check the dump is in the new bucket; the old ones in the library's `backups/` can then be
+deleted.

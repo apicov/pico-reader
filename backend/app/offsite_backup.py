@@ -14,8 +14,16 @@ PREFIX = "backups/"
 KEEP_DAYS = 30
 
 
+def destination():
+    """The backups' own bucket and token when set (BACKUP_*), else the library's."""
+    s = get_settings()
+    if s.backup_bucket:
+        return r2.client_for(s.r2_account_id, s.backup_access_key_id, s.backup_secret_access_key, s.r2_endpoint), s.backup_bucket
+    return r2.get_client(), s.r2_bucket
+
+
 def main(path: str) -> None:
-    client, bucket = r2.get_client(), get_settings().r2_bucket
+    client, bucket = destination()
     key = PREFIX + os.path.basename(path)
     client.upload_file(path, bucket, key)
     print(f"uploaded {key}")

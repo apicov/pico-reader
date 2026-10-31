@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
     r2_bucket: str = "pico-library"
+    # Database dumps (app/offsite_backup.py): their own bucket and token, so the app's key can't reach them; empty =
+    # the library's bucket (backups/) and token
+    backup_bucket: str = ""
+    backup_access_key_id: str = ""
+    backup_secret_access_key: str = ""
     download_url_seconds: int = 3600
     upload_url_seconds: int = 3600
 
