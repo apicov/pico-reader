@@ -44,6 +44,8 @@ from readertool.projects import PROJECTS, load_projects
 
 STATE = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "pico-reader" / "sync.json"
 STABLE_SECONDS = 2  # a file younger than this may still be being written: next round
+
+
 class Sync:
     def __init__(self, api, folder: Path, state_path: Path = STATE, log=print, clock=time.time,
                  projects_path: Path = PROJECTS):
@@ -63,6 +65,11 @@ class Sync:
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._all, indent=1))
         tmp.replace(self.state_path)
+
+    @property
+    def settling(self) -> bool:
+        """A file was still being written at the last round: look again soon."""
+        return self._unsettled
 
     def _stable(self, path: Path) -> bool:
         return self.clock() - path.stat().st_mtime >= STABLE_SECONDS
@@ -176,10 +183,23 @@ class Sync:
         return changes
 
     def _notes(self, spaces: dict[str | None, Path]) -> int:
+        """One pass over the notes: each in the app against its file here, then files that are new here, then
+        notes deleted in the app. Returns how many changed."""
         known = self.state["notes"]
         remote = {n["id"]: n for n in self.api.get("/api/notes")}
-        files: dict[str, tuple[str | None, Path]] = {}  # note id → (its space, its file here)
-        new_files: list[tuple[str | None, Path]] = []  # files without an id: new notes
+        files, new_files = self._note_files(spaces)
+        deleted = [i for i in known if i not in remote]  # before new files add notes the list above doesn't have
+        changes = sum(self._sync_note(note, known.get(note_id), files.get(note_id), spaces)
+                      for note_id, note in remote.items())
+        changes += sum(self._new_note(path, space, spaces[space]) for space, path in new_files)
+        changes += sum(self._deleted_note(known.pop(note_id)) for note_id in deleted)
+        return changes
+
+    def _note_files(self, spaces: dict[str | None, Path]) -> tuple[dict[str, tuple[str | None, Path]],
+                                                                    list[tuple[str | None, Path]]]:
+        """The note files here: {note id: (its space, its file)}, and the files without an id (new notes)."""
+        files: dict[str, tuple[str | None, Path]] = {}
+        new_files: list[tuple[str | None, Path]] = []
         for space, folder in spaces.items():
             for path in sorted(folder.glob("*.md")):
                 fields, _, _ = read_note_file(path)
@@ -189,74 +209,83 @@ class Sync:
                     new_files.append((space, path))
                 else:
                     self._unsettled = True
-        changes = 0
-        deleted = [i for i in known if i not in remote]  # before new files add notes the list above doesn't have
-        for note_id, note in remote.items():
-            st = known.get(note_id)
-            target = note.get("project_id") if note.get("project_id") in spaces else None
-            space, path = files.get(note_id, (target, None))
-            if path is not None and space != target:
-                if st is not None and st.get("space") == target and note["updated_at"] == st["updated_at"]:
-                    # moved here, from one folder to another: the note moves to that project in the app
-                    note = self.api.patch(f"/api/notes/{note_id}", {"project_id": space})
-                    self._write_note(note, path, spaces[space], space)
-                    self.log(f"notes: {path.name} → project {note.get('project') or '(none)'} in the app")
-                    changes += 1
-                    continue
-                # moved in the app (or its project isn't on this computer): the file follows
-                path = path.rename(unique_path(spaces[target], path.stem, ".md"))
-                space = target
-            if path is None:  # new in the app, or the file was deleted here: (again) from the app
-                self._write_note(note, None, spaces[target], target)
-                changes += 1
-                continue
-            _, title, body = read_note_file(path)
-            local_changed = st is None or digest(title, body) != st["hash"]
-            remote_changed = st is None or note["updated_at"] != st["updated_at"]
-            if not local_changed and not remote_changed:
-                if st.get("file") != str(path):
-                    self._write_note(note, path, spaces[space], space)
-                continue
-            if st is not None and local_changed and not remote_changed:
-                if not self._stable(path):
-                    self._unsettled = True
-                    continue
-                try:
-                    saved = self.api.patch(f"/api/notes/{note_id}", {"title": title, "markdown": body,
-                                                                    "updated_at_was": st["updated_at"]})
-                except ToolError as e:
-                    if e.status != 409:
-                        raise
-                    note = self.api.get(f"/api/notes/{note_id}")  # changed in the app meanwhile: a conflict
-                    self._conflict(path, title, note, spaces[space], space)
-                    changes += 1
-                    continue
-                self._write_note(saved, path, spaces[space], space)
-                self.log(f"notes: {path.name} → the app")
-            elif st is not None and remote_changed and not local_changed:
-                self._write_note(note, path, spaces[space], space)
-                self.log(f"notes: {note['title']} ← the app")
-            elif digest(title, body) == digest(note["title"], note["markdown"]):
-                self._write_note(note, path, spaces[space], space)  # the same on both sides (e.g. the state was lost)
-            else:
-                self._conflict(path, title, note, spaces[space], space)
-            changes += 1
-        for space, path in new_files:
-            _, title, body = read_note_file(path)
-            if not body:
-                continue
-            note = self.api.post("/api/notes", {"title": title, "markdown": body, "origin": "computer",
-                                                "project_id": space})
-            self._write_note(note, path, spaces[space], space)
-            self.log(f"notes: {path.name} → a new note in the app")
-            changes += 1
-        for note_id in deleted:  # deleted in the app
-            path = self._file(known.pop(note_id))
-            if path.exists():
-                path.rename(unique_path(path.parent / "deleted", path.stem, ".md"))
-                self.log(f"notes: {path.name} was deleted in the app → {path.parent.name}/deleted/")
-                changes += 1
-        return changes
+        return files, new_files
+
+    def _sync_note(self, note: dict, st: dict | None, here: tuple[str | None, Path] | None,
+                   spaces: dict[str | None, Path]) -> int:
+        """A note in the app and its file here (`here`, None when there's none), as last synced (`st`)."""
+        target = note.get("project_id") if note.get("project_id") in spaces else None
+        space, path = here or (target, None)
+        if path is not None and space != target:
+            if st is not None and st.get("space") == target and note["updated_at"] == st["updated_at"]:
+                return self._moved_here(note, path, space, spaces[space])
+            # moved in the app (or its project isn't on this computer): the file follows
+            path, space = path.rename(unique_path(spaces[target], path.stem, ".md")), target
+        if path is None:  # new in the app, or the file was deleted here: (again) from the app
+            self._write_note(note, None, spaces[target], target)
+            return 1
+        folder = spaces[space]
+        _, title, body = read_note_file(path)
+        local_changed = st is None or digest(title, body) != st["hash"]
+        remote_changed = st is None or note["updated_at"] != st["updated_at"]
+        if not local_changed and not remote_changed:
+            if st.get("file") != str(path):  # only moved: remember where
+                self._write_note(note, path, folder, space)
+            return 0
+        if st is not None and not remote_changed:
+            return self._changed_here(note, st, path, title, body, folder, space)
+        if st is not None and not local_changed:
+            self._write_note(note, path, folder, space)
+            self.log(f"notes: {note['title']} ← the app")
+        elif digest(title, body) == digest(note["title"], note["markdown"]):
+            self._write_note(note, path, folder, space)  # the same on both sides (e.g. the state was lost)
+        else:
+            self._conflict(path, title, note, folder, space)
+        return 1
+
+    def _moved_here(self, note: dict, path: Path, space: str | None, folder: Path) -> int:
+        """The file moved from one folder to another here: the note moves to that project in the app."""
+        note = self.api.patch(f"/api/notes/{note['id']}", {"project_id": space})
+        self._write_note(note, path, folder, space)
+        self.log(f"notes: {path.name} → project {note.get('project') or '(none)'} in the app")
+        return 1
+
+    def _changed_here(self, note: dict, st: dict, path: Path, title: str, body: str, folder: Path,
+                      space: str | None) -> int:
+        """Edited here only: the app gets the new text, unless it changed there meanwhile (a conflict)."""
+        if not self._stable(path):
+            self._unsettled = True
+            return 0
+        try:
+            saved = self.api.patch(f"/api/notes/{note['id']}", {"title": title, "markdown": body,
+                                                                "updated_at_was": st["updated_at"]})
+        except ToolError as e:
+            if e.status != 409:
+                raise
+            self._conflict(path, title, self.api.get(f"/api/notes/{note['id']}"), folder, space)
+            return 1
+        self._write_note(saved, path, folder, space)
+        self.log(f"notes: {path.name} → the app")
+        return 1
+
+    def _new_note(self, path: Path, space: str | None, folder: Path) -> int:
+        """A file without an id: a new note in the app (an empty one waits)."""
+        _, title, body = read_note_file(path)
+        if not body:
+            return 0
+        note = self.api.post("/api/notes", {"title": title, "markdown": body, "origin": "computer", "project_id": space})
+        self._write_note(note, path, folder, space)
+        self.log(f"notes: {path.name} → a new note in the app")
+        return 1
+
+    def _deleted_note(self, st: dict) -> int:
+        """Deleted in the app: its file goes to deleted/."""
+        path = self._file(st)
+        if not path.exists():
+            return 0
+        path.rename(unique_path(path.parent / "deleted", path.stem, ".md"))
+        self.log(f"notes: {path.name} was deleted in the app → {path.parent.name}/deleted/")
+        return 1
 
     def _conflict(self, path: Path, title: str, note: dict, folder: Path, space: str | None) -> None:
         stamp = datetime.fromtimestamp(self.clock()).strftime("%Y-%m-%d %H%M")
@@ -285,8 +314,5 @@ def run(api, folder: Path, interval: float, once: bool) -> None:
             seen, next_round = current, min(next_round, now + STABLE_SECONDS + 0.2)
         if now >= next_round:
             sync.run_once()
-            seen, next_round = sync.signature(), time.time() + (STABLE_SECONDS + 0.2 if sync._unsettled else interval)
+            seen, next_round = sync.signature(), time.time() + (STABLE_SECONDS + 0.2 if sync.settling else interval)
         time.sleep(1)
-
-
-# --- projects: folders here with their own notes/ and inbox/ ---
