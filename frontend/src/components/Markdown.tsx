@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Box, useTheme, type SxProps, type Theme } from '@mui/material';
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import { drawDiagrams } from './diagrams';
-import { citeButtons, withSpoilers } from './markdownHtml';
+import { citeButtons, markdownToHtml, withSpoilers } from './markdownHtml';
 
 /** Model answers and notes: Markdown, sanitized; "[3]" citations become buttons (`onCite(3)`), except in code;
  *  ```mermaid blocks become diagrams. */
 export function Markdown({ text, onCite, sx }: { text: string; onCite?: (n: number) => void; sx?: SxProps<Theme> }) {
   const html = useMemo(() => {
-    const raw = marked.parse(withSpoilers(text), { async: false, breaks: false, gfm: true });
+    const raw = markdownToHtml(withSpoilers(text));
     return DOMPurify.sanitize(citeButtons(raw), { ADD_ATTR: ['data-n'] });
   }, [text]);
   const ref = useRef<HTMLDivElement>(null);

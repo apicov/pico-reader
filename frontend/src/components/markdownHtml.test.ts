@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { citeButtons, withSpoilers } from './markdownHtml';
+import { citeButtons, markdownToHtml, withSpoilers } from './markdownHtml';
 
 describe('withSpoilers', () => {
   it('wraps ||text|| in a spoiler span', () => {
@@ -17,5 +17,12 @@ describe('citeButtons', () => {
     const diagram = '<pre><code class="language-mermaid">flowchart LR\n  A[1] --> B[2]</code></pre>';
     expect(citeButtons(diagram)).toBe(diagram);
     expect(citeButtons('<p><code>a[1]</code> [1]</p>')).toBe('<p><code>a[1]</code> <button type="button" class="cite" data-n="1">1</button></p>');
+  });
+});
+
+describe('markdownToHtml', () => {
+  it('strikes through only between double tildes', () => {
+    expect(markdownToHtml('from ~5 km to ~10 km')).toBe('<p>from ~5 km to ~10 km</p>\n');
+    expect(markdownToHtml('~~gone~~ stays')).toBe('<p><del>gone</del> stays</p>\n');
   });
 });
