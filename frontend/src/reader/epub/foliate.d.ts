@@ -8,7 +8,11 @@ declare module 'foliate-js/view.js' {
       resolveHref?: (href: string) => { index: number; anchor: (doc: Document) => Element | Range | number | null } | null;
       sections: { createDocument?: () => Promise<Document> }[];
     };
-    renderer: HTMLElement & { setStyles?: (css: string) => void; next: () => Promise<void>; prev: () => Promise<void> };
+    renderer: HTMLElement & {
+      setStyles?: (css: string) => void; next: () => Promise<void>; prev: () => Promise<void>;
+      /** the sections laid out now */
+      getContents?: () => { doc?: Document; index?: number }[];
+    };
     open(book: Blob | File | string): Promise<void>;
     init(opts: { lastLocation?: string | null; showTextStart?: boolean }): Promise<void>;
     goTo(target: string | number): Promise<unknown>;

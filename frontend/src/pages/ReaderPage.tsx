@@ -1,67 +1,47 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppBar, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, ListItemText, Menu, MenuItem, Snackbar, TextField, Toolbar, Typography } from '@mui/material';
-import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
-import BookmarkIcon from '@mui/icons-material/Bookmark';
-import { annotationsFor, deleteAnnotation, saveAnnotation, subscribeAnnotations, syncAnnotations, updateAnnotation, type Annotation } from '@/services/annotations';
-import FormatSizeIcon from '@mui/icons-material/FormatSize';
-import TocIcon from '@mui/icons-material/Toc';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppBar, Box, Button, LinearProgress, Snackbar, Typography } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useSettings } from '@/contexts/SettingsContext';
-import { useLibrary } from '@/hooks/useLibrary';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { ensureFile, ensureSearchFile, fileBlob, isCached } from '@/services/bookCache';
-import { getPref, setPref } from '@/services/prefs';
-import { isOnline } from '@/services/connectivity';
-import type { Book, BookFormat } from '@/services/types';
-import { READING_THEMES, readingVars } from '@/theme/readingThemes';
-import { flushPositions, loadPosition, savePosition, type Position } from '@/reader/position';
-import { ReadingSettings } from '@/reader/ReadingSettings';
-import { TocDrawer } from '@/reader/TocDrawer';
-import { ReflowBundle } from '@/reader/reflow/bundle';
-import { ReflowView } from '@/reader/reflow/ReflowView';
-import { EpubView } from '@/reader/epub/EpubView';
-import { PdfView } from '@/reader/pdf/PdfView';
-import type { TocItem, ViewHandle } from '@/reader/types';
-import { flushEvents, saveSession, SessionTracker } from '@/services/events';
-import { cachedLookedUpWords, lookedUpWords, subscribeLookedUp, wordsIn } from '@/services/words';
-import { setShelfStatus } from '@/services/shelf';
-import { offlineSearchEnabled } from '@/search/offlineSearch';
-import type { TextSelection } from '@/reader/selection';
-import { SelectionPanel } from '@/reader/SelectionPanel';
 import { ImageViewer, type ViewedImage } from '@/components/ImageViewer';
 import { useSendToComputer } from '@/components/SendToComputer';
 import { TopBar } from '@/components/TopBar';
+import { useSettings } from '@/contexts/SettingsContext';
+import { useLibrary } from '@/hooks/useLibrary';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { AnnotationNoteDialog } from '@/reader/AnnotationNoteDialog';
+import { FormatMenu } from '@/reader/FormatMenu';
+import { FORMATS } from '@/reader/formats';
+import { useAnnotations } from '@/reader/hooks/useAnnotations';
+import { useBookFormat } from '@/reader/hooks/useBookFormat';
+import { useFinishPrompt } from '@/reader/hooks/useFinishPrompt';
+import { useLookedUpWords } from '@/reader/hooks/useLookedUpWords';
+import { useOpenedBook, type Initial } from '@/reader/hooks/useOpenedBook';
+import { usePlace } from '@/reader/hooks/usePlace';
+import { useReadingSession } from '@/reader/hooks/useReadingSession';
+import { jumpFromParams, type Jump } from '@/reader/jump';
+import { loadPosition } from '@/reader/position';
+import { ReaderToolbar } from '@/reader/ReaderToolbar';
+import { ReadingSettings } from '@/reader/ReadingSettings';
 import { setReadingNow } from '@/reader/readingNow';
+import type { TextSelection } from '@/reader/selection';
+import { SelectionPanel } from '@/reader/SelectionPanel';
+import { TocDrawer } from '@/reader/TocDrawer';
+import type { TocItem, ViewHandle } from '@/reader/types';
+import { offlineSearchEnabled } from '@/search/offlineSearch';
+import { deleteAnnotation, saveAnnotation, type Annotation } from '@/services/annotations';
+import { ensureSearchFile } from '@/services/bookCache';
+import { setShelfStatus } from '@/services/shelf';
+import type { BookFormat } from '@/services/types';
+import { wordsIn } from '@/services/words';
+import { READING_THEMES, readingVars } from '@/theme/readingThemes';
 
-// Best reading experience first: text that reflows, then EPUB, then fixed PDF pages
-const PREFERENCE: BookFormat[] = ['reflow', 'epub', 'pdf'];
-const LABEL: Record<BookFormat, string> = { reflow: 'Text', epub: 'EPUB', pdf: 'PDF' };
-const formatKey = (bookId: string) => `format:${bookId}`;
-
-type Loaded = { format: 'reflow'; bundle: ReflowBundle } | { format: 'epub' | 'pdf'; blob: Blob };
-type Phase = { kind: 'loading' } | { kind: 'downloading'; fraction: number } | { kind: 'error'; message: string }
-  | { kind: 'ready'; loaded: Loaded; initial: { location?: string; progress?: number } };
-
-async function openFormat(book: Book, format: BookFormat, online: boolean,
-                          onProgress: (f: number) => void): Promise<Loaded> {
-  if (!(await isCached(book.id, format, book.formats[format]!)) && !online) {
-    throw new Error(`The ${LABEL[format]} version isn't on this device yet; open it once while online.`);
-  }
-  await ensureFile(book, format, onProgress);
-  const blob = await fileBlob(book.id, format);
-  return format === 'reflow' ? { format, bundle: await ReflowBundle.open(blob) } : { format, blob };
-}
+/** A bookmark this close (in progress through the book) to the place is the place's bookmark */
+const BOOKMARK_NEAR = 0.004;
 
 /** `active`: shown; when another page is, the book stays open behind it (ReaderHost) and comes back as it was */
 export default function ReaderPage({ bookId, active }: { bookId: string; active: boolean }) {
   // ?format=&location=&progress= opens the book at a place (a search result); used once, then dropped
   const [params, setParams] = useSearchParams();
-  const jump = useRef<{ format: BookFormat | null; location: string; progress: number } | null>(
-    params.get('format') || params.get('progress') ? {
-      format: (params.get('format') || null) as BookFormat | null, location: params.get('location') ?? '',
-      progress: Number(params.get('progress') ?? 0),
-    } : null);
+  const jump = useRef<Jump | null>(jumpFromParams(params));
   const navigate = useNavigate();
   const { library } = useLibrary();
   const online = useOnlineStatus();
@@ -69,68 +49,41 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
   const book = library?.books.find((b) => b.id === bookId);
   // the other pages offer the way back here ("Continue reading")
   useEffect(() => { if (book) setReadingNow(book); }, [book]);
-  const formats = useMemo(() => PREFERENCE.filter((f) => book?.formats[f]), [book]);
 
-  const [format, setFormat] = useState<BookFormat | null>(null);
-  const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  const { formats, format, choose: chooseFormat, openIn } = useBookFormat(book, jump.current?.format ?? null);
+  const readingActivity = useReadingSession(book?.id, format, active);
+  const finishPrompt = useFinishPrompt(book?.id);
+  const checkFinished = finishPrompt.check;
+  const onMove = useCallback((progress: number) => {
+    checkFinished(progress);
+    readingActivity(progress);
+  }, [checkFinished, readingActivity]);
+  const place = usePlace(book?.id, format, onMove);
+
+  // A link to a place opens there; the same format resumes exactly; another one starts at the same share of the book
+  const startAt = async (f: BookFormat): Promise<Initial> => {
+    const pos = place.last.current ?? (book ? await loadPosition(book.id) : null);
+    const target = jump.current && (!jump.current.format || jump.current.format === f) ? jump.current : null;
+    jump.current = null;
+    if (target) setParams({}, { replace: true });
+    if (target) return { location: target.location, progress: target.progress };
+    return pos?.format === f ? { location: pos.location } : { progress: pos?.progress ?? 0 };
+  };
+  const phase = useOpenedBook(book, format, online, startAt);
+  const viewRef = useRef<ViewHandle>(null);
+
   const [toc, setToc] = useState<TocItem[]>([]);
   const [currentToc, setCurrentToc] = useState<string | null>(null);
+  useEffect(() => { setToc([]); setCurrentToc(null); }, [book?.id, format]);
+  const heading = toc.find((t) => t.id === currentToc)?.label;
+
   const [tocOpen, setTocOpen] = useState(false);
   const [settingsAnchor, setSettingsAnchor] = useState<HTMLElement | null>(null);
   const [formatAnchor, setFormatAnchor] = useState<HTMLElement | null>(null);
   const [selection, setSelection] = useState<TextSelection | null>(null);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [noteFor, setNoteFor] = useState<Annotation | null>(null);
-  const [noteText, setNoteText] = useState('');
-  const [position, setPosition] = useState<{ location: string; progress: number } | null>(null);
-  const [looked, setLooked] = useState<Set<string> | null>(null);
+  const [picture, setPicture] = useState<ViewedImage | null>(null); // a picture tapped in the book, shown large
   const [chapterWords, setChapterWords] = useState<{ word: string; count: number }[]>([]);
-  const viewRef = useRef<ViewHandle>(null);
-  const lastPosition = useRef<Position | null>(null);
-
-  // The format: the last one used for this book, else the best available
-  useEffect(() => {
-    if (!book || format) return;
-    if (jump.current?.format && book.formats[jump.current.format]) {
-      setFormat(jump.current.format);
-      return;
-    }
-    void getPref<BookFormat>(formatKey(book.id)).then((saved) =>
-      setFormat(saved && book.formats[saved] ? saved : formats[0] ?? null));
-  }, [book, format, formats]);
-
-  // Download (if needed) and open the chosen format
-  useEffect(() => {
-    if (!book || !format) return;
-    let cancelled = false;
-    let opened: Loaded | null = null;
-    setPhase({ kind: 'loading' });
-    setToc([]);
-    void (async () => {
-      try {
-        const loaded = await openFormat(book, format, online,
-          (fraction) => !cancelled && setPhase({ kind: 'downloading', fraction }));
-        opened = loaded;
-        const pos = lastPosition.current ?? (await loadPosition(book.id));
-        const target = jump.current && (!jump.current.format || jump.current.format === format) ? jump.current : null;
-        jump.current = null;
-        if (target) setParams({}, { replace: true });
-        // A search result opens at its passage; the same format resumes exactly; another one starts at the
-        // same share of the book
-        const initial = target ? { location: target.location, progress: target.progress }
-          : pos?.format === format ? { location: pos.location } : { progress: pos?.progress ?? 0 };
-        if (!cancelled) setPhase({ kind: 'ready', loaded, initial });
-      } catch (e) {
-        if (!cancelled) setPhase({ kind: 'error', message: (e as Error).message });
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (opened?.format === 'reflow') opened.bundle.close();
-    };
-    // `online` only matters for the first open; a connection change mustn't reload the book
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book?.id, format]);
 
   // Hidden behind another page: what floats over the book closes (menus and panels would show over that page)
   useEffect(() => {
@@ -146,72 +99,55 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
   const target = active ? params.get('location') ?? params.get('progress') : null;
   useEffect(() => {
     if (!target || phase.kind !== 'ready' || jump.current) return;
-    const to = { format: (params.get('format') || null) as BookFormat | null, location: params.get('location') ?? '',
-      progress: Number(params.get('progress') ?? 0) };
+    const to = jumpFromParams(params);
     setParams({}, { replace: true });
-    if (to.format && to.format !== format && book?.formats[to.format]) {
-      jump.current = to;  // the other format opens there
-      setFormat(to.format);
-    } else {
-      viewRef.current?.goTo(to.location, to.progress);
-    }
+    if (to) goToPlace(to);
   }, [target, phase.kind]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Opening a book puts it on the reader's "Currently reading" list (unless finished or removed before)
-  useEffect(() => {
-    if (book) void setShelfStatus(book.id, 'reading', true);
-    // with offline search on, an opened book's search file comes along
-    if (book?.search && online) void offlineSearchEnabled().then((on) => on && ensureSearchFile(book).catch(() => undefined));
-  }, [book?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Words looked up before in this book's language (underlined, and the "Words" tab)
+  // Opening a book puts it on the reader's "Currently reading" list (unless finished or removed before);
+  // with offline search on, its search file comes along
   useEffect(() => {
     if (!book) return;
-    void lookedUpWords(book.language).then(setLooked);
-    // a lookup (or a word marked known) changes the underlines at once
-    return subscribeLookedUp((language) => {
-      if (language === book.language) void cachedLookedUpWords(language).then(setLooked);
-    });
-  }, [book?.language]);  // eslint-disable-line react-hooks/exhaustive-deps
-  const seenWords = settings.markLookedUp ? looked : null;
+    void setShelfStatus(book.id, 'reading', true);
+    if (book.search && online) void offlineSearchEnabled().then((on) => on && ensureSearchFile(book).catch(() => undefined));
+  }, [book?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const looked = useLookedUpWords(book?.language);
   const openToc = () => {
     setTocOpen(true);
     const text = viewRef.current?.currentText() ?? '';
     setChapterWords(looked ? wordsIn(text, looked) : []);
   };
 
-  // Highlights and bookmarks of this book (synced with the other devices)
-  useEffect(() => {
-    if (!bookId) return;
-    const load = () => void annotationsFor(bookId).then(setAnnotations);
-    load();
-    void syncAnnotations().catch(() => undefined);
-    return subscribeAnnotations(load);
-  }, [bookId]);
-  const highlights = useMemo(() => annotations.filter((a) => a.kind === 'highlight' && a.format === format)
-    .map((a) => ({ id: a.id, location: a.location, text: a.text, color: a.color })), [annotations, format]);
-  const bookmarkHere = position && annotations.find((a) => a.kind === 'bookmark' && a.format === format
-    && Math.abs(a.progress - position.progress) < 0.004);
-
+  const { annotations, highlights } = useAnnotations(bookId, format);
+  const bookmarkHere = place.place && annotations.find((a) => a.kind === 'bookmark' && a.format === format
+    && Math.abs(a.progress - place.place!.progress) < BOOKMARK_NEAR);
   const toggleBookmark = () => {
-    if (!book || !format || !position) return;
+    if (!book || !format || !place.place) return;
     if (bookmarkHere) void deleteAnnotation(bookmarkHere.id);
-    else void saveAnnotation({ book_id: book.id, kind: 'bookmark', format, location: position.location,
-      progress: position.progress, text: toc.find((t) => t.id === currentToc)?.label ?? '' });
+    else void saveAnnotation({ book_id: book.id, kind: 'bookmark', format, location: place.place.location,
+      progress: place.place.progress, text: heading ?? '' });
   };
 
+  const clearSelection = () => {
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  };
   const highlightSelection = () => {
     if (!book || !format || !selection?.anchor) return;
     void saveAnnotation({ book_id: book.id, kind: 'highlight', format, location: selection.anchor.location,
       progress: selection.anchor.progress, text: selection.text });
-    setSelection(null);
-    window.getSelection()?.removeAllRanges();
+    clearSelection();
   };
+  const onSelection = useCallback((s: TextSelection | null) => {
+    setSelection(s);
+    if (s) readingActivity();
+  }, [readingActivity]);
 
   // Sending to the study computer: code as a snippet (its language kept), anything else as a highlight
   const { send, ui: sendUi } = useSendToComputer();
-  const meta = (place?: { location: string; progress: number }) => ({ book_id: book?.id, book_title: book?.title,
-    heading: toc.find((t) => t.id === currentToc)?.label ?? '', location: place?.location, progress: place?.progress });
+  const meta = (at?: { location: string; progress: number }) => ({ book_id: book?.id, book_title: book?.title,
+    heading: heading ?? '', location: at?.location, progress: at?.progress });
   const sendSelection = () => {
     if (!selection) return;
     send(selection.code
@@ -226,109 +162,34 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
       location: q.location, progress: q.progress } } });
   };
 
-  const openAnnotation = (a: Annotation) => {
-    if (a.format === format) viewRef.current?.goTo(a.location, a.progress);
-    else if (book?.formats[a.format as BookFormat]) {
-      jump.current = { format: a.format as BookFormat, location: a.location, progress: a.progress };
-      setFormat(a.format as BookFormat);
+  /** To a place: in the format it's in when the book has it (opened there), else at its progress in the open one */
+  const goToPlace = (to: Jump) => {
+    if (to.format && to.format !== format && book?.formats[to.format]) {
+      jump.current = to;
+      openIn(to.format);
+    } else {
+      viewRef.current?.goTo(to.location, to.progress);
     }
   };
-
-  // Reading time for the statistics: a session per stretch of reading, saved as it grows (only while shown)
-  const tracker = useRef<SessionTracker | null>(null);
-  useEffect(() => {
-    if (!book || !format || !active) return;
-    const t = new SessionTracker(book.id, format);
-    tracker.current = t;
-    const finish = () => { const s = t.end(); if (s) void saveSession(s).then(() => flushEvents().catch(() => undefined)); };
-    const onVisibility = () => { if (document.hidden) finish(); };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => { document.removeEventListener('visibilitychange', onVisibility); finish(); tracker.current = null; };
-  }, [book?.id, format, active]);  // eslint-disable-line react-hooks/exhaustive-deps
-  const lastSessionSave = useRef(0);
-  const readingActivity = useCallback((progress?: number) => {
-    const s = tracker.current?.activity(progress);
-    if (s && Date.now() - lastSessionSave.current > 15_000) {
-      lastSessionSave.current = Date.now();
-      void saveSession(s);
-    }
-  }, []);
-
-  // Remember the place: on the device at once, on the server every so often and when leaving
-  const lastSync = useRef(0);
-  // Reaching the end of a book that wasn't finished when opened: offer to rate it (once per book)
-  const startProgress = useRef<number | null>(null);
-  const [ratePrompt, setRatePrompt] = useState(false);
-  const onLocation = useCallback((location: string, progress: number) => {
-    if (!book || !format) return;
-    if (startProgress.current === null) startProgress.current = progress;
-    else if (progress >= 0.98 && startProgress.current < 0.98) {
-      startProgress.current = 1;
-      const key = `rate_prompted_${book.id}`;
-      void getPref<boolean>(key).then((asked) => {
-        if (!asked && isOnline()) { setRatePrompt(true); void setPref(key, true); }
-      });
-    }
-    const pos = { book_id: book.id, format, location, progress };
-    setPosition({ location, progress });
-    readingActivity(progress);
-    lastPosition.current = { ...pos, updated_at: new Date().toISOString() };
-    void savePosition(pos).then(() => {
-      if (Date.now() - lastSync.current > 15_000) {
-        lastSync.current = Date.now();
-        void flushPositions().catch(() => undefined);
-      }
-    });
-  }, [book, format, readingActivity]);
-  useEffect(() => () => { void flushPositions().catch(() => undefined); }, []);
-  const onSelection = useCallback((s: TextSelection | null) => {
-    setSelection(s);
-    if (s) readingActivity();
-  }, [readingActivity]);
-
-  const switchFormat = (f: BookFormat) => {
-    setFormatAnchor(null);
-    if (!book || f === format) return;
-    void setPref(formatKey(book.id), f);
-    setFormat(f);
-  };
+  const openAnnotation = (a: Annotation) => goToPlace({ format: a.format as BookFormat, location: a.location, progress: a.progress });
 
   const colors = READING_THEMES[settings.theme];
-  // a picture tapped in the book, shown large
-  const [picture, setPicture] = useState<ViewedImage | null>(null);
+  const dark = colors.mode === 'dark';
   const viewProps = {
-    ref: viewRef, onLocation, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
-    vars: readingVars(settings), dark: colors.mode === 'dark', highlights, seenWords, onImage: setPicture, active,
+    onLocation: place.report, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
+    vars: readingVars(settings), dark, highlights, seenWords: settings.markLookedUp ? looked : null,
+    onImage: setPicture, active,
   };
-  const title = toc.find((t) => t.id === currentToc)?.label ?? book?.title;
 
   return (
     <Box sx={{ height: '100vh', '@supports (height: 100dvh)': { height: '100dvh' }, display: 'flex',
       flexDirection: 'column', bgcolor: colors.background }}>
       <AppBar position="static" sx={{ pt: 'env(safe-area-inset-top)' }}>
         <TopBar bookId={book?.id} />
-        {/* the book's own bar: thumb-sized buttons, bigger and further apart on a tablet */}
-        <Toolbar variant="dense" sx={{ minHeight: { xs: 48, sm: 60 }, gap: { xs: 0.5, sm: 2.5 }, borderTop: 1, borderColor: 'divider',
-          '& .MuiIconButton-root': { p: { xs: 1.25, sm: 1.75 } }, '& .MuiSvgIcon-root': { fontSize: { xs: 24, sm: 34 } } }}>
-          <Typography noWrap sx={{ flex: 1, mx: 1, fontSize: { xs: 15, sm: 20 } }}>{title}</Typography>
-          {formats.length > 1 && (
-            <Button color="inherit" startIcon={<SwapHorizIcon />} aria-label="Switch format"
-              sx={{ minHeight: 44, px: { xs: 1, sm: 2 }, fontSize: { xs: 14, sm: 16 } }}
-              onClick={(e) => setFormatAnchor(e.currentTarget)}>{format && LABEL[format]}</Button>
-          )}
-          {phase.kind === 'ready' && (
-            <IconButton aria-label={bookmarkHere ? 'Remove bookmark' : 'Bookmark this place'} onClick={toggleBookmark}
-              disabled={!position}>
-              {bookmarkHere ? <BookmarkIcon /> : <BookmarkBorderIcon />}
-            </IconButton>
-          )}
-          {phase.kind === 'ready' && (
-            <IconButton aria-label="Contents" onClick={openToc}><TocIcon /></IconButton>
-          )}
-          <IconButton edge="end" aria-label="Text settings" onClick={(e) => setSettingsAnchor(e.currentTarget)}>
-            <FormatSizeIcon />
-          </IconButton>
-        </Toolbar>
+        <ReaderToolbar title={heading ?? book?.title} ready={phase.kind === 'ready'}
+          formatLabel={formats.length > 1 && format ? FORMATS[format].label : undefined} onFormats={setFormatAnchor}
+          bookmarked={!!bookmarkHere} canBookmark={!!place.place} onBookmark={toggleBookmark}
+          onContents={openToc} onSettings={setSettingsAnchor} />
       </AppBar>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {!book && library && <Alert severity="warning" sx={{ m: 2 }}>This book is no longer in the library.</Alert>}
@@ -343,22 +204,14 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
         {phase.kind === 'error' && (
           <Alert severity="info" sx={{ m: 2 }} action={<Button onClick={() => navigate('/')}>Library</Button>}>{phase.message}</Alert>
         )}
-        {phase.kind === 'ready' && phase.loaded.format === 'reflow' && (
-          <ReflowView key="reflow" bundle={phase.loaded.bundle} initial={phase.initial} {...viewProps} />
-        )}
-        {phase.kind === 'ready' && phase.loaded.format === 'epub' && book && (
-          <EpubView key="epub" blob={phase.loaded.blob} language={book.language} initial={phase.initial} {...viewProps} />
-        )}
-        {phase.kind === 'ready' && phase.loaded.format === 'pdf' && (
-          <PdfView key="pdf" blob={phase.loaded.blob} initial={phase.initial} {...viewProps} />
-        )}
+        {phase.kind === 'ready' && phase.opened.render({ ...viewProps, initial: phase.initial }, viewRef)}
         {selection && book && (
-          <SelectionPanel selection={selection} language={book.language} dark={colors.mode === 'dark'}
-            bookId={book.id} location={lastPosition.current?.location ?? ''}
+          <SelectionPanel selection={selection} language={book.language} dark={dark}
+            bookId={book.id} location={selection.anchor?.location ?? place.place?.location ?? ''}
             onHighlight={selection.anchor ? highlightSelection : undefined} onSend={sendSelection}
-            onQuote={selection.anchor && format ? () => quoteInPost({ format, location: selection.anchor!.location,
-              progress: selection.anchor!.progress, text: selection.text }) : undefined}
-            onClose={() => { setSelection(null); window.getSelection()?.removeAllRanges(); }} />
+            onQuote={selection.anchor && format
+              ? () => quoteInPost({ format, ...selection.anchor!, text: selection.text }) : undefined}
+            onClose={clearSelection} />
         )}
       </Box>
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}
@@ -366,33 +219,15 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
         annotations={annotations} onAnnotation={openAnnotation} onShare={quoteInPost}
         onSend={(a) => send({ kind: 'highlight', body: a.text, meta: { ...meta(a), heading: '' } })}
         words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
-        onEditNote={(a) => { setNoteFor(a); setNoteText(a.note); }} onDelete={(a) => void deleteAnnotation(a.id)} />
+        onEditNote={setNoteFor} onDelete={(a) => void deleteAnnotation(a.id)} />
       {sendUi}
       <ImageViewer image={picture} onClose={() => setPicture(null)} />
-      <Snackbar open={ratePrompt} autoHideDuration={12_000} onClose={() => setRatePrompt(false)}
+      <Snackbar open={finishPrompt.open} autoHideDuration={12_000} onClose={finishPrompt.close}
         message="Finished! Tell the others what you thought?"
         action={<Button color="primary" size="small" onClick={() => book && navigate(`/book/${encodeURIComponent(book.id)}`)}>Rate it</Button>} />
-      <Dialog open={!!noteFor} onClose={() => setNoteFor(null)} fullWidth maxWidth="sm">
-        <DialogTitle>Note</DialogTitle>
-        <DialogContent>
-          {noteFor?.kind === 'highlight' && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontStyle: 'italic' }}>“{noteFor.text}”</Typography>
-          )}
-          <TextField autoFocus fullWidth multiline minRows={3} value={noteText} onChange={(e) => setNoteText(e.target.value)} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNoteFor(null)}>Cancel</Button>
-          <Button onClick={() => { if (noteFor) void updateAnnotation(noteFor.id, { note: noteText.trim() }); setNoteFor(null); }}>Save</Button>
-        </DialogActions>
-      </Dialog>
-      <Menu anchorEl={formatAnchor} open={!!formatAnchor} onClose={() => setFormatAnchor(null)}>
-        {formats.map((f) => (
-          <MenuItem key={f} selected={f === format} onClick={() => switchFormat(f)}>
-            <ListItemText primary={LABEL[f]}
-              secondary={f === 'reflow' ? 'Text that fits the screen' : f === 'pdf' ? 'The printed pages' : 'E-book pages'} />
-          </MenuItem>
-        ))}
-      </Menu>
+      <AnnotationNoteDialog annotation={noteFor} onClose={() => setNoteFor(null)} />
+      <FormatMenu anchor={formatAnchor} formats={formats} current={format} onPick={chooseFormat}
+        onClose={() => setFormatAnchor(null)} />
       <ReadingSettings anchor={settingsAnchor} onClose={() => setSettingsAnchor(null)} />
     </Box>
   );

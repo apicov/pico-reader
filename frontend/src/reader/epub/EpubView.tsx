@@ -1,68 +1,24 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Box, Button, Dialog, DialogContent } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { Box, Dialog, DialogContent } from '@mui/material';
 import 'katex/dist/katex.min.css'; // math in a note's popup (the note is shown in the app's page)
-import DOMPurify from 'dompurify';
 import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
 import { Overlayer } from 'foliate-js/overlayer.js';
 import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
-import { tappedImage } from '../images';
-import type { Settings } from '@/contexts/SettingsContext';
-import type { TocItem, ViewHandle, ViewProps } from '../types';
-import { watchSelection } from '../selection';
 import { seenWordRanges } from '@/services/words';
+import { highlightColor } from '../highlightColors';
+import { tappedImage } from '../images';
+import { LinkBackButton } from '../LinkBackButton';
+import { openExternal } from '../links';
+import { isCfi } from '../locations';
+import { watchSelection } from '../selection';
+import type { TocItem, ViewHandle, ViewProps } from '../types';
+import { bookCss, MARGIN_PX } from './bookCss';
+import { fitDisplayMath, refitDisplayMath } from './math';
+import { asElement, hiddenNote, isNoteRef, noteHtml } from './notes';
 
-/** The app's @font-face rules with absolute URLs: the book's sections are separate documents (blob URLs),
- *  so they neither inherit the app's fonts nor resolve its relative font paths. */
-let fontFaces: string | null = null;
-function appFontFaces(): string {
-  if (fontFaces !== null) return fontFaces;
-  const rules: string[] = [];
-  for (const sheet of Array.from(document.styleSheets)) {
-    let list: CSSRuleList;
-    try { list = sheet.cssRules; } catch { continue; }
-    for (const rule of Array.from(list)) {
-      if (rule instanceof CSSFontFaceRule && /Literata/.test(rule.style.getPropertyValue('font-family'))) {
-        rules.push(rule.cssText.replace(/url\("?([^")]+)"?\)/g,
-          (_, u: string) => `url("${new URL(u, sheet.href ?? location.href).href}")`));
-      }
-    }
-  }
-  fontFaces = rules.join('\n');
-  return fontFaces;
-}
-
-/** The book's text styled by the reading settings (foliate injects this into each section). */
-function bookCss(s: Settings): string {
-  const c = READING_THEMES[s.theme];
-  return `
-    @namespace epub "http://www.idpf.org/2007/ops";
-    ${appFontFaces()}
-    /* foliate paints the page background itself, from --theme-bg-color (also on a theme change) */
-    html { color-scheme: ${c.mode}; --theme-bg-color: ${c.background}; background: ${c.background} !important;
-      -webkit-tap-highlight-color: ${c.tap}; }
-    body { background: transparent !important; color: ${c.text} !important; font-size: ${18 * s.fontScale}px !important; }
-    /* the reading font and colours win over the book's own (dark themes need it), except for code and math, which
-       keep their own fonts (KaTeX places glyphs by its fonts' metrics) and colours (syntax highlighting, \\color);
-       the exceptions sit in :where() so the rules' specificity, and so which book rules beat them, stays the same */
-    body, body *:where(:not(.katex, .katex *, math, math *, mjx-container, mjx-container *)) {
-      font-family: ${READING_FONT} !important; }
-    pre, code, kbd, samp, pre *, code * { font-family: ui-monospace, monospace !important; }
-    body *:not(a):where(:not(pre *, code *, .katex *, math *, mjx-container *)) { color: inherit !important; }
-    p, li, blockquote, dd { line-height: ${s.lineHeight} !important; text-align: ${s.justify ? 'justify' : 'start'};
-      hyphens: auto; -webkit-hyphens: auto; widows: 2; orphans: 2; }
-    a:link { color: ${c.accent} !important; }
-    img, svg { max-width: 100%; height: auto; }
-    pre { white-space: pre-wrap !important; }
-    /* a wide table fits its column (the page is in columns: wider, it ran over the next pages) */
-    table { max-width: 100% !important; }
-    td, th { overflow-wrap: anywhere; }
-    ${c.mode === 'dark' ? 'img { filter: brightness(0.9); }' : ''}
-    ::highlight(seen) { text-decoration: underline dotted ${c.accent} 1.5px; text-underline-offset: 3px; }
-    aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"] { display: none; }
-  `;
-}
+/** foliate's page layout: a column at most this wide, this much space above and below, this gap between columns */
+const PAGE = { maxInlineSize: '720px', margin: '40px', gap: '6%' };
 
 /** Underline the looked-up words (a CSS highlight: the DOM stays as it is, so EPUB positions don't move).
  *  WebViews without the Custom Highlight API (Chromium < 105) show no underlines. */
@@ -73,67 +29,6 @@ function markSeen(doc: Document, words: Set<string> | null) {
   if (words?.size) registry.set('seen', new win.Highlight(...seenWordRanges(doc.body, words)));
   else registry.delete('seen');
 }
-
-/** The element an anchor resolved to (anchors can also be ranges or offsets); tag checks, not instanceof:
- *  the book's pages are documents of their own */
-const asElement = (x: unknown) => (x && typeof x === 'object' && 'closest' in x ? x as Element : null);
-
-/** Display math wider than its column is scaled down to fit (it ran into the next column or was cut off); again
- *  whenever the column's width or the text size changes. Math can't wrap, and scrolling sideways fights page turns. */
-const refits = new WeakMap<Document, () => void>();
-/** Returns what stops it */
-function fitDisplayMath(doc: Document): () => void {
-  const win = doc.defaultView;
-  if (!win) return () => {};
-  const fit = () => doc.querySelectorAll<HTMLElement>('.katex-display, math[display="block"], mjx-container[display="true"]')
-    .forEach((el) => {
-      el.style.fontSize = '';
-      el.style.overflowX = '';
-      const ratio = el.clientWidth / el.scrollWidth;
-      if (ratio >= 1) return;
-      el.style.fontSize = `${Math.max(0.5, ratio * 0.98)}em`;
-      if (el.scrollWidth > el.clientWidth + 1) el.style.overflowX = 'auto';  // too wide even at half size: it scrolls
-    });
-  // foliate widens the page as it adds columns: only the column's width and the text size matter
-  let last = '';
-  const check = () => {
-    const now = `${getComputedStyle(doc.documentElement).columnWidth}|${getComputedStyle(doc.body).fontSize}`;
-    if (now !== last) { last = now; win.requestAnimationFrame(fit); }
-  };
-  const observer = new win.ResizeObserver(check);
-  observer.observe(doc.documentElement);
-  refits.set(doc, check);
-  void doc.fonts?.ready.then(() => win.requestAnimationFrame(fit));  // the math fonts change the widths
-  return () => observer.disconnect();
-}
-
-const EPUB_NS = 'http://www.idpf.org/2007/ops';
-const NOTE_TYPES = /\b(footnote|endnote|rearnote)\b/;
-const isNoteRef = (a: Element) => /\bnoteref\b/.test(a.getAttributeNS(EPUB_NS, 'type') ?? '')
-  || a.getAttribute('role') === 'doc-noteref';
-/** A note hidden by bookCss (asides typed as notes) */
-const hiddenNote = (el: Element) => {
-  for (let e: Element | null = el; e; e = e.parentElement) {
-    if (e.localName === 'aside' && NOTE_TYPES.test(e.getAttributeNS(EPUB_NS, 'type') ?? '')) return e;
-  }
-  return null;
-};
-
-/** A note's content for the popup: its element (or the block around the anchor it starts with), without the
- *  link back to the text, sanitized; null when there's nothing to show. */
-function noteHtml(target: Element): string | null {
-  const note = (hiddenNote(target) ?? target.closest('aside, li, dd, p, div') ?? target).cloneNode(true) as Element;
-  note.querySelectorAll('a').forEach((a) => {
-    if (/\bbacklink\b/.test(a.getAttributeNS(EPUB_NS, 'type') ?? '') || a.getAttribute('role') === 'doc-backlink'
-      || a.classList.contains('footnote-back')) a.remove();
-  });
-  if (!note.textContent?.trim()) return null;
-  return DOMPurify.sanitize(note.innerHTML, { FORBID_TAGS: ['style', 'form', 'input'] });
-}
-
-const HIGHLIGHT_COLORS: Record<string, string> = { yellow: 'rgba(255, 210, 0, 0.45)', green: 'rgba(80, 200, 120, 0.4)', blue: 'rgba(80, 150, 255, 0.38)' };
-
-const MARGIN_PX = { narrow: '0px', normal: '8px', wide: '32px' } as const;
 
 function flatten(items: FoliateTocItem[] | null | undefined, depth = 0, out: TocItem[] = []): TocItem[] {
   for (const item of items ?? []) {
@@ -151,6 +46,18 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     active = true }, ref) {
   const activeRef = useRef(active);
   activeRef.current = active;
+  // Left/right follow the screen (the book's direction decides which is forward); PageDown/Space always go on.
+  // One function for the page and every section (keys in a section don't reach the page); it reads only refs.
+  const onKey = useRef((e: KeyboardEvent) => {
+    if (!activeRef.current || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.isContentEditable || t?.closest?.('input, textarea, select, [role="dialog"]')) return; // typing, a dialog
+    const view = viewRef.current;
+    if (e.key === 'ArrowLeft') void view?.goLeft();
+    else if (e.key === 'ArrowRight') void view?.goRight();
+    else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) void view?.prev();
+    else if (e.key === 'PageDown' || e.key === ' ') void view?.next();
+  }).current;
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
   const callbacks = useRef({ onLocation, onToc, onCurrentToc, onSelection, onImage });
@@ -187,7 +94,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     });
     view.addEventListener('external-link', (e) => {
       e.preventDefault();
-      window.open((e as CustomEvent<{ href: string }>).detail.href, '_blank', 'noopener');
+      openExternal((e as CustomEvent<{ href: string }>).detail.href);
     });
     view.addEventListener('load', (e) => {
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail;
@@ -232,12 +139,12 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     // highlights: drawn by foliate's overlayer, again whenever a section is laid out
     view.addEventListener('create-overlay', () => {
       for (const h of highlightsRef.current) {
-        if (h.location.startsWith('epubcfi(')) void view.addAnnotation({ value: h.location, color: h.color });
+        if (isCfi(h.location)) void view.addAnnotation({ value: h.location, color: h.color });
       }
     });
     view.addEventListener('draw-annotation', (e) => {
       const { draw, annotation } = (e as CustomEvent<{ draw: (f: unknown, o: unknown) => void; annotation: { color?: string } }>).detail;
-      draw(Overlayer.highlight, { color: HIGHLIGHT_COLORS[annotation.color ?? 'yellow'] ?? HIGHLIGHT_COLORS.yellow });
+      draw(Overlayer.highlight, { color: highlightColor(annotation.color ?? 'yellow') });
     });
 
     void (async () => {
@@ -246,14 +153,14 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       if (closed) return;
       const s = settingsRef.current;
       view.renderer.setAttribute('flow', 'paginated');
-      view.renderer.setAttribute('max-inline-size', '720px');
-      view.renderer.setAttribute('margin', '40px');
-      view.renderer.setAttribute('gap', '6%');
+      view.renderer.setAttribute('max-inline-size', PAGE.maxInlineSize);
+      view.renderer.setAttribute('margin', PAGE.margin);
+      view.renderer.setAttribute('gap', PAGE.gap);
       view.renderer.style.setProperty('padding-inline', MARGIN_PX[s.margin]);
       view.renderer.setStyles?.(bookCss(s));
       view.renderer.style.background = READING_THEMES[s.theme].background;
       callbacks.current.onToc(flatten(view.book.toc));
-      if (initial.location?.startsWith('epubcfi(')) await view.init({ lastLocation: initial.location });
+      if (isCfi(initial.location)) await view.init({ lastLocation: initial.location });
       else if (initial.progress) await view.goToFraction(initial.progress);
       else await view.init({ showTextStart: true });
     })();
@@ -274,30 +181,19 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     view.renderer.setStyles(bookCss(settings));
     view.renderer.style.background = READING_THEMES[settings.theme].background;
     view.renderer.style.setProperty('padding-inline', MARGIN_PX[settings.margin]);
-    const contents = (view.renderer as unknown as { getContents?: () => { doc?: Document }[] }).getContents?.() ?? [];
-    requestAnimationFrame(() => contents.forEach((c) => c.doc && refits.get(c.doc)?.()));  // a new text size
+    const contents = view.renderer.getContents?.() ?? [];
+    requestAnimationFrame(() => contents.forEach((c) => c.doc && refitDisplayMath(c.doc)));  // a new text size
   }, [settings]);
 
-  // Left/right follow the screen (the book's direction decides which is forward); PageDown/Space always go on
-  const onKey = (e: KeyboardEvent) => {
-    if (!activeRef.current || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
-    const t = e.target as HTMLElement | null;
-    if (t?.isContentEditable || t?.closest?.('input, textarea, select, [role="dialog"]')) return; // typing, a dialog
-    const view = viewRef.current;
-    if (e.key === 'ArrowLeft') void view?.goLeft();
-    else if (e.key === 'ArrowRight') void view?.goRight();
-    else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) void view?.prev();
-    else if (e.key === 'PageDown' || e.key === ' ') void view?.next();
-  };
   useEffect(() => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [onKey]);
 
   // Add new highlights, remove deleted ones (before the book is open, create-overlay draws them)
   useEffect(() => {
     const view = viewRef.current;
-    const now = new Map(highlights.filter((h) => h.location.startsWith('epubcfi(')).map((h) => [h.location, h.color]));
+    const now = new Map(highlights.filter((h) => isCfi(h.location)).map((h) => [h.location, h.color]));
     if (!view?.book) { drawn.current = now; return; }
     for (const [cfi] of drawn.current) if (!now.has(cfi)) void view.deleteAnnotation({ value: cfi });
     for (const [cfi, color] of now) if (drawn.current.get(cfi) !== color) void view.addAnnotation({ value: cfi, color });
@@ -306,19 +202,18 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
 
   // The underlines follow the looked-up words (and the setting) on the open pages too
   useEffect(() => {
-    const contents = (viewRef.current?.renderer as unknown as { getContents?: () => { doc?: Document }[] })?.getContents?.() ?? [];
-    for (const c of contents) if (c.doc?.body) markSeen(c.doc, seenWords);
+    for (const c of viewRef.current?.renderer?.getContents?.() ?? []) if (c.doc?.body) markSeen(c.doc, seenWords);
   }, [seenWords]);
 
   useImperativeHandle(ref, () => ({
     goToToc: (href) => { setCanGoBack(false); void viewRef.current?.goTo(href); },
     goTo: (location, progress) => {
       setCanGoBack(false);
-      if (location.startsWith('epubcfi(')) void viewRef.current?.goTo(location);
+      if (isCfi(location)) void viewRef.current?.goTo(location);
       else void viewRef.current?.goToFraction(progress);
     },
     currentText: () => {
-      const contents = (viewRef.current?.renderer as unknown as { getContents?: () => { doc?: Document }[] })?.getContents?.() ?? [];
+      const contents = viewRef.current?.renderer?.getContents?.() ?? [];
       return contents.map((c) => c.doc?.body?.textContent ?? '').join('\n');
     },
   }), []);
@@ -331,11 +226,8 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       <Box sx={{ ...zone, left: 0 }} onClick={() => void viewRef.current?.goLeft()} aria-label="Previous page" />
       <Box sx={{ ...zone, right: 0 }} onClick={() => void viewRef.current?.goRight()} aria-label="Next page" />
       {canGoBack && (
-        <Button variant="contained" size="small" startIcon={<ArrowBackIcon />}
-          onClick={() => { setCanGoBack(false); viewRef.current?.history.back(); }}
-          sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(12px + env(safe-area-inset-bottom))', zIndex: 2 }}>
-          Back
-        </Button>
+        <LinkBackButton onClick={() => { setCanGoBack(false); viewRef.current?.history.back(); }}
+          sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 2 }} />
       )}
       <Dialog open={note !== null} onClose={() => setNote(null)} fullWidth maxWidth="sm"
         slotProps={{ paper: { 'aria-label': 'Note', sx: { bgcolor: READING_THEMES[settings.theme].surface,

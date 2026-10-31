@@ -1,15 +1,14 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import type { ReflowBundle } from './bundle';
 import { ReflowReader, type ReflowTarget } from './ReflowReader';
+import { chapterPlace, placeAt, progressAt } from '../locations';
 import type { TocItem, ViewHandle, ViewProps } from '../types';
 
-/** Location: `c<chapter>:<fraction down the chapter>` */
+/** Where a location (or, from another format, a progress) is in this book */
 function startTarget(bundle: ReflowBundle, initial: ViewProps['initial']): ReflowTarget {
-  const m = /^c(\d+):([\d.]+)$/.exec(initial.location ?? '');
-  if (m) return { chapter: Math.min(Number(m[1]), bundle.meta.chapters.length - 1), fraction: Number(m[2]) };
-  const exact = (initial.progress ?? 0) * bundle.meta.chapters.length;
-  const chapter = Math.min(Math.floor(exact), bundle.meta.chapters.length - 1);
-  return { chapter, fraction: exact - chapter };
+  const count = bundle.meta.chapters.length;
+  const place = chapterPlace.parse(initial.location) ?? placeAt(initial.progress ?? 0, count);
+  return { chapter: Math.min(place.index, count - 1), fraction: place.fraction };
 }
 
 export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBundle }>(function ReflowView(
@@ -31,7 +30,8 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
   useEffect(() => onCurrentToc(`c${target.chapter}`), [target.chapter, onCurrentToc]);
 
   const onScroll = useCallback((chapter: number, fraction: number) => {
-    onLocation(`c${chapter}:${fraction.toFixed(4)}`, Math.min(1, (chapter + fraction) / n));
+    const place = { index: chapter, fraction };
+    onLocation(chapterPlace.format(place), progressAt(place, n));
   }, [onLocation, n]);
 
   // the place where it opened (a chapter too short to scroll reports nothing else; bookmarks need it)
@@ -53,8 +53,8 @@ export const ReflowView = forwardRef<ViewHandle, ViewProps & { bundle: ReflowBun
   }), [navigate, bundle, target.chapter]);
 
   const chapterHighlights = useMemo(() => highlights.flatMap((h) => {
-    const m = /^c(\d+):([\d.]+)$/.exec(h.location);
-    return m && Number(m[1]) === target.chapter ? [{ id: h.id, text: h.text, fraction: Number(m[2]), color: h.color }] : [];
+    const place = chapterPlace.parse(h.location);
+    return place?.index === target.chapter ? [{ id: h.id, text: h.text, fraction: place.fraction, color: h.color }] : [];
   }), [highlights, target.chapter]);
 
   return <ReflowReader bundle={bundle} target={target} onNavigate={navigate} onScroll={onScroll}

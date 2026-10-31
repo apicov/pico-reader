@@ -30,8 +30,8 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import type { CachedFile } from '@/services/bookCache';
 import { languageName } from '@/services/languages';
 import type { Book } from '@/services/types';
+import { formatLabel } from '@/reader/formats';
 
-const FORMAT_LABEL: Record<string, string> = { pdf: 'PDF', epub: 'EPUB', reflow: 'Text' };
 
 type LibraryTab = 'mine' | 'reading' | 'all' | 'finished';
 
@@ -97,7 +97,7 @@ function BookCard({ book, files, online, shelf, mine, collections, badge, job, r
         )}
         <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
           <Chip size="small" variant="outlined" label={languageName(book.language)} />
-          {Object.keys(book.formats).map((f) => <Chip key={f} size="small" variant="outlined" label={FORMAT_LABEL[f] ?? f} />)}
+          {Object.keys(book.formats).map((f) => <Chip key={f} size="small" variant="outlined" label={formatLabel(f)} />)}
         </Stack>
       </CardActionArea>
       <IconButton size="small" aria-label={`${book.title}: shelf`} onClick={(e) => setMenu(e.currentTarget)}

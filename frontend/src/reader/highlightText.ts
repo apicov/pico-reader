@@ -4,6 +4,9 @@
 
 interface Piece { node: Text; start: number }
 
+/** A highlight in a reflow chapter; `fraction`: how far down the chapter it was made */
+export interface ChapterHighlight { id: string; text: string; fraction: number; color: string }
+
 function textIndex(root: HTMLElement): { text: string; pieces: Piece[]; map: number[] } {
   // collapsed text (runs of whitespace → one space) and, per collapsed char, its position in the raw node text
   const pieces: Piece[] = [];
@@ -26,7 +29,7 @@ function textIndex(root: HTMLElement): { text: string; pieces: Piece[]; map: num
   return { text, pieces, map };
 }
 
-export function markHighlights(root: HTMLElement, highlights: { id: string; text: string; fraction: number; color: string }[]): void {
+export function markHighlights(root: HTMLElement, highlights: ChapterHighlight[]): void {
   for (const h of highlights) {
     const { text, pieces, map } = textIndex(root);
     const needle = h.text.replace(/\s+/g, ' ').trim();

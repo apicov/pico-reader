@@ -9,11 +9,11 @@
 import { Capacitor } from '@capacitor/core';
 import { api } from '@/services/api';
 import { getPref, setPref } from '@/services/prefs';
-import type { Book, FileRef } from '@/services/types';
+import type { Book, BookFormat, FileRef } from '@/services/types';
 import { nativeStore } from './native';
 import { webStore } from './web';
 
-export type FileKind = 'pdf' | 'epub' | 'reflow' | 'cover' | 'search';
+export type FileKind = BookFormat | 'cover' | 'search';
 
 export interface CachedFile {
   bookId: string;

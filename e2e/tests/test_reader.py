@@ -207,15 +207,16 @@ def test_looked_up_words_are_underlined_without_changing_the_page(page, book_id)
 
 
 def pdf() -> bytes:
-    """Three pages, the third landscape; on the first a link to the third and one to the web."""
+    """Four pages, the third landscape; on the first a link to the third and one to the web; an outline (contents)
+    with an entry for the first page and one for the third (a page after it, so it can be scrolled to the top)."""
     def text(*lines):
         body = " ".join(f"BT /F1 18 Tf 20 {y} Td ({t}) Tj ET" for y, t in lines).encode()
         return b"<< /Length %d >>\nstream\n%s\nendstream" % (len(body), body)
     page = lambda box, contents, extra=b"": (b"<< /Type /Page /Parent 2 0 R /MediaBox [%s] /Contents %d 0 R "
                                             b"/Resources << /Font << /F1 9 0 R >> >> %s>>" % (box, contents, extra))
     objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+        b"<< /Type /Catalog /Pages 2 0 R /Outlines 12 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R 15 0 R] /Count 4 >>",
         page(b"0 0 300 400", 6, b"/Annots [7 0 R 8 0 R] "),
         page(b"0 0 300 400", 10),
         page(b"0 0 500 300", 11),
@@ -226,6 +227,11 @@ def pdf() -> bytes:
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         text((350, "Seite zwei")),
         text((250, "Seite drei")),
+        b"<< /Type /Outlines /First 13 0 R /Last 14 0 R /Count 2 >>",
+        b"<< /Title (Anfang) /Parent 12 0 R /Next 14 0 R /Dest [3 0 R /XYZ 0 400 0] >>",
+        b"<< /Title (Das Ende) /Parent 12 0 R /Prev 13 0 R /Dest [5 0 R /XYZ 0 300 0] >>",
+        page(b"0 0 300 400", 16),
+        text((350, "Seite vier")),
     ]
     out = io.BytesIO()
     out.write(b"%PDF-1.4\n")
@@ -252,10 +258,12 @@ def pdf_book_id(api):
     return book["id"]
 
 
-def test_pdf_links_work_and_pages_get_their_own_size(page, pdf_book_id):
+def test_pdf_links_work_and_pages_get_their_own_size_and_the_title_follows_the_contents(page, pdf_book_id):
     page.context.route("https://example.com/**", lambda route: route.fulfill(body="<p>web</p>", content_type="text/html"))
     page.goto(f"{WEB}/#/read/{pdf_book_id}")
     page.locator(".pdf-link").first.wait_for(state="attached", timeout=30_000)
+    title = page.locator("header .MuiToolbar-dense")
+    until(lambda: "Anfang" in title.inner_text(), what="the first contents entry as the title")
     # the landscape page, measured after the PDF is shown, gets its own shape
     until(lambda: page.locator('[data-index="2"]').evaluate("el => el.offsetWidth > el.offsetHeight"),
           what="the third page landscape")
@@ -267,6 +275,7 @@ def test_pdf_links_work_and_pages_get_their_own_size(page, pdf_book_id):
     until(lambda: page.evaluate("""() => { const s = document.querySelector('.pdf-scroll');
         const top = document.querySelector('[data-index="2"]').offsetTop - 20;  // (the last page: as far as it goes)
         return s.scrollTop >= Math.min(top, s.scrollHeight - s.clientHeight - 1); }"""), what="the third page")
+    until(lambda: "Das Ende" in title.inner_text(), what="the third page's contents entry as the title")
 
 
 def test_a_wide_table_stays_in_its_column(page, book_id):

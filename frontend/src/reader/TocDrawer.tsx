@@ -7,9 +7,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import type { Annotation } from '@/services/annotations';
 import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined';
+import { formatLabel } from './formats';
 import type { TocItem } from './types';
-
-const FORMAT_LABEL: Record<string, string> = { reflow: 'Text', epub: 'EPUB', pdf: 'PDF' };
 
 /** Contents and notes (highlights + bookmarks) of the open book. */
 export function TocDrawer({ open, onClose, title, items, current, onPick, annotations, onAnnotation, onEditNote, onDelete,
@@ -79,7 +78,7 @@ export function TocDrawer({ open, onClose, title, items, current, onPick, annota
                 primary={a.kind === 'bookmark' ? (a.text || 'Bookmark') : `“${a.text.length > 160 ? `${a.text.slice(0, 160)}…` : a.text}”`}
                 secondary={<>
                   {a.note && <Box component="span" sx={{ display: 'block', fontStyle: 'italic' }}>{a.note}</Box>}
-                  {Math.round(a.progress * 100)}%{formats.size > 1 ? ` · ${FORMAT_LABEL[a.format] ?? a.format}` : ''}
+                  {Math.round(a.progress * 100)}%{formats.size > 1 ? ` · ${formatLabel(a.format)}` : ''}
                 </>}
               />
               <Box sx={{ display: 'flex', flexDirection: 'column', ml: 0.5 }} onClick={(e) => e.stopPropagation()}>

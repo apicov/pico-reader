@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, Stack } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './reflow.css';
@@ -8,8 +7,16 @@ import { resolvePath, type ReflowBundle } from './bundle';
 import { watchSelection, type TextSelection } from '../selection';
 import { markHighlights } from '../highlightText';
 import { tappedImage } from '../images';
+import { LinkBackButton } from '../LinkBackButton';
+import { openExternal } from '../links';
+import { chapterPlace, fractionDown, progressAt } from '../locations';
+import type { ChapterHighlight } from '../highlightText';
+import type { ViewedImage } from '@/components/ImageViewer';
+import { useThrottledScroll } from '../useThrottledScroll';
 import { markSeenWords } from '@/services/words';
 import { scopeCss } from './scopeCss';
+
+const REPORT_EVERY_MS = 500;
 
 export interface ReflowTarget {
   chapter: number;
@@ -24,9 +31,9 @@ interface Props {
   /** Called while reading: chapter, fraction down the chapter */
   onScroll: (chapter: number, fraction: number) => void;
   onSelection: (selection: TextSelection | null) => void;
-  onImage?: (image: { src: string; alt: string }) => void;
-  /** Highlights of this chapter; fraction = where in the chapter it was made */
-  highlights: { id: string; text: string; fraction: number; color: string }[];
+  onImage?: (image: ViewedImage) => void;
+  /** Highlights of this chapter */
+  highlights: ChapterHighlight[];
   seenWords: Set<string> | null;
   style: React.CSSProperties; // CSS variables from the reading settings
   justify: boolean;
@@ -118,31 +125,18 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
   }, [html, target]);
 
   // Report the reading place
-  useEffect(() => {
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-    let pending = 0;
-    const onScrollEvt = () => {
-      if (pending) return;
-      pending = window.setTimeout(() => {
-        pending = 0;
-        const max = scroller.scrollHeight - scroller.clientHeight;
-        onScroll(target.chapter, max > 0 ? scroller.scrollTop / max : 0);
-      }, 500);
-    };
-    scroller.addEventListener('scroll', onScrollEvt, { passive: true });
-    return () => { scroller.removeEventListener('scroll', onScrollEvt); clearTimeout(pending); };
-  }, [target.chapter, onScroll]);
+  useThrottledScroll(scrollRef, REPORT_EVERY_MS, (scroller) => {
+    const max = scroller.scrollHeight - scroller.clientHeight;
+    onScroll(target.chapter, max > 0 ? scroller.scrollTop / max : 0);
+  });
 
   // The selection, with where it is in the chapter (for highlights)
   useEffect(() => watchSelection(document, (sel) => {
     const content = contentRef.current;
     const range = document.getSelection()?.rangeCount ? document.getSelection()!.getRangeAt(0) : null;
     if (sel && content && range) {
-      const box = content.getBoundingClientRect();
-      const fraction = Math.max(0, Math.min(1, (range.getBoundingClientRect().top - box.top) / Math.max(1, box.height)));
-      const n = chapters.length;
-      sel.anchor = { location: `c${target.chapter}:${fraction.toFixed(4)}`, progress: Math.min(1, (target.chapter + fraction) / n) };
+      const place = { index: target.chapter, fraction: fractionDown(range, content.getBoundingClientRect()) };
+      sel.anchor = { location: chapterPlace.format(place), progress: progressAt(place, chapters.length) };
     }
     onSelection(sel);
   }, () => contentRef.current), [onSelection, target.chapter, chapters.length]);
@@ -158,13 +152,8 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
     const a = (e.target as HTMLElement).closest('a');
     if (!a) return;
     const href = a.getAttribute('href') ?? '';
-    if (/^https?:/.test(href)) {
-      e.preventDefault();
-      window.open(href, '_blank', 'noopener');
-      return;
-    }
     e.preventDefault();
-    if (href.startsWith('file:') || !href) return;
+    if (openExternal(href) || href.startsWith('file:') || !href) return;
     const [path, anchor] = href.split('#');
     if (!path) {
       follow({ chapter: target.chapter, anchor });
@@ -190,12 +179,7 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
           )}
         </Box>
       </Stack>
-      {back && (
-        <Button variant="contained" size="small" startIcon={<ArrowBackIcon />} onClick={() => onNavigate(back)}
-          sx={{ position: 'sticky', display: 'flex', mx: 'auto', bottom: 'calc(12px + env(safe-area-inset-bottom))', mb: 2 }}>
-          Back
-        </Button>
-      )}
+      {back && <LinkBackButton onClick={() => onNavigate(back)} sx={{ position: 'sticky', display: 'flex', mx: 'auto', mb: 2 }} />}
     </div>
   );
 }
