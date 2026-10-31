@@ -2,33 +2,8 @@
 an EPUB exported from it), and several files chosen together."""
 
 import re
-import struct
-import zlib
 
-from conftest import WEB, until
-
-PROSE = ("Der Alarm kam am Vormittag, als Janna-Berta noch in der Schule saß, und die Lehrerin las die Durchsage vor. "
-         "Es ist nicht so, dass sie mit dem Bus nach Hause fuhr. ") * 8
-
-
-def png() -> bytes:
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress((b"\x00" + b"\x90\x40\x20" * 4) * 4)) + chunk(b"IEND", b""))
-
-
-def marker_project(root, name: str, heading: str) -> None:
-    folder = root / name
-    folder.mkdir(parents=True)
-    (folder / f"{name}.md").write_text(
-        f"{{0}}------------------------------------------------\n\n# {heading}\n\n{PROSE}\n\n"
-        "![](_page_1_Picture_0.png)\n\n<packt>\n\n"
-        "{1}------------------------------------------------\n\n"
-        f"# Kapitel Zwei\n\n{PROSE}\n")
-    (folder / f"{name}_meta.json").write_text('{"table_of_contents": []}')
-    (folder / "_page_1_Picture_0.png").write_bytes(png())
-    (folder / f"{name}.epub").write_bytes(b"PK an export of the same book")
+from helpers import PROSE, WEB, marker_project, until
 
 
 def test_a_folder_of_marker_projects_becomes_several_books(page, api, tmp_path):

@@ -6,24 +6,8 @@ import zipfile
 
 import httpx
 import pytest
-from conftest import TITLE, WEB, until
+from helpers import FIRST, TITLE, WEB, open_book, select_first_paragraph, until
 from PIL import Image
-
-FIRST = "Der Alarm kam am Vormittag"
-
-
-def open_book(page, book_id):
-    page.goto(f"{WEB}/#/read/{book_id}")
-    return until(lambda: next((f for f in page.frames if f.locator(f"text={FIRST}").count()), None),
-                 timeout=30, what="the book's text")
-
-
-def select_first_paragraph(frame):
-    frame.evaluate("""() => {
-        const p = [...document.querySelectorAll('p')].find((x) => x.textContent.startsWith('Der Alarm'));
-        const range = document.createRange(); range.selectNodeContents(p);
-        const sel = document.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-    }""")
 
 
 def test_open_the_book_highlight_and_it_reaches_the_server(page, api, book_id):
@@ -185,9 +169,9 @@ def test_a_deleted_highlight_goes_from_the_page(page, book_id):
     page.get_by_role("tab", name=re.compile(r"Notes")).click()
     n = page.get_by_label("Delete").count()
     assert n
-    for _ in range(n):
+    for left in range(n - 1, -1, -1):
         page.get_by_label("Delete").first.click()
-        page.wait_for_timeout(300)
+        until(lambda left=left: page.get_by_label("Delete").count() == left, what="the note gone from the list")
     # (the list also holds the bookmark of another test: not on the page)
     until(lambda: len(page.evaluate("window.removed")) > 0, what="the highlights taken off the page")
     assert all(cfi.startswith("epubcfi(") for cfi in page.evaluate("window.removed"))

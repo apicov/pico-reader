@@ -4,18 +4,11 @@ an API client with the same reader's token for checking what reached the server.
 import os
 import re
 import time
-from pathlib import Path
 
 import httpx
 import pytest
+from helpers import API, API_LOG, EMAIL, TITLE, WEB
 from playwright.sync_api import Browser, Page, sync_playwright
-
-WEB = os.environ["E2E_WEB"]
-API = os.environ["E2E_API"]
-AI = os.environ["E2E_AI"]
-API_LOG = Path(os.environ["E2E_API_LOG"])
-EMAIL = "reader@example.com"
-TITLE = "Die Wolke (Probe)"
 
 
 def latest_code() -> str:
@@ -70,18 +63,3 @@ def api(signed_in: dict) -> httpx.Client:
 @pytest.fixture(scope="session")
 def book_id(api: httpx.Client) -> str:
     return next(b["id"] for b in api.get("/api/library").json()["books"] if b["title"] == TITLE)
-
-
-def script_ai(*messages: dict) -> None:
-    """The fake AI's next agent replies, in order."""
-    httpx.post(f"{AI}/script", json=list(messages)).raise_for_status()
-
-
-def until(check, timeout=10.0, what="the condition"):
-    """Polls `check()` until it's truthy (sync to the server happens in the background)."""
-    end = time.time() + timeout
-    while time.time() < end:
-        if (result := check()):
-            return result
-        time.sleep(0.25)
-    raise AssertionError(f"Timed out waiting for {what}")

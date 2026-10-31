@@ -1,6 +1,6 @@
 import json
 
-from conftest import WEB, script_ai, until
+from helpers import WEB, script_ai, until
 
 NOTE = "## Figuren\n\n- **Janna-Berta**, 14\n\n```mermaid\nflowchart LR\n  J[\"Janna-Berta\"] --> U[\"Uli\"]\n```\n"
 

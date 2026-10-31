@@ -18,10 +18,8 @@ from pathlib import Path
 
 import httpx
 import pytest
-from conftest import AI, WEB, until
+from helpers import AI, WEB, marker_project, open_book, select_first_paragraph, until
 from PIL import Image, ImageDraw, ImageFont
-from test_reader import open_book, select_first_paragraph
-from test_upload import marker_project
 
 OUT = Path(__file__).resolve().parents[2] / "frontend" / "public" / "manual"
 PHONE = {"width": 390, "height": 844}

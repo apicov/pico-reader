@@ -5,8 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from conftest import API, WEB, until
-from test_reader import open_book, select_first_paragraph
+from helpers import API, WEB, open_book, select_first_paragraph, until
 
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 

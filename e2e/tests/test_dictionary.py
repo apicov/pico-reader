@@ -1,5 +1,5 @@
 import httpx
-from conftest import AI, WEB
+from helpers import AI, WEB
 from playwright.sync_api import expect
 
 # matched by prompt: the two requests are made at the same time

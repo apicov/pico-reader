@@ -3,7 +3,7 @@
 import io
 import re
 
-from conftest import WEB, until
+from helpers import WEB, until
 from manual_capture import add_book
 from PIL import Image
 
