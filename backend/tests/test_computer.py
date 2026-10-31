@@ -1,7 +1,7 @@
 from sqlalchemy import text
 
+from app import computer_service as computer
 from app.db import get_engine
-from app.routes import computer
 from tests.test_chat import ask, call, groq, new, say  # noqa: F401 (fixtures)
 from tests.test_search import fake_embed, fresh_query_cache, indexed_book  # noqa: F401 (fixtures)
 

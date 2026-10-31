@@ -8,7 +8,6 @@ import inspect
 import json
 import logging
 import re
-import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,12 +16,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import categories, community
+from app import categories, community, computer_service, notes_service, stats_service
 from app.auth import Reader
-from app.routes import computer as computer_routes
-from app.routes import notes as notes_routes
-from app.routes import stats as stats_routes
-from app.routes.search import retrieve
+from app.search_service import fold_accents, retrieve
+from app.settings_service import ReaderSettings, load_settings, save_settings
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +46,6 @@ class Tool:
                                                  "parameters": self.parameters}}
 
 
-def _plain(s: str) -> str:
-    return "".join(c for c in unicodedata.normalize("NFD", s.lower()) if not unicodedata.combining(c))
-
-
 def resolve_book(ctx: Context, book: str | None) -> dict | None:
     """A book by id or (part of) its title, accents and case ignored."""
     if not book:
@@ -61,12 +54,12 @@ def resolve_book(ctx: Context, book: str | None) -> dict | None:
     for r in rows:
         if r.id == book:
             return dict(r._mapping)
-    wanted = _plain(book)
-    matches = [r for r in rows if wanted in _plain(r.title) or _plain(r.title) in wanted]
+    wanted = fold_accents(book)
+    matches = [r for r in rows if wanted in fold_accents(r.title) or fold_accents(r.title) in wanted]
     if not matches:
         return None
     # the closest title: the same one, then one that starts with it, then the shortest (ties by id: always the same)
-    best = min(matches, key=lambda r: (_plain(r.title) != wanted, not _plain(r.title).startswith(wanted), len(r.title), r.id))
+    best = min(matches, key=lambda r: (fold_accents(r.title) != wanted, not fold_accents(r.title).startswith(wanted), len(r.title), r.id))
     return dict(best._mapping)
 
 
@@ -78,7 +71,7 @@ def _book_or_error(ctx: Context, book: str | None):
 
 
 def _stats(ctx: Context, period: str, book_id: str | None = None) -> dict:
-    return stats_routes.stats(period=period, tz=ctx.tz, book_id=book_id, reader=ctx.reader, db=ctx.db)
+    return stats_service.reading_stats(ctx.db, ctx.reader.email, period, ctx.tz, book_id)
 
 
 # --- read-only tools ---
@@ -95,10 +88,10 @@ def list_books(ctx: Context, category: str | None = None) -> dict:
         LEFT JOIN shelf sh ON sh.book_id = b.id AND sh.reader_email = :e
         LEFT JOIN my_shelf ms ON ms.book_id = b.id AND ms.reader_email = :e
         WHERE b.status = 'ready' ORDER BY lower(b.title)"""), {"e": ctx.reader.email}).fetchall()
-    wanted = _plain(category) if category else None
+    wanted = fold_accents(category) if category else None
 
     def in_category(r) -> bool:
-        return not wanted or any(wanted in _plain(paths.get(c) or "") for c in (r.category_id, r.category2_id))
+        return not wanted or any(wanted in fold_accents(paths.get(c) or "") for c in (r.category_id, r.category2_id))
 
     return {"books": [{"id": r.id, "title": r.title, "author": r.author, "language": r.language,
                        "category": paths.get(r.category_id), "second_category": paths.get(r.category2_id),
@@ -205,7 +198,7 @@ def vocabulary_due(ctx: Context, language: str | None = None) -> dict:
 
 
 def reading_goal(ctx: Context) -> dict:
-    return stats_routes.load_settings(ctx.db, ctx.reader.email).reading_goal.model_dump()
+    return load_settings(ctx.db, ctx.reader.email).reading_goal.model_dump()
 
 
 def open_book_at(ctx: Context, book: str, percent: float | None = None, source: int | None = None) -> dict:
@@ -233,7 +226,7 @@ def export_anki(ctx: Context, book: str | None = None) -> dict:
 
 
 def ai_usage(ctx: Context, period: str = "month") -> dict:
-    return stats_routes.usage_summary(ctx.db, ctx.reader.email, period if period in ("week", "month", "year", "all") else "month", ctx.tz)
+    return stats_service.usage_summary(ctx.db, ctx.reader.email, period if period in ("week", "month", "year", "all") else "month", ctx.tz)
 
 
 def book_opinions(ctx: Context, book: str) -> dict:
@@ -312,9 +305,9 @@ def read_post(ctx: Context, post: str) -> dict:
     try:
         post_id = str(uuid.UUID(post))
     except ValueError:
-        wanted = _plain(post)
+        wanted = fold_accents(post)
         match = next((p for p in community.list_posts(ctx.db, ctx.reader, limit=100)
-                      if not p["hidden"] and wanted in _plain(p["title"])), None)
+                      if not p["hidden"] and wanted in fold_accents(p["title"])), None)
         if match is None:
             return {"error": f"No post {post!r}; community_posts lists them"}
         post_id = match["id"]
@@ -335,21 +328,21 @@ def my_reviews(ctx: Context) -> dict:
                         for r in community.reviews(ctx.db, ctx.reader, author_email=ctx.reader.email, limit=100)]}
 
 
-def _find_note(ctx: Context, note: str) -> notes_routes.Note | None:
+def _find_note(ctx: Context, note: str) -> notes_service.Note | None:
     """One of the reader's notes by id or (part of) its title."""
-    mine = notes_routes.list_notes(ctx.db, ctx.reader.email)
-    wanted = _plain(note)
-    return next((n for n in mine if n.id == note), None) or next((n for n in mine if wanted in _plain(n.title)), None)
+    mine = notes_service.list_notes(ctx.db, ctx.reader.email)
+    wanted = fold_accents(note)
+    return next((n for n in mine if n.id == note), None) or next((n for n in mine if wanted in fold_accents(n.title)), None)
 
 
 def _project(ctx: Context, name: str | None) -> tuple[str | None, dict | None]:
     """(project id, error) for a project on the study computer named (in part) `name`; (None, None) for none."""
     if not name:
         return None, None
-    projects = computer_routes.list_projects(ctx.db, ctx.reader.email)
-    wanted = _plain(name)
-    found = next((p for p in projects if _plain(p.name) == wanted), None) or \
-        next((p for p in projects if wanted in _plain(p.name)), None)
+    projects = computer_service.list_projects(ctx.db, ctx.reader.email)
+    wanted = fold_accents(name)
+    found = next((p for p in projects if fold_accents(p.name) == wanted), None) or \
+        next((p for p in projects if wanted in fold_accents(p.name)), None)
     if found is None:
         return None, {"error": f"No project {name!r}. The reader's projects: {[p.name for p in projects] or 'none yet'}"}
     return found.id, None
@@ -362,11 +355,11 @@ def list_notes(ctx: Context, book: str | None = None, project: str | None = None
     project_id, error = _project(ctx, project)
     if error:
         return error
-    notes = notes_routes.list_notes(ctx.db, ctx.reader.email, found["id"] if found else None)
+    notes = notes_service.list_notes(ctx.db, ctx.reader.email, found["id"] if found else None)
     return {"notes": [{"id": n.id, "title": n.title, "book": n.book_title, "project": n.project,
                        "updated": n.updated_at[:10], "characters": len(n.markdown), "made_in": n.origin}
                       for n in notes if not project_id or n.project_id == project_id],
-            "projects": [p.name for p in computer_routes.list_projects(ctx.db, ctx.reader.email)]}
+            "projects": [p.name for p in computer_service.list_projects(ctx.db, ctx.reader.email)]}
 
 
 def read_note(ctx: Context, note: str) -> dict:
@@ -406,9 +399,9 @@ def save_note(ctx: Context, title: str, markdown: str, book: str | None = None, 
         return error
     markdown, sources = _cited(markdown, _sources or [])
     try:
-        n = notes_routes.create_note(ctx.db, ctx.reader.email, title, markdown, found["id"] if found else None, sources,
+        n = notes_service.create_note(ctx.db, ctx.reader.email, title, markdown, found["id"] if found else None, sources,
                                      project_id=project_id)
-    except notes_routes.NoteLimit as e:
+    except notes_service.NoteLimit as e:
         return {"error": str(e)}
     return {"saved": n.title, "id": n.id}
 
@@ -419,9 +412,9 @@ def send_to_computer(ctx: Context, title: str, text: str, kind: str = "text", la
     project_id, error = _project(ctx, project)
     if error:
         return error
-    drop = computer_routes.DropIn(kind=kind if kind in ("text", "snippet", "note") else "text", title=title[:200],
+    drop = computer_service.DropIn(kind=kind if kind in ("text", "snippet", "note") else "text", title=title[:200],
                                   language=language[:30], body=text, project_id=project_id, append=bool(append))
-    return {"sent": title, "id": computer_routes.create_drop(ctx.db, ctx.reader.email, drop)}
+    return {"sent": title, "id": computer_service.create_drop(ctx.db, ctx.reader.email, drop)}
 
 
 def append_to_note(ctx: Context, note: str, markdown: str, _sources: list[dict] | None = None) -> dict:
@@ -430,23 +423,23 @@ def append_to_note(ctx: Context, note: str, markdown: str, _sources: list[dict] 
         return {"error": f"No note {note!r}"}
     added, sources = _cited(markdown, _sources or [], first=len(found.sources) + 1)
     try:
-        n = notes_routes.change_note(ctx.db, ctx.reader.email, found.id,
+        n = notes_service.change_note(ctx.db, ctx.reader.email, found.id,
                                      markdown=f"{found.markdown.rstrip()}\n\n{added.strip()}\n",
                                      sources=found.sources + sources)
-    except notes_routes.NoteLimit as e:
+    except notes_service.NoteLimit as e:
         return {"error": str(e)}
     return {"updated": n.title, "id": n.id}
 
 
 def set_reading_goal(ctx: Context, enabled: bool, minutes: int | None = None, days: list[int] | None = None) -> dict:
-    settings = stats_routes.load_settings(ctx.db, ctx.reader.email)
+    settings = load_settings(ctx.db, ctx.reader.email)
     goal = settings.reading_goal
     goal.enabled = enabled
     if minutes:
         goal.minutes = max(1, min(600, int(minutes)))
     if days:
         goal.days = sorted({d for d in days if 0 <= d <= 6})
-    stats_routes.put_settings(stats_routes.ReaderSettings(reading_goal=goal), reader=ctx.reader, db=ctx.db)
+    save_settings(ctx.db, ctx.reader.email, ReaderSettings(reading_goal=goal))
     return {"reading_goal": goal.model_dump()}
 
 

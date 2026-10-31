@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import Reader, get_current_reader
 from app.db import get_db
-from app.routes.translate import LANGUAGES
+from app.languages import LANGUAGES
 
 router = APIRouter(prefix="/api", tags=["vocabulary"])
 

@@ -1,4 +1,4 @@
-from app.routes import notes as notes_routes
+from app import notes_service
 from tests.test_chat import ask, call, groq, new, say  # noqa: F401 (fixtures)
 from tests.test_search import fake_embed, fresh_query_cache, indexed_book  # noqa: F401 (fixtures)
 
@@ -47,7 +47,7 @@ def test_appending_numbers_new_citations_after_the_old_ones(client, admin_header
 def test_the_agent_lists_and_reads_notes(client, admin_headers, indexed_book, groq):
     import json
     with _db() as db:
-        notes_routes.create_note(db, "boss@example.com", "Pruning", "It removes weights [1].", None, [{"x": 1}])
+        notes_service.create_note(db, "boss@example.com", "Pruning", "It removes weights [1].", None, [{"x": 1}])
     groq.steps += [call("list_notes", {}), call("read_note", {"note": "pruning"}, "c2"), say("You have one note.")]
     new(client, admin_headers)
     ask(client, admin_headers, "conv-00000001", "What notes do I have?")
@@ -66,22 +66,22 @@ def test_edit_delete_and_privacy(client, admin_headers, auth_headers, indexed_bo
     assert client.delete(f"/api/notes/{note['id']}", headers=auth_headers).status_code == 404
     r = client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"title": "Renamed", "markdown": "New"})
     assert r.json()["title"] == "Renamed" and r.json()["markdown"] == "New"
-    too_long = "x" * (notes_routes.MAX_CHARS + 1)
+    too_long = "x" * (notes_service.MAX_CHARS + 1)
     assert client.patch(f"/api/notes/{note['id']}", headers=admin_headers, json={"markdown": too_long}).status_code == 422
     assert client.delete(f"/api/notes/{note['id']}", headers=admin_headers).status_code == 204
     assert client.get("/api/notes", headers=admin_headers).json() == []
 
 
 def test_limits_reach_the_reader_as_a_failed_action(client, admin_headers, indexed_book, groq, monkeypatch):
-    monkeypatch.setattr(notes_routes, "MAX_NOTES", 0)
+    monkeypatch.setattr(notes_service, "MAX_NOTES", 0)
     cid, action = propose(client, admin_headers, groq, "save_note", {"title": "One", "markdown": "Text"}, search=False)
     assert confirm(client, admin_headers, cid, action).json()["content"].startswith("Couldn't do it: You have 0 notes")
 
 
 def test_filter_by_book_and_book_deletion_keeps_the_note(client, admin_headers, indexed_book, groq):
     with _db() as db:
-        notes_routes.create_note(db, "boss@example.com", "About it", "x", indexed_book, [])
-        notes_routes.create_note(db, "boss@example.com", "Loose", "y", None, [])
+        notes_service.create_note(db, "boss@example.com", "About it", "x", indexed_book, [])
+        notes_service.create_note(db, "boss@example.com", "Loose", "y", None, [])
     assert [n["title"] for n in client.get(f"/api/notes?book={indexed_book}", headers=admin_headers).json()] == ["About it"]
     client.delete(f"/api/books/{indexed_book}", headers=admin_headers)
     assert {n["title"]: n["book_id"] for n in client.get("/api/notes", headers=admin_headers).json()} == \

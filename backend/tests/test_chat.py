@@ -176,7 +176,7 @@ def test_conversations_are_private(client, admin_headers, auth_headers, indexed_
 
 
 def test_ask_knows_the_library(client, admin_headers, indexed_book, monkeypatch):
-    from app.routes import search
+    from app import search_service as search
     seen = {}
     monkeypatch.setattr(search, "_translated", lambda q, langs, who=None: ())
     monkeypatch.setattr(search.groq_client, "chat_json", lambda system, user, max_tokens, who=None: (

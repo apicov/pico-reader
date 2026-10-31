@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app import groq_client
 from app.auth import Reader, get_current_reader
 from app.db import get_db, get_engine
-from app.routes.search import CITATION_RULES, Passage, books_named, library_overview
+from app.search_service import CITATION_RULES, Passage, books_named, library_overview
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/conversations", tags=["chat"])

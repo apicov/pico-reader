@@ -70,7 +70,7 @@ def test_index_refuses_another_model(client, admin_headers, indexed_book):
 
 @pytest.fixture(autouse=True)
 def fresh_query_cache():
-    from app.routes import search
+    from app import search_service as search
     search._translated.cache_clear()
 
 

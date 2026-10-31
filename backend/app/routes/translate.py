@@ -14,14 +14,13 @@ from sqlalchemy.orm import Session
 from app import groq_client
 from app.auth import Reader, get_current_reader
 from app.db import get_db
+from app.languages import LANGUAGES
 
 router = APIRouter(prefix="/api", tags=["translate"])
 
 # Bump when the prompt changes: cached translations of an older prompt are then made again
 PROMPT_VERSION = 1
 
-LANGUAGES = {"de": "German", "en": "English", "es": "Spanish", "fr": "French", "it": "Italian",
-             "pt": "Portuguese", "nl": "Dutch", "ru": "Russian", "el": "Greek", "la": "Latin"}
 
 
 class TranslateRequest(BaseModel):
