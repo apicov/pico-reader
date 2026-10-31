@@ -10,7 +10,7 @@ agent searches the book, writes the note and proposes **Save note: …**. The ca
 and **Confirm** / **Cancel**; nothing is saved before confirming. "Add chapter 6 to my *Die Wolke* note" finds
 the note and proposes **Add to note: …**, which appends a section.
 
-Agent tools (`backend/app/agent_tools.py`): `list_notes`, `read_note` (run at once), `save_note`,
+Agent tools (`backend/app/agent/notes.py`): `list_notes`, `read_note` (run at once), `save_note`,
 `append_to_note` (proposed, run after confirming). `list_notes` names the reader's projects and filters by one;
 `save_note` can put the note into a project ("…as a note in my rust-book project"). The agent never deletes or rewrites a note; the reader does
 that in the app. The answer limit is 4,000 tokens, so a whole note fits in one call.

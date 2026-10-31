@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import groq_client
+from app import llm
 from app.config import get_settings
 from app.errors import DomainError
 from app.routes import (
@@ -46,8 +46,8 @@ def domain_error(_: Request, e: DomainError):
     return JSONResponse({"detail": str(e)}, status_code=e.status)
 
 
-@app.exception_handler(groq_client.GroqError)
-def llm_error(_: Request, e: groq_client.GroqError):
+@app.exception_handler(llm.LLMError)
+def llm_error(_: Request, e: llm.LLMError):
     """The AI couldn't answer: its status (502 unreachable, 503 not set up, 429 rate limit) and why"""
     return JSONResponse({"detail": str(e)}, status_code=e.status)
 app.include_router(auth.router)

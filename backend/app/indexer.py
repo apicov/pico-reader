@@ -15,12 +15,12 @@ import time
 from pathlib import Path
 
 from sqlalchemy import text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from app import categories, r2
 from app import dictionary_service as dicts
 from app import library_service as books
-from app.db import get_engine
+from app.db import new_session
 from pico_core import embed, indexing
 
 logger = logging.getLogger("indexer")
@@ -137,7 +137,7 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     os.environ.setdefault("EMBED_THREADS", "1")  # leave the small server's CPU to the API
-    db = sessionmaker(bind=get_engine())()
+    db = new_session()
     if (n := requeue_interrupted(db)):
         logger.info("Requeued %d interrupted jobs", n)
     idle_since = time.time()

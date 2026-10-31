@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import categories, groq_client
+from app import categories, llm
 from app import library_service as books
 from app.auth import Reader, get_current_admin, get_current_reader
 from app.db import get_db
@@ -93,10 +93,7 @@ def ask(body: AskRequest, reader: Reader = Depends(get_current_reader), db: Sess
     passages = retrieve(db, body.question, scope, 8, who=(reader.email, "search"))
     user = (f"LIBRARY:\n{library_overview(db)}\n\nSOURCES:\n{numbered_sources(passages)}"
             f"\n\nQUESTION: {body.question}")
-    try:
-        data, _model = groq_client.chat_json(ASK_PROMPT, user, max_tokens=1200, who=(reader.email, "ask"))
-    except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e)) from e
+    data, _model = llm.chat_json(ASK_PROMPT, user, max_tokens=1200, who=(reader.email, "ask"))
     answer = str(data.get("answer") or "").strip()
     if not answer:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "The model returned no answer")

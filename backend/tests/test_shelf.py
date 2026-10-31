@@ -111,13 +111,14 @@ def test_collections_are_private_and_checked(client, admin_headers, auth_headers
 def test_the_agent_sees_collections(client, admin_headers, bucket):
     from sqlalchemy.orm import sessionmaker
 
-    from app import agent_tools
+    from app.agent import Context
+    from app.agent.library import list_books
     from app.auth import find_reader
     from app.db import get_engine
     b = make_book(client, admin_headers)
     client.put("/api/shelf/collections/col-00000005", headers=admin_headers, json={"name": "Uni"})
     client.put(f"/api/shelf/collections/col-00000005/books/{b}", headers=admin_headers)
     with sessionmaker(bind=get_engine())() as db:
-        ctx = agent_tools.Context(db=db, reader=find_reader(db, "boss@example.com"), tz="UTC", sources=[])
-        [book] = agent_tools.list_books(ctx)["books"]
+        ctx = Context(db=db, reader=find_reader(db, "boss@example.com"), tz="UTC", sources=[])
+        [book] = list_books(ctx)["books"]
     assert book["collections"] == ["Uni"] and book["on_my_shelf"] is True

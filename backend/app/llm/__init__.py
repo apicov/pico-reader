@@ -5,7 +5,7 @@ LLM_PROVIDER picks the AI, LLM_FALLBACK_PROVIDER an optional second one (any of 
 key or model) for when the first is unavailable:
 - groq (the default) and gemini speak the same OpenAI-compatible API, here. Gemini thinks before answering, and
   its thinking counts against max_tokens, so its calls get room for it.
-- anthropic: Claude through the official SDK (app/anthropic_llm.py), in and out in the same shapes.
+- anthropic: Claude through the official SDK (app/llm/anthropic.py), in and out in the same shapes.
 
 Unavailable means a limit (429), a server error (5xx), a timeout or no connection, a missing key, or a key or model
 the provider doesn't accept (401/403/404). Then the call goes to the fallback, and the first one rests (as long as
@@ -25,8 +25,8 @@ from typing import Any, TypeVar
 import httpx
 from sqlalchemy import text
 
-from app import anthropic_llm
 from app.config import get_settings
+from app.llm import anthropic as anthropic_llm
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _route(kind: str, api_key: str | None = None, key_setting: str = "", model_n
         return Route("anthropic", s.anthropic_api_key if api_key is None else api_key, key_setting or "ANTHROPIC_API_KEY",
                      model_name, agent_model or s.anthropic_agent_model or model_name)
     if kind != "groq":
-        raise GroqError(f"Unknown AI provider {kind!r} (groq, gemini or anthropic)", 503)
+        raise LLMError(f"Unknown AI provider {kind!r} (groq, gemini or anthropic)", 503)
     model_name = model_name or s.groq_model
     extra: dict[str, Any] = {}
     if s.groq_reasoning_format and "qwen" in model_name:
@@ -100,7 +100,7 @@ def model() -> str:
     return routes()[0].model
 
 
-class GroqError(Exception):
+class LLMError(Exception):
     """The AI couldn't be used: no key, unreachable, an error answer. `status` is what the API passes on;
     `unavailable`: worth trying the fallback."""
 
@@ -126,7 +126,7 @@ def _with_fallback(call: Callable[[Route], T]) -> T:
     for i, route in enumerate(ready):
         try:
             return call(route)
-        except GroqError as e:
+        except LLMError as e:
             if not e.unavailable or i == len(ready) - 1:
                 raise
             rest = e.retry_after or (60 if e.status == 429 else 30)
@@ -172,7 +172,7 @@ def chat_json_via(system: str, user: str, max_tokens: int = 1500, who: Who = Non
                 return _parse(reply), route.model, route.role
             except UnusableReply as e:
                 if attempt == 2:
-                    raise GroqError(f"The model's answer wasn't usable: {e}") from e
+                    raise LLMError(f"The model's answer wasn't usable: {e}") from e
                 logger.warning("Unusable AI reply, asking again: %s", e)
         raise AssertionError("unreachable")
     return _with_fallback(ask)
@@ -198,7 +198,7 @@ def chat_tools(messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_
             body = res.json()
             message = body["choices"][0]["message"]
         except (KeyError, IndexError, ValueError) as e:
-            raise GroqError(f"{route.name} sent no message", unavailable=True) from e
+            raise LLMError(f"{route.name} sent no message", unavailable=True) from e
         _record(who, body)
         return {**message, "_route": route.id, "_model": route.agent_model, "_via": route.role}
     return _with_fallback(step)
@@ -228,7 +228,7 @@ def _timeout() -> float:
 
 def _payload(route: Route, messages: list[dict[str, Any]], max_tokens: int) -> dict[str, Any]:
     if not route.api_key:
-        raise GroqError(f"{route.key_setting} is not set on the server", 503, unavailable=True)
+        raise LLMError(f"{route.key_setting} is not set on the server", 503, unavailable=True)
     return {"model": route.model, "messages": messages, "max_tokens": max_tokens + route.thinking_room,
             "temperature": 0.2, **route.extra}
 
@@ -238,27 +238,27 @@ def _post(route: Route, payload: dict[str, Any]) -> httpx.Response:
         return httpx.post(f"{route.base_url}/chat/completions", json=payload, timeout=_timeout(),
                           headers={"Authorization": f"Bearer {route.api_key}"})
     except httpx.HTTPError as e:
-        raise GroqError(f"Could not reach {route.name}: {e}", unavailable=True) from e
+        raise LLMError(f"Could not reach {route.name}: {e}", unavailable=True) from e
 
 
-def _failed(route: Route, res: httpx.Response) -> GroqError:
+def _failed(route: Route, res: httpx.Response) -> LLMError:
     logger.error("%s error %s: %s", route.name, res.status_code, res.text[:500])
     try:
         retry_after = float(res.headers.get("retry-after", ""))
     except ValueError:
         retry_after = None
-    return GroqError(f"{route.name} answered {res.status_code}: {_error_message(res)}",
+    return LLMError(f"{route.name} answered {res.status_code}: {_error_message(res)}",
                      429 if res.status_code == 429 else 502,
                      unavailable=res.status_code in UNAVAILABLE or res.status_code >= 500, retry_after=retry_after)
 
 
 def _claude(route: Route, call: Callable[[], T]) -> T:
     if not route.api_key:
-        raise GroqError(f"{route.key_setting} is not set on the server", 503, unavailable=True)
+        raise LLMError(f"{route.key_setting} is not set on the server", 503, unavailable=True)
     try:
         return call()
     except anthropic_llm.ClaudeError as e:
-        raise GroqError(str(e), 429 if e.status == 429 else 422 if e.status == 422 else 502,
+        raise LLMError(str(e), 429 if e.status == 429 else 422 if e.status == 422 else 502,
                         unavailable=e.status == 0 or e.status in UNAVAILABLE or e.status >= 500) from e
 
 

@@ -31,7 +31,7 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Vocabulary export**: `/api/vocabulary.apkg` (an Anki deck, genanki) and `/api/vocabulary.tsv`, from the
   vocabulary of saved translations.
 - **Chats** ("Ask your library"): `conversations` and `messages` in Postgres (so in the daily backup). The
-  chat is an agent (`backend/app/agent_tools.py`): with the recent turns and a list of every book, the model
+  chat is an agent (`backend/app/agent/`): with the recent turns and a list of every book, the model
   calls fixed tools (book passages, reading and lookup statistics, translations, highlights, review cards,
   the reading goal, book links, the Anki export, notes, My shelf and its collections, community posts with
   their comments, the reader's reviews; spoilers stay hidden) and answers with citations. Tools that change something
@@ -57,7 +57,7 @@ web app / PWA  ·  Android app (Capacitor, same build)
 - **Categories** ([13](13-categories.md)): a shared 3-level tree; the AI files each book after indexing (new
   categories only under existing ones, approved by an admin); the uploader or an admin can change it.
 - **AI usage** (`llm_usage`): every Groq call records its reader, purpose (translate, define, chat, chat_title,
-  search, ask), model and tokens in and out (`groq_client._record`). Readers see their own on the statistics
+  search, ask), model and tokens in and out (`llm._record`). Readers see their own on the statistics
   page and through the agent; `python -m app.cli usage` lists everyone's.
 - **Statistics** (`reading_sessions`, `lookups`, recorded on the device and sent in batches; `reader_settings`
   for the optional reading goal): `/api/stats` gives minutes per day, streaks, goal days, reading speed, time

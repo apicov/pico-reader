@@ -1,4 +1,4 @@
-"""Translating selected passages with Groq. Every translation is kept (per reader) for reading back and for
+"""Translating selected passages with the AI. Every translation is kept (per reader) for reading back and for
 later analysis; asking again for the same passage with the same settings returns the stored one."""
 
 import hashlib
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import groq_client
+from app import llm
 from app.auth import Reader, get_current_reader
 from app.db import get_db
 from app.languages import LANGUAGES
@@ -89,7 +89,7 @@ def _clean(data: dict) -> dict:
              for v in vocabulary if isinstance(v, dict) and v.get("term")][:8]
     translation = str(data.get("translation") or "").strip()
     if not translation:
-        raise groq_client.GroqError("The model returned no translation")
+        raise llm.LLMError("The model returned no translation")
     return {"translation": translation, "notes": str(data.get("notes") or "").strip(), "vocabulary": items,
             "detected_language": str(data.get("detected_language") or "").strip()[:3]}
 
@@ -109,16 +109,12 @@ def translate(body: TranslateRequest, reader: Reader = Depends(get_current_reade
     # looked up as the primary model wrote it; a fallback's answer is stored under the fallback's model, so it isn't
     # served again once the primary is back
     stored = db.execute(text(f"SELECT {_COLUMNS} FROM translations WHERE reader_email = :e AND cache_key = :k "
-                             "ORDER BY id DESC LIMIT 1"), {"e": reader.email, "k": _cache_key(body, groq_client.model())}).fetchone()
+                             "ORDER BY id DESC LIMIT 1"), {"e": reader.email, "k": _cache_key(body, llm.model())}).fetchone()
     if stored:
         return _row(stored, cached=True)
     user = f"CONTEXT:\n{body.context or body.text}\n\nPASSAGE:\n{body.text}"
-    try:
-        data, model, via = groq_client.chat_json_via(prompt(body.source_lang, body.target_lang), user,
-                                                     who=(reader.email, "translate"))
-        result = _clean(data)
-    except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e)) from e
+    data, model, via = llm.chat_json_via(prompt(body.source_lang, body.target_lang), user, who=(reader.email, "translate"))
+    result = _clean(data)
     row = db.execute(text(f"""
         INSERT INTO translations (reader_email, book_id, location, source_text, context, source_lang, target_lang,
                                   model, prompt_version, cache_key, result)
@@ -201,12 +197,9 @@ Reply with one JSON object and nothing else with exactly those {keys} keys."""
 
 @router.post("/define", response_model=Definition)
 def define(body: DefineRequest, reader: Reader = Depends(get_current_reader)):
-    try:
-        data, model, via = groq_client.chat_json_via(define_prompt(body.language, body.target_lang, bool(body.context)),
-                                                     f"WORD: {body.word}" + (f"\nSENTENCE: {body.context}" if body.context else ""),
-                                                     max_tokens=300, who=(reader.email, "define"))
-    except groq_client.GroqError as e:
-        raise HTTPException(e.status, str(e)) from e
+    data, model, via = llm.chat_json_via(define_prompt(body.language, body.target_lang, bool(body.context)),
+                                         f"WORD: {body.word}" + (f"\nSENTENCE: {body.context}" if body.context else ""),
+                                         max_tokens=300, who=(reader.email, "define"))
     meaning = str(data.get("meaning") or "").strip()
     if not meaning:
         raise HTTPException(502, "The model returned no meaning")

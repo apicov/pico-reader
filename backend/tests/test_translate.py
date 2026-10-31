@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from app import groq_client
+from app import llm
 from app.config import get_settings
 
 GOOD = {"translation": "Janna-Berta vio cómo le hablaba a su marido.", "notes": "«einreden»: insistir.",
@@ -26,7 +26,7 @@ def groq(monkeypatch):
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}], "model": json["model"],
                                          "usage": {"prompt_tokens": 120, "completion_tokens": 30}})
 
-    monkeypatch.setattr(groq_client.httpx, "post", post)
+    monkeypatch.setattr(llm.httpx, "post", post)
     yield calls, replies
     get_settings.cache_clear()
 
@@ -141,12 +141,12 @@ def test_define_a_word_of_unknown_language(client, auth_headers, groq):
 def test_a_fallback_translation_is_not_served_as_cached_later(client, auth_headers, groq, monkeypatch):
     calls, _ = groq
     answered_by = ["fallback"]
-    real = groq_client.chat_json_via
+    real = llm.chat_json_via
 
     def via(*args, **kwargs):
         data, model, _ = real(*args, **kwargs)
         return data, ("fallback-model" if answered_by[0] == "fallback" else model), answered_by[0]
-    monkeypatch.setattr(groq_client, "chat_json_via", via)
+    monkeypatch.setattr(llm, "chat_json_via", via)
     assert client.post("/api/translate", headers=auth_headers, json=BODY).json()["via"] == "fallback"
     answered_by[0] = "main"  # the primary is back: asked again, not the fallback's answer from the cache
     again = client.post("/api/translate", headers=auth_headers, json=BODY).json()

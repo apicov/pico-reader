@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app import groq_client
+from app import llm
 from app.config import get_settings
 from tests.test_search import fake_embed, fresh_query_cache, indexed_book  # noqa: F401 (fixtures)
 
@@ -43,7 +43,7 @@ def groq(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     get_settings.cache_clear()
     fake = FakeGroq()
-    monkeypatch.setattr(groq_client.httpx, "post", fake.post)
+    monkeypatch.setattr(llm.httpx, "post", fake.post)
     yield fake
     get_settings.cache_clear()
 
@@ -179,7 +179,7 @@ def test_ask_knows_the_library(client, admin_headers, indexed_book, monkeypatch)
     from app import search_service as search
     seen = {}
     monkeypatch.setattr(search, "_translated", lambda q, langs, who=None: ())
-    monkeypatch.setattr(search.groq_client, "chat_json", lambda system, user, max_tokens, who=None: (
+    monkeypatch.setattr(search.llm, "chat_json", lambda system, user, max_tokens, who=None: (
         seen.setdefault("user", user), {"answer": "You have one book."})[1:] + ("m",))
     r = client.post("/api/ask", headers=admin_headers, json={"question": "How many books do I have?"})
     assert r.json()["answer"] == "You have one book."
@@ -298,15 +298,15 @@ def test_an_answer_says_which_model_wrote_it(client, admin_headers, indexed_book
 def test_an_answer_finished_by_the_fallback_says_so(client, admin_headers, indexed_book, groq, monkeypatch):
     import httpx
 
-    from app import groq_client
+    from app import llm
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER", "groq")
     monkeypatch.setenv("LLM_FALLBACK_API_KEY", "second-key")
     get_settings.cache_clear()
-    groq_client._resting.clear()
+    llm._resting.clear()
     groq.steps += [call("reading_stats", {"period": "week"}),
                    httpx.Response(429, json={"error": {"message": "Rate limit reached"}}),  # the first key, step 2
                    say("You read 15 minutes.")]
     cid = new(client, admin_headers)
     evs = ask(client, admin_headers, cid, "How much did I read?")
     assert evs[-1][1]["models"] == ["qwen/qwen3.8-27b", "qwen/qwen3.8-27b · fallback"]
-    groq_client._resting.clear()
+    llm._resting.clear()

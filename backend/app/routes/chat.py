@@ -1,6 +1,6 @@
 """Conversations with the library: an agent that answers with the conversation so far and the app's data.
 
-One turn: the model gets the recent turns and the library overview, calls tools (agent_tools.py: book passages,
+One turn: the model gets the recent turns and the library overview, calls tools (agent.py: book passages,
 statistics, lookups, translations, highlights, review, goal) for up to MAX_ROUNDS rounds, then answers. The turn
 streams as server-sent events: tool / link / action events as they happen, then the sources, the answer text and
 done. Tools that change something are only proposed (action); /actions/{id} runs them once the reader confirms.
@@ -20,9 +20,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import groq_client
+from app import agent, llm
 from app.auth import Reader, get_current_reader
-from app.db import get_db, get_engine
+from app.db import get_db, get_engine, new_session
 from app.search_service import CITATION_RULES, Passage, books_named, library_overview
 
 logger = logging.getLogger(__name__)
@@ -146,6 +146,9 @@ def conversation(conversation_id: str, reader: Reader = Depends(get_current_read
 # --- one turn: the agent ---
 
 MAX_ROUNDS = 5  # tool rounds before the model must answer
+AGENT_MAX_TOKENS = 4000  # a step's reply: room for a whole note in a save_note call
+MAX_TOOL_RESULT = 12_000  # characters of a tool's result the model gets
+DELTA_CHARS = 24  # the answer is handed on in pieces this long
 
 
 def _history(messages: list[Message]) -> list[Message]:
@@ -159,15 +162,15 @@ def _history(messages: list[Message]) -> list[Message]:
     return list(reversed(kept))
 
 
-def _title(content: str, who: groq_client.Who = None) -> str:
+def _title(content: str, who: llm.Who = None) -> str:
     """A short title for a new conversation, in the message's language."""
     try:
-        data, _model = groq_client.chat_json(
+        data, _model = llm.chat_json(
             "Give a short title (at most 6 words) for a conversation that starts with the MESSAGE, written in the SAME "
             'language as the message. Reply with one JSON object and nothing else: {"title": string}',
             f"MESSAGE: {content}", max_tokens=60, who=who)
         return str(data.get("title") or "").strip()[:120] or content[:60]
-    except groq_client.GroqError:
+    except llm.LLMError:
         return content[:60]
 
 
@@ -195,17 +198,6 @@ Today is {{today}}. {{scope}}
 
 LIBRARY:
 {{library}}"""
-
-TOOL_LABELS = {"list_books": "library", "book_details": "book details", "search_passages": "searched the books",
-               "reading_stats": "reading statistics", "lookup_stats": "lookup statistics", "translations": "translations",
-               "highlights": "highlights", "vocabulary_due": "review cards", "reading_goal": "reading goal",
-               "open_book_at": "book link", "export_anki": "Anki export", "ai_usage": "AI usage",
-               "list_notes": "notes", "read_note": "notes", "my_shelf": "My shelf", "community_posts": "community",
-               "read_post": "community", "my_reviews": "reviews"}
-
-
-NOTE_TOOLS = {"save_note", "append_to_note"}
-
 
 def _valid_zone(tz: str) -> str:
     """The device's time zone, or UTC when Python doesn't know it (statistics are counted in its days)."""
@@ -243,13 +235,77 @@ def _scope_note(db: Session, book_ids: list[str] | None) -> str:
     return f"This conversation is about: {', '.join(titles)} (search those books unless told otherwise)."
 
 
+class AgentTurn:
+    """One answer: the model's rounds of tool calls until it answers. Tools that only read run at once; a change is
+    proposed (stored as a pending action the reader confirms). `steps` yields the events the app shows meanwhile;
+    afterwards `answer` and `extras` (tools used, links, actions, the models that answered) are set."""
+
+    def __init__(self, session: Session, ctx: agent.Context, conversation_id: str):
+        self.session, self.ctx, self.conversation_id = session, ctx, conversation_id
+        self.answer = ""
+        self.extras: dict = {"tools": [], "links": [], "actions": [], "models": []}
+
+    def steps(self, messages: list[dict]) -> Iterator[str]:
+        schemas = [t.schema() for t in agent.TOOLS.values()]
+        for _round in range(MAX_ROUNDS):
+            reply = llm.chat_tools(messages, schemas, max_tokens=AGENT_MAX_TOKENS, who=(self.ctx.reader.email, "chat"))
+            if reply.get("_model"):  # shown under the answer; more than one when the fallback took over midway
+                who_answered = reply["_model"] + (" · fallback" if reply.get("_via") == "fallback" else "")
+                if who_answered not in self.extras["models"]:
+                    self.extras["models"].append(who_answered)
+            calls = reply.get("tool_calls") or []
+            if not calls:
+                self.answer = (reply.get("content") or "").strip()
+                return
+            # the app's own keys (_route: who wrote it, _raw: Claude's blocks) go along to the next step
+            messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls,
+                             **{k: v for k, v in reply.items() if k.startswith("_")}})
+            for call in calls:
+                name = call["function"]["name"]
+                raw = call["function"].get("arguments") or "{}"
+                tool = agent.TOOLS.get(name)
+                result = yield from (self._propose(tool, raw) if tool and tool.changes else self._run(name, tool, raw))
+                messages.append({"role": "tool", "tool_call_id": call.get("id", name),
+                                 "content": json.dumps(result, ensure_ascii=False, default=str)[:MAX_TOOL_RESULT]})
+        self.answer = "I needed too many steps for that; could you ask more specifically?"
+
+    def _propose(self, tool: agent.Tool, raw: str) -> Iterator[str]:
+        """A change: stored as a pending action, shown to the reader to confirm; not run now"""
+        try:
+            args = json.loads(raw)
+        except json.JSONDecodeError:
+            args = {}
+        if tool.cites_sources:
+            # the passages its [n] cite, kept with the note; the reader sees it before confirming
+            args["_sources"] = [p.model_dump() for p in self.ctx.sources]
+        action = {"id": f"act-{uuid.uuid4()}", "label": tool.label(args) or tool.name, "status": "pending"}
+        if tool.preview:
+            action["preview"] = str(args.get(tool.preview) or "")
+        self.session.execute(text("""INSERT INTO chat_actions (id, conversation_id, tool, args, label)
+                                     VALUES (:id, :c, :t, CAST(:a AS jsonb), :l)"""),
+                             {"id": action["id"], "c": self.conversation_id, "t": tool.name, "a": json.dumps(args),
+                              "l": action["label"]})
+        self.session.commit()
+        self.extras["actions"].append(action)
+        yield _event("action", action)
+        return {"status": "proposed; the reader is asked to confirm in the chat"}
+
+    def _run(self, name: str, tool: agent.Tool | None, raw: str) -> Iterator[str]:
+        """A tool that only reads: run now; the app shows that it was used, and any link it offers"""
+        result = agent.run(self.ctx, name, raw)
+        label = (tool and tool.shown_as) or name
+        if label not in self.extras["tools"]:
+            self.extras["tools"].append(label)
+            yield _event("tool", {"name": name, "label": label})
+        if isinstance(result, dict) and "link" in result:
+            self.extras["links"].append(result["link"])
+            yield _event("link", result["link"])
+        return result
+
+
 @router.post("/{conversation_id}/messages")
 def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_current_reader),
          db: Session = Depends(get_db)):
-    from sqlalchemy.orm import sessionmaker
-
-    from app import agent_tools
-
     convo = _own(db, reader, conversation_id)
     earlier = _messages(db, conversation_id)
     content = body.content.strip()
@@ -262,75 +318,23 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
 
     def stream() -> Iterator[str]:
         # the request's session is closed once a streamed body runs: the agent gets a session of its own
-        session = sessionmaker(bind=get_engine())()
+        session = new_session()
         try:
-            ctx = agent_tools.Context(db=session, reader=reader, tz=_valid_zone(body.tz), sources=[])
+            ctx = agent.Context(db=session, reader=reader, tz=_valid_zone(body.tz), sources=[])
             today = datetime.now(ZoneInfo(ctx.tz)).date().isoformat()  # the reader's day, not the server's
             messages: list[dict] = [{"role": "system", "content": AGENT_PROMPT.format(
                 today=today, scope=_scope_note(session, book_ids), library=library_overview(session))}]
             for m in _history(earlier):
                 messages.append({"role": m.role, "content": m.content + _action_notes(m)})
             messages.append({"role": "user", "content": content})
-            schemas = [t.schema() for t in agent_tools.TOOLS.values()]
-            extras: dict = {"tools": [], "links": [], "actions": [], "models": []}  # models: the AIs that answered
-            answer = ""
-            for _round in range(MAX_ROUNDS):
-                # room for a whole note in a save_note call
-                reply = groq_client.chat_tools(messages, schemas, max_tokens=4000, who=(reader.email, "chat"))
-                if reply.get("_model"):  # shown under the answer; more than one when the fallback took over midway
-                    who_answered = reply["_model"] + (" · fallback" if reply.get("_via") == "fallback" else "")
-                    if who_answered not in extras["models"]:
-                        extras["models"].append(who_answered)
-                calls = reply.get("tool_calls") or []
-                if not calls:
-                    answer = (reply.get("content") or "").strip()
-                    break
-                # the app's own keys (_route: who wrote it, _raw: Claude's blocks) go along to the next step
-                messages.append({"role": "assistant", "content": reply.get("content") or "", "tool_calls": calls,
-                                 **{k: v for k, v in reply.items() if k.startswith("_")}})
-                for call in calls:
-                    name = call["function"]["name"]
-                    raw = call["function"].get("arguments") or "{}"
-                    tool = agent_tools.TOOLS.get(name)
-                    if tool and tool.changes:
-                        # proposed, not run: the reader confirms in the chat
-                        try:
-                            args = json.loads(raw)
-                        except json.JSONDecodeError:
-                            args = {}
-                        if name in NOTE_TOOLS:
-                            # the passages its [n] cite, kept with the note; the reader sees it before confirming
-                            args["_sources"] = [p.model_dump() for p in ctx.sources]
-                        action = {"id": f"act-{uuid.uuid4()}", "tool": name, "args": args,
-                                  "label": tool.label(args) or name, "status": "pending"}
-                        if name in NOTE_TOOLS or name == "send_to_computer":
-                            action["preview"] = str(args.get("markdown") or args.get("text") or "")
-                        session.execute(text("""INSERT INTO chat_actions (id, conversation_id, tool, args, label)
-                                                VALUES (:id, :c, :t, CAST(:a AS jsonb), :l)"""),
-                                        {"id": action["id"], "c": conversation_id, "t": name, "a": json.dumps(args),
-                                         "l": action["label"]})
-                        session.commit()
-                        extras["actions"].append({k: action[k] for k in ("id", "label", "status", "preview") if k in action})
-                        yield _event("action", extras["actions"][-1])
-                        result = {"status": "proposed; the reader is asked to confirm in the chat"}
-                    else:
-                        result = agent_tools.run(ctx, name, raw)
-                        label = TOOL_LABELS.get(name, name)
-                        if label not in extras["tools"]:
-                            extras["tools"].append(label)
-                            yield _event("tool", {"name": name, "label": label})
-                        if isinstance(result, dict) and "link" in result:
-                            extras["links"].append(result["link"])
-                            yield _event("link", result["link"])
-                    messages.append({"role": "tool", "tool_call_id": call.get("id", name),
-                                     "content": json.dumps(result, ensure_ascii=False, default=str)[:12000]})
-            else:
-                answer = "I needed too many steps for that; could you ask more specifically?"
+            turn = AgentTurn(session, ctx, conversation_id)
+            yield from turn.steps(messages)
+            answer, extras = turn.answer, turn.extras
             answer = _keep_real_citations(answer, len(ctx.sources))
             sources = [p.model_dump() for p in ctx.sources]
             yield _event("sources", sources)
-            for i in range(0, len(answer), 24):  # the answer comes in one piece from the agent: hand it on in steps
-                yield _event("delta", answer[i:i + 24])
+            for i in range(0, len(answer), DELTA_CHARS):  # the answer comes in one piece from the agent: handed on in steps
+                yield _event("delta", answer[i:i + DELTA_CHARS])
             title = _title(content, (reader.email, "chat_title")) if first else ""
             with get_engine().begin() as conn:
                 assistant_id = conn.execute(text("""
@@ -344,7 +348,7 @@ def send(conversation_id: str, body: MessageIn, reader: Reader = Depends(get_cur
                 conn.execute(text("UPDATE conversations SET updated_at = now() WHERE id = :id"), {"id": conversation_id})
             yield _event("done", {"user_message_id": user_id, "assistant_message_id": assistant_id,
                                   "title": title or convo.title, "models": extras["models"]})
-        except groq_client.GroqError as e:
+        except llm.LLMError as e:
             yield _event("error", {"message": str(e), "user_message_id": user_id})
         except Exception:  # never a stream that just stops: the app shows the error and keeps the question
             logger.exception("Answering in %s failed", conversation_id)
@@ -366,8 +370,6 @@ class ActionDecision(BaseModel):
 def decide(conversation_id: str, action_id: str, body: ActionDecision, tz: str = "UTC",
            reader: Reader = Depends(get_current_reader), db: Session = Depends(get_db)):
     """The reader confirms (or cancels) a change the agent proposed; the outcome becomes a chat message."""
-    from app import agent_tools
-
     _own(db, reader, conversation_id)
     # taken (as done or cancelled) and committed before the tool runs: tools commit their own work, so a lock
     # wouldn't last, and a second click would run the change twice
@@ -381,8 +383,8 @@ def decide(conversation_id: str, action_id: str, body: ActionDecision, tz: str =
         raise HTTPException(409, f"Already {taken.status}") if taken else HTTPException(404, "Not found")
     db.commit()
     if body.approve:
-        ctx = agent_tools.Context(db=db, reader=reader, tz=_valid_zone(tz), sources=[])
-        result = agent_tools.run(ctx, action.tool, action.args)
+        ctx = agent.Context(db=db, reader=reader, tz=_valid_zone(tz), sources=[])
+        result = agent.run(ctx, action.tool, action.args)
         if isinstance(result, dict) and "error" in result:
             content = f"Couldn't do it: {result['error']}"
             db.execute(text("UPDATE chat_actions SET status = 'failed' WHERE id = :id"), {"id": action_id})

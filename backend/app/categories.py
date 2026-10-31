@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import groq_client
+from app import llm
 
 logger = logging.getLogger(__name__)
 MAX_DEPTH = 3
@@ -152,7 +152,7 @@ def classify(db: Session, book_id: str, force: bool = False) -> dict | None:
     paths = "\n".join(n["path"] + (" (new)" if n["status"] == "suggested" else "") for n in nodes.values())
     user = (f"Title: {book.title}\nAuthor: {book.author or 'unknown'}\nLanguage: {book.language}\n"
             f"Headings: {'; '.join(headings) or 'none'}\n\nFirst pages:\n{sample or '(no text)'}\n\nCategories:\n{paths}")
-    reply, _ = groq_client.chat_json(SYSTEM, user, max_tokens=600, who=_who(db, book.uploaded_by))
+    reply, _ = llm.chat_json(SYSTEM, user, max_tokens=600, who=_who(db, book.uploaded_by))
     main, second = find(db, reply.get("category")), find(db, reply.get("second"))
     new = reply.get("new")
     if main is None and isinstance(new, dict) and str(new.get("name") or "").strip():

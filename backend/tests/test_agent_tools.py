@@ -1,12 +1,13 @@
-"""Every agent tool against real data. `agent_tools.run` turns any failure into {"error": …} for the model, so a
+"""Every agent tool against real data. `agent.run` turns any failure into {"error": …} for the model, so a
 broken query would only show as a vague answer in the chat: these tests check that no tool returns an error."""
 
 from contextlib import contextmanager
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from app import agent_tools
+from app import agent
 from app.auth import find_reader
 from app.db import get_engine
 from tests.test_annotations import HL
@@ -20,11 +21,11 @@ ME = "boss@example.com"
 @contextmanager
 def context():
     with sessionmaker(bind=get_engine())() as db:
-        yield agent_tools.Context(db=db, reader=find_reader(db, ME), tz=TZ, sources=[])
+        yield agent.Context(db=db, reader=find_reader(db, ME), tz=TZ, sources=[])
 
 
 def ok(ctx, name, **args):
-    result = agent_tools.run(ctx, name, args)
+    result = agent.run(ctx, name, args)
     assert "error" not in result, f"{name}({args}) → {result}"
     return result
 
@@ -45,7 +46,7 @@ def wolke(client, admin_headers, bucket, groq):
 
 def test_every_read_tool_runs_without_arguments(wolke):
     with context() as ctx:
-        for name, tool in agent_tools.TOOLS.items():
+        for name, tool in agent.TOOLS.items():
             if not tool.changes and not tool.parameters["required"]:
                 ok(ctx, name)
 
@@ -78,12 +79,12 @@ def test_the_read_tools_report_my_reading(wolke):
 
 def test_every_tool_that_takes_a_book_says_when_none_matches(wolke):
     with context() as ctx:
-        for name, tool in agent_tools.TOOLS.items():
+        for name, tool in agent.TOOLS.items():
             if "book" in tool.parameters["properties"] and not tool.changes:
                 args = {"book": "Kafka", "query": "x", "note": "x"}
                 args = {k: v for k, v in args.items() if k in tool.parameters["properties"]}
-                assert "No book matches 'Kafka'" in agent_tools.run(ctx, name, args).get("error", ""), name
-        assert "No reader called" in agent_tools.run(ctx, "member_lists", {"handle": "@niemand"})["error"]
+                assert "No book matches 'Kafka'" in agent.run(ctx, name, args).get("error", ""), name
+        assert "No reader called" in agent.run(ctx, "member_lists", {"handle": "@niemand"})["error"]
 
 
 def test_the_changing_tools_do_what_they_say(wolke, client, admin_headers):
@@ -103,26 +104,26 @@ def test_the_changing_tools_do_what_they_say(wolke, client, admin_headers):
 
 def test_bad_calls_and_failures_go_back_to_the_model(wolke, monkeypatch):
     with context() as ctx:
-        assert agent_tools.run(ctx, "fly_to_the_moon", {}) == {"error": "No tool 'fly_to_the_moon'"}
-        assert agent_tools.run(ctx, "reading_stats", "{not json") == {"error": "Arguments must be JSON"}
-        assert agent_tools.run(ctx, "reading_stats", {"colour": "red"})["error"].startswith("Bad arguments")
+        assert agent.run(ctx, "fly_to_the_moon", {}) == {"error": "No tool 'fly_to_the_moon'"}
+        assert agent.run(ctx, "reading_stats", "{not json") == {"error": "Arguments must be JSON"}
+        assert agent.run(ctx, "reading_stats", {"colour": "red"})["error"].startswith("Bad arguments")
 
         def broken(ctx, **_):
-            ctx.db.execute(agent_tools.text("SELECT * FROM no_such_table"))
-        monkeypatch.setattr(agent_tools.TOOLS["reading_goal"], "run", broken)
-        assert "no_such_table" in agent_tools.run(ctx, "reading_goal", {})["error"]
+            ctx.db.execute(text("SELECT * FROM no_such_table"))
+        monkeypatch.setattr(agent.TOOLS["reading_goal"], "run", broken)
+        assert "no_such_table" in agent.run(ctx, "reading_goal", {})["error"]
         assert ok(ctx, "list_books")["books"]  # rolled back: the session still works
 
         def buggy(ctx, **_):
             return len(None)  # a TypeError inside the tool is a bug, not the model's bad arguments
-        monkeypatch.setattr(agent_tools.TOOLS["reading_goal"], "run", buggy)
-        assert not agent_tools.run(ctx, "reading_goal", {})["error"].startswith("Bad arguments")
+        monkeypatch.setattr(agent.TOOLS["reading_goal"], "run", buggy)
+        assert not agent.run(ctx, "reading_goal", {})["error"].startswith("Bad arguments")
 
 
 def test_a_book_by_part_of_its_title_is_the_closest_title(wolke, client, admin_headers):
     long = make_book(client, admin_headers)
     with get_engine().begin() as c:
-        c.execute(agent_tools.text("UPDATE books SET title = 'Die Wolke und der Regen' WHERE id = :id"), {"id": long})
+        c.execute(text("UPDATE books SET title = 'Die Wolke und der Regen' WHERE id = :id"), {"id": long})
     with context() as ctx:
-        assert agent_tools.resolve_book(ctx, "die wolke")["id"] != long
-        assert agent_tools.resolve_book(ctx, "Wolke und")["id"] == long
+        assert agent.resolve_book(ctx, "die wolke")["id"] != long
+        assert agent.resolve_book(ctx, "Wolke und")["id"] == long

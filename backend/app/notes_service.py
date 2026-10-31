@@ -1,5 +1,5 @@
 """Notes: Markdown documents (summaries, outlines, Mermaid diagrams) a reader keeps, alone or about a book.
-The chat agent writes them when asked, after the reader confirms (agent_tools.save_note); the reader reads,
+The chat agent writes them when asked, after the reader confirms (app/agent/notes.py save_note); the reader reads,
 edits and deletes them in the app, and the desktop tool keeps them as .md files on their computer (`origin`
 says where a note was made). Private: nobody else sees a reader's notes."""
 

@@ -1,5 +1,5 @@
 """Settings, read from the environment (or backend/.env). Secrets live here and nowhere else:
-the app never sees an R2 or Groq key, it asks this backend for short-lived links instead."""
+the app never sees an R2 or AI key, it asks this backend for short-lived links instead."""
 
 from functools import lru_cache
 
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # The chat agent (tool calling); empty = groq_model. qwen3.8 calls several tools at once and answers well.
     groq_agent_model: str = ""
     # Which AI the app uses: "groq" (above), "gemini" (Google's OpenAI-compatible endpoint, a free tier for Flash) or
-    # "anthropic" (Claude, through the official SDK, app/anthropic_llm.py)
+    # "anthropic" (Claude, through the official SDK, app/llm/anthropic.py)
     llm_provider: str = "groq"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"

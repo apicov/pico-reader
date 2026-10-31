@@ -14,8 +14,13 @@ def get_engine() -> Engine:
     return create_engine(get_settings().database_url, pool_pre_ping=True)
 
 
+def new_session() -> Session:
+    """A session of its own (a streamed answer, the indexer, the command line); a request gets one from get_db"""
+    return sessionmaker(bind=get_engine())()
+
+
 def get_db() -> Iterator[Session]:
-    session = sessionmaker(bind=get_engine())()
+    session = new_session()
     try:
         yield session
     finally:

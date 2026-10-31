@@ -1,5 +1,5 @@
 """Claude (Anthropic's Messages API, official SDK) behind the same calls as the OpenAI-compatible providers in
-groq_client: messages and tools come in the chat-completions shape the app uses, and go back in it.
+llm: messages and tools come in the chat-completions shape the app uses, and go back in it.
 
 - The system message becomes `system`; tool results (role "tool") become one user message of `tool_result` blocks.
 - Claude thinks before answering (adaptive thinking; `effort` from ANTHROPIC_EFFORT) and its thinking counts against
@@ -91,7 +91,7 @@ def _create(api_key: str, model: str, timeout: float, max_tokens: int, system: s
 
 
 def _usage(response) -> dict[str, Any]:
-    """The chat-completions shape groq_client records: model and tokens in/out."""
+    """The chat-completions shape llm records: model and tokens in/out."""
     return {"model": response.model, "usage": {"prompt_tokens": response.usage.input_tokens,
                                               "completion_tokens": response.usage.output_tokens}}
 

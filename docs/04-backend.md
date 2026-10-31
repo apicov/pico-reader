@@ -78,7 +78,7 @@ make them part of the value):
 | `GROQ_AGENT_MODEL` | the chat agent's model (tool calling); empty = `GROQ_MODEL`. Qwen 3.8 calls several tools at once and answers well |
 
 **The AI: Groq, Gemini or Claude.** `LLM_PROVIDER` picks the provider for translations, definitions, the chat,
-search and categories (`backend/app/groq_client.py`):
+search and categories (`backend/app/llm/`):
 
 | `LLM_PROVIDER` | Settings | Notes |
 |---|---|---|
@@ -92,7 +92,7 @@ search and categories (`backend/app/groq_client.py`):
     answer text.
   - The free tier has small per-minute and per-day limits (see AI Studio). Going over them gives 429, which the app
     shows as "too many requests".
-- **Claude:** the official `anthropic` SDK (`backend/app/anthropic_llm.py`). It converts the chat's messages and
+- **Claude:** the official `anthropic` SDK (`backend/app/llm/anthropic.py`). It converts the chat's messages and
   tools to the Messages API and back.
   - **Thinking:** Claude thinks before answering; calls get room in `max_tokens` for it. In a chat step, its blocks
     (thinking included) are passed back unchanged.

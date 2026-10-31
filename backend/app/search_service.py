@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import groq_client
+from app import llm
 from app.languages import LANGUAGES
 from app.library_service import vector_literal
 from pico_core import embed
@@ -42,19 +42,19 @@ query with the same meaning (don't answer it, don't add words). Reply with one J
 
 
 @lru_cache(maxsize=256)
-def _translated(query: str, languages: tuple[str, ...], who: groq_client.Who = None) -> tuple[str, ...]:
+def _translated(query: str, languages: tuple[str, ...], who: llm.Who = None) -> tuple[str, ...]:
     """The query in the books' languages. The small embedding model matches best within one language, and
     word search only finds the book's own words, so a Spanish question about a German book needs German too."""
     names = ", ".join(f"{LANGUAGES.get(code, code)} ({code})" for code in languages)
     shape = ", ".join(f'"{code}": string' for code in languages)
-    data, _model = groq_client.chat_json(QUERY_PROMPT.format(languages=names, shape=shape), f"QUERY: {query}",
-                                         max_tokens=400, who=who)
+    data, _model = llm.chat_json(QUERY_PROMPT.format(languages=names, shape=shape), f"QUERY: {query}",
+                                 max_tokens=400, who=who)
     translations = data.get("translations") or {}
     return tuple(str(translations[c]).strip() for c in languages
                  if isinstance(translations, dict) and str(translations.get(c) or "").strip())
 
 
-def query_variants(db: Session, query: str, book_ids: list[str] | None, who: groq_client.Who = None) -> list[str]:
+def query_variants(db: Session, query: str, book_ids: list[str] | None, who: llm.Who = None) -> list[str]:
     scope = "AND b.id = ANY(:books)" if book_ids else ""
     languages = tuple(sorted(db.execute(text(f"""SELECT DISTINCT b.language FROM books b
                                                 JOIN book_index i ON i.book_id = b.id WHERE TRUE {scope}"""),
@@ -63,7 +63,7 @@ def query_variants(db: Session, query: str, book_ids: list[str] | None, who: gro
     if languages:
         try:
             variants += [v for v in _translated(query, languages, who) if v.lower() != query.lower()]
-        except groq_client.GroqError as e:
+        except llm.LLMError as e:
             logger.warning("Query not translated, searching as asked: %s", e)
     return list(dict.fromkeys(variants))  # unique, in order
 
@@ -96,7 +96,7 @@ def library_overview(db: Session) -> str:
 
 
 def retrieve(db: Session, query: str, book_ids: list[str] | None, limit: int,
-             variants: list[str] | None = None, who: groq_client.Who = None) -> list[Passage]:
+             variants: list[str] | None = None, who: llm.Who = None) -> list[Passage]:
     """The best passages for `query` (and its `variants`, the same question worded for the books' languages)."""
     variants = variants or query_variants(db, query, book_ids, who)
     vectors = embed.embed(variants, "query")

@@ -3,7 +3,7 @@
     python -m app.cli add someone@example.com "Their Name" [--admin]
     python -m app.cli remove someone@example.com
     python -m app.cli list
-    python -m app.cli usage [--days 30]      (Groq tokens per reader and purpose)
+    python -m app.cli usage [--days 30]      (AI tokens per reader and purpose)
     python -m app.cli history [--days 30]    (who added, changed, deleted or indexed which book, and when)
 
 Admins can add books and dictionaries (the desktop tool signs in as one).
@@ -13,7 +13,7 @@ import argparse
 
 from sqlalchemy import text
 
-from app.db import get_engine
+from app.db import get_engine, new_session
 
 
 def main() -> None:
@@ -57,7 +57,7 @@ def main() -> None:
                 SELECT reader_email, purpose, count(*) AS calls, sum(prompt_tokens) AS i, sum(completion_tokens) AS o
                 FROM llm_usage WHERE created_at >= now() - make_interval(days => :d)
                 GROUP BY 1, 2 ORDER BY 1, sum(prompt_tokens + completion_tokens) DESC"""), {"d": args.days}).fetchall()
-            print(f"Groq tokens, last {args.days} days")
+            print(f"AI tokens, last {args.days} days")
             print(f"{'reader':32} {'purpose':12} {'calls':>6} {'tokens in':>11} {'tokens out':>11}")
             for r in rows:
                 print(f"{r.reader_email:32} {r.purpose:12} {r.calls:>6} {r.i:>11,} {r.o:>11,}")
@@ -68,11 +68,9 @@ def main() -> None:
 
 
 def categorize(args) -> None:
-    from sqlalchemy.orm import sessionmaker
-
     from app import categories
 
-    db = sessionmaker(bind=get_engine())()
+    db = new_session()
     ids = [args.book] if args.book else [r.id for r in db.execute(text(
         "SELECT id FROM books WHERE status = 'ready' AND EXISTS (SELECT 1 FROM book_chunks c WHERE c.book_id = books.id) ORDER BY title"))]
     for book_id in ids:

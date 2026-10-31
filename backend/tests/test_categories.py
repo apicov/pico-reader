@@ -1,6 +1,6 @@
 import pytest
 
-from app import categories, groq_client
+from app import categories, llm
 from tests.test_books import run_queue, upload_epub
 from tests.test_search import fake_embed, indexed_book  # noqa: F401 (fixtures)
 
@@ -17,7 +17,7 @@ def answers(monkeypatch):
             raise reply
         return reply, "fake"
 
-    monkeypatch.setattr(groq_client, "chat_json", chat_json)
+    monkeypatch.setattr(llm, "chat_json", chat_json)
     return replies, prompts
 
 
@@ -96,7 +96,7 @@ def test_indexing_categorizes_and_survives_an_llm_failure(client, auth_headers, 
     replies.append({"category": "Literature > Young adult & children", "reason": "A story for young readers."})
     first = upload_epub(client, auth_headers)
     run_queue()
-    replies.append(groq_client.GroqError("Groq is down"))
+    replies.append(llm.LLMError("Groq is down"))
     second = upload_epub(client, auth_headers, title="Noch ein Buch")
     run_queue()
     books = {b["id"]: b for b in client.get("/api/library", headers=auth_headers).json()["books"]}
