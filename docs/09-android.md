@@ -35,9 +35,12 @@ keeps the app's data (downloaded books, dictionaries, sign-in).
 
 ## Native code
 
-`MainActivity.java` is Capacitor's activity with one change: Android's floating menu over selected text (Copy,
-Share, Select all) is emptied, so it doesn't show; the app's own panel (translate, highlight, copy, …) takes its
-place. The WebView sits in a small holder whose `startActionModeForChild` passes Android an empty menu.
+`MainActivity.java` is Capacitor's activity with one change: while a book is open, Android's floating menu over
+selected text (Copy, Share, Select all) is emptied, so it doesn't show; the app's own panel (translate, highlight,
+copy, …) takes its place. The WebView sits in a small holder whose `startActionModeForChild` passes Android an empty
+menu.
+- **Only in the book:** it checks the WebView's address (`#/read/…`, the app uses hash routes); on every other page
+  the menu is Android's own.
 - **Why not the activity hook:** the activity's `onWindowStartingActionMode` can't do it, because for a floating
   menu Android builds it from the original callback.
 - **When it's emptied:** the WebView fills the menu while preparing it, not when creating it, so both are

@@ -16,11 +16,11 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     /**
-     * Selecting text in the book opens the app's own panel (translate, highlight, copy, …), so Android's floating
-     * menu over the selection (Copy, Share, Select all) is left empty: with no items it doesn't show. The selection
-     * and its handles stay. The WebView sits in a holder that hands its own menu callback to Android: the activity's
-     * onWindowStartingActionMode can't, Android builds a floating menu from the original callback when it returns
-     * nothing. The WebView fills the menu when preparing it, not when creating it, so both are emptied.
+     * Selecting text in the book opens the app's own panel (translate, highlight, copy, …), so while a book is open
+     * (the #/read/… page) Android's floating menu over the selection (Copy, Share, Select all) is left empty: with no
+     * items it doesn't show. The selection and its handles stay. Elsewhere in the app the menu is Android's own. The
+     * WebView sits in a holder that hands its own menu callback to Android: the activity's onWindowStartingActionMode
+     * can't, Android builds a floating menu from the original callback when it returns nothing. The WebView fills the menu when preparing it, not when creating it, so both are emptied.
      */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -30,20 +30,25 @@ public class MainActivity extends BridgeActivity {
         int index = parent.indexOfChild(web);
         ViewGroup.LayoutParams params = web.getLayoutParams();
         parent.removeView(web);
-        FrameLayout holder = new NoSelectionMenu(this);
+        FrameLayout holder = new NoSelectionMenu(this, web);
         holder.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         parent.addView(holder, index, params);
     }
 
     private static final class NoSelectionMenu extends FrameLayout {
-        NoSelectionMenu(Context context) {
+        private final WebView web;
+
+        NoSelectionMenu(Context context, WebView web) {
             super(context);
+            this.web = web;
         }
 
         @Override
         public ActionMode startActionModeForChild(View originalView, ActionMode.Callback callback, int type) {
+            String url = web.getUrl();
+            boolean reading = url != null && url.contains("#/read/");
             return super.startActionModeForChild(originalView,
-                    type == ActionMode.TYPE_FLOATING ? new EmptyMenu(callback) : callback, type);
+                    type == ActionMode.TYPE_FLOATING && reading ? new EmptyMenu(callback) : callback, type);
         }
     }
 
