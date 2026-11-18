@@ -6,6 +6,8 @@ export interface TextSelection {
   anchor?: { location: string; progress: number };
   /** Inside a code block: the text as it is (lines and indentation kept) and its language, if the block says */
   code?: { text: string; language: string };
+  /** Chosen from a list to be looked up, not selected in the text */
+  picked?: boolean;
 }
 
 /** `language-python` (Markdown, EPUB), or Quarto's `sourceCode python` */

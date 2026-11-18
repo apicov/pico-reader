@@ -55,6 +55,8 @@ export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | nul
           label="Justify text" />
         <FormControlLabel control={<Switch checked={settings.markLookedUp} onChange={(e) => update({ markLookedUp: e.target.checked })} />}
           label="Underline words I looked up" />
+        <FormControlLabel control={<Switch checked={settings.autoLookup} onChange={(e) => update({ autoLookup: e.target.checked })} />}
+          label="Look up selected words" />
       </Stack>
     </Popover>
   );

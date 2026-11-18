@@ -6,6 +6,8 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import BorderColorIcon from '@mui/icons-material/BorderColor';
 import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
 import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import { useSettings } from '@/contexts/SettingsContext';
 import { DictResults } from '@/dict/DictResults';
 import type { TextSelection } from './selection';
 import { TranslationCard } from './TranslationCard';
@@ -42,9 +44,13 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
   // a word picked from a translation's vocabulary, looked up in place
   const [term, setTerm] = useState<string | null>(null);
   const [sentence, setSentence] = useState(false);
-  useEffect(() => { setTerm(null); setSentence(false); }, [selection]);
+  // with automatic lookup off: the word's entries once asked for
+  const [lookup, setLookup] = useState(false);
+  const { settings } = useSettings();
+  useEffect(() => { setTerm(null); setSentence(false); setLookup(false); }, [selection]);
 
-  const showDict = term ?? (word && !sentence ? selection.text : null);
+  const oneWord = word && !sentence;
+  const showDict = term ?? (oneWord && (settings.autoLookup || lookup || selection.picked) ? selection.text : null);
   const passage = sentence ? selection.context : selection.text;
   return (
     <Paper elevation={8} square sx={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
@@ -58,8 +64,8 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
           </IconButton>
         )}
         <Typography sx={{ flex: 1, pl: term || sentence ? 0 : 1, fontFamily: READING_FONT, fontSize: { xs: 16, sm: 18 },
-          fontWeight: showDict ? 600 : 400 }} noWrap>
-          {showDict ?? `“${passage}”`}
+          fontWeight: showDict || oneWord ? 600 : 400 }} noWrap>
+          {showDict ?? (oneWord ? selection.text : `“${passage}”`)}
         </Typography>
         <IconButton aria-label="Close" onClick={onClose} sx={{ p: { xs: 1, sm: 1.25 } }}>
           <CloseIcon sx={{ fontSize: { xs: 22, sm: 26 } }} />
@@ -89,6 +95,13 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
               record={term ? undefined : { bookId, location: selection.anchor?.location ?? location, context: selection.context }} />
             {word && !term && selection.context && selection.context !== selection.text && (
               <Button size="small" sx={{ mt: 1 }} onClick={() => setSentence(true)}>Translate the sentence</Button>
+            )}
+          </>
+        ) : oneWord ? (
+          <>
+            <Button variant="outlined" startIcon={<MenuBookIcon />} onClick={() => setLookup(true)}>Look up</Button>
+            {selection.context && selection.context !== selection.text && (
+              <Button onClick={() => setSentence(true)}>Translate the sentence</Button>
             )}
           </>
         ) : (

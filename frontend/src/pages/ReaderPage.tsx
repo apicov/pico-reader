@@ -218,7 +218,7 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
         current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)}
         annotations={annotations} onAnnotation={openAnnotation} onShare={quoteInPost}
         onSend={(a) => send({ kind: 'highlight', body: a.text, meta: { ...meta(a), heading: '' } })}
-        words={chapterWords} onWord={(word) => setSelection({ text: word, context: '' })}
+        words={chapterWords} onWord={(word) => setSelection({ text: word, context: '', picked: true })}
         onEditNote={setNoteFor} onDelete={(a) => void deleteAnnotation(a.id)} />
       {sendUi}
       <ImageViewer image={picture} onClose={() => setPicture(null)} />

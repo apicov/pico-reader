@@ -190,6 +190,25 @@ def test_looked_up_words_are_underlined_without_changing_the_page(page, book_id)
     until(lambda: frame.evaluate(seen)[0] == 0, what="the underlines gone")
 
 
+def test_with_lookup_off_a_selected_word_is_looked_up_only_on_request(page, book_id):
+    defined = []
+    page.route("**/api/define**", lambda route: (defined.append(1), route.fulfill(status=503))[1])
+    frame = open_book(page, book_id)
+    page.get_by_label("Text settings").click()
+    page.get_by_label("Look up selected words").click()
+    page.keyboard.press("Escape")
+    frame.evaluate("""() => {
+        const p = [...document.querySelectorAll('p')].find((x) => x.textContent.startsWith('Der Alarm'));
+        const range = document.createRange(); range.setStart(p.firstChild, 4); range.setEnd(p.firstChild, 9);
+        const sel = document.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    }""")
+    page.get_by_role("button", name="Look up").wait_for()
+    page.get_by_label("Copy").wait_for()
+    assert not defined  # no dictionary has it: the AI would be asked at once with lookup on
+    page.get_by_role("button", name="Look up").click()
+    until(lambda: defined, what="the word looked up")
+
+
 def pdf() -> bytes:
     """Four pages, the third landscape; on the first a link to the third and one to the web; an outline (contents)
     with an entry for the first page and one for the third (a page after it, so it can be scrolled to the top)."""

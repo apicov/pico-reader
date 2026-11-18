@@ -125,6 +125,8 @@ export const themes: ManualChapter = {
             <li><strong>Justify text</strong>: straight right edges, with hyphenation.</li>
             <li><strong>Underline words I looked up</strong>: a dotted line under words you looked up before, so you notice
               them coming back.</li>
+            <li><strong>Look up selected words</strong>: a selected word shows its dictionary entries at once. Off, the
+              panel shows <Ui>Look up</Ui> instead, for when you only want to copy.</li>
           </ul>
           <p>The settings are the same for every book, and kept on this device: a phone and a tablet can each have their own.</p>
         </>
@@ -181,7 +183,8 @@ export const selecting: ManualChapter = {
         <>
           <p>A single word shows its entries from the dictionaries installed on this device, in the book's language. An
             inflected word is also tried in its dictionary forms (<em>Häuser</em> → <em>Haus</em>, <em>hablando</em> →
-            <em> hablar</em>), and similar words are suggested when nothing matches. It works offline.</p>
+            <em> hablar</em>), and similar words are suggested when nothing matches. It works offline. With <strong>Look up
+            selected words</strong> off (<ManualLink to="themes.text">Text settings</ManualLink>), it shows them when you tap <Ui>Look up</Ui>.</p>
           <ul>
             <li>The ★ next to a dictionary puts it first from now on.</li>
             <li>No dictionary has the word? The AI explains it, marked <em>AI · not in your dictionaries</em> (needs a connection).</li>
