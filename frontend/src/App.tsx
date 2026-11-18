@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { flushEvents } from '@/services/events';
 import { flushComputer } from '@/services/computer';
 import { syncDictPrefs } from '@/dict/prefs';
+import { syncWorkspaces } from '@/services/workspaces';
 import { subscribeOnline } from '@/services/connectivity';
 import { Box, CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
@@ -74,6 +75,7 @@ function Routed() {
       void flushEvents().catch(() => undefined);
       void flushComputer().catch(() => undefined);
       void syncDictPrefs();
+      void syncWorkspaces();
     };
     flush();
     const timer = setInterval(flush, FLUSH_EVERY_MS);

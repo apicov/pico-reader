@@ -102,6 +102,27 @@ export const reading: ManualChapter = {
         </>
       ),
     },
+    {
+      id: 'workspaces',
+      title: 'Several books: workspaces',
+      body: (
+        <>
+          <p>Opening a book doesn't close the one you were reading: it joins it as a tab. With two books open or more, a
+            row under the reader's bar shows them. Tap a tab to switch, at once and at the same place; × closes one. Back
+            leaves the reader rather than going through the tabs.</p>
+          <ul>
+            <li><strong>Workspaces</strong> are sets of open books with a name, say <em>Thesis</em> or <em>German</em>.
+              The first one is called <em>Reading</em>. Tap its name at the start of the row: switch to another,
+              <Ui> New workspace…</Ui> (it starts with the book you're reading), <Ui>Rename…</Ui> or <Ui>Delete
+              workspace</Ui> (the books stay in the library).</li>
+            <li>A workspace holds up to 8 books. Up to 4 stay loaded; another one opens again in a moment, at its place.</li>
+            <li>Close the app while reading and it opens in the same book next time, with the same tabs.</li>
+            <li>Your workspaces follow your account to your other devices; each device remembers which one is open
+              there and which tab is in front.</li>
+          </ul>
+        </>
+      ),
+    },
   ],
 };
 

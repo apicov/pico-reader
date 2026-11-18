@@ -63,3 +63,13 @@ def api(signed_in: dict) -> httpx.Client:
 @pytest.fixture(scope="session")
 def book_id(api: httpx.Client) -> str:
     return next(b["id"] for b in api.get("/api/library").json()["books"] if b["title"] == TITLE)
+
+
+@pytest.fixture(autouse=True)
+def no_workspaces(api: httpx.Client):
+    """Every test starts on a new device (a new browser context) with no workspaces in the account, so tabs from
+    one test don't show in the next."""
+    from datetime import UTC, datetime
+    for w in api.get("/api/workspaces").json():
+        api.put(f"/api/workspaces/{w['id']}", json={**w, "deleted": True,
+                "updated_at": datetime.now(UTC).isoformat()}).raise_for_status()

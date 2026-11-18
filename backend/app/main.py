@@ -27,6 +27,7 @@ from app.routes import (
     stats,
     translate,
     vocabulary,
+    workspaces,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +70,7 @@ app.include_router(community.router)
 app.include_router(categories.router)
 app.include_router(notes.router)
 app.include_router(computer.router)
+app.include_router(workspaces.router)
 
 
 @app.get("/health")

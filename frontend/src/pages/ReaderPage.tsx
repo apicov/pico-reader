@@ -25,11 +25,13 @@ import { setReadingNow } from '@/reader/readingNow';
 import type { TextSelection } from '@/reader/selection';
 import { SelectionPanel } from '@/reader/SelectionPanel';
 import { TocDrawer } from '@/reader/TocDrawer';
+import { WorkspaceTabs } from '@/reader/WorkspaceTabs';
 import type { TocItem, ViewHandle } from '@/reader/types';
 import { offlineSearchEnabled } from '@/search/offlineSearch';
 import { deleteAnnotation, saveAnnotation, type Annotation } from '@/services/annotations';
 import { ensureSearchFile } from '@/services/bookCache';
 import { setShelfStatus } from '@/services/shelf';
+import { openInWorkspace } from '@/services/workspaces';
 import type { BookFormat } from '@/services/types';
 import { wordsIn } from '@/reader/seenWords';
 import { READING_THEMES, readingVars } from '@/theme/readingThemes';
@@ -47,8 +49,9 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
   const online = useOnlineStatus();
   const { settings } = useSettings();
   const book = library?.books.find((b) => b.id === bookId);
-  // the other pages offer the way back here ("Continue reading")
-  useEffect(() => { if (book) setReadingNow(book); }, [book]);
+  // the other pages offer the way back here ("Back to the book"); shown, it's the workspace's tab in front
+  useEffect(() => { if (book && active) setReadingNow(book); }, [book, active]);
+  useEffect(() => { if (active) void openInWorkspace(bookId); }, [active, bookId]);
 
   const { formats, format, choose: chooseFormat, openIn } = useBookFormat(book, jump.current?.format ?? null);
   const readingActivity = useReadingSession(book?.id, format, active);
@@ -190,6 +193,7 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
           formatLabel={formats.length > 1 && format ? FORMATS[format].label : undefined} onFormats={setFormatAnchor}
           bookmarked={!!bookmarkHere} canBookmark={!!place.place} onBookmark={toggleBookmark}
           onContents={openToc} onSettings={setSettingsAnchor} />
+        <WorkspaceTabs bookId={bookId} books={library?.books} />
       </AppBar>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {!book && library && <Alert severity="warning" sx={{ m: 2 }}>This book is no longer in the library.</Alert>}

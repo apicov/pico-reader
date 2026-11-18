@@ -52,18 +52,21 @@ function renderMath(root: HTMLElement) {
   });
 }
 
-/** The book's own CSS (book.json "styles"), applied to the chapter's text while the book is open. */
-function useBookStyles(bundle: ReflowBundle, dark: boolean) {
+let opened = 0;
+
+/** The book's own CSS (book.json "styles"), applied to the chapter's text while the book is open; `scope` is this
+ *  book's class, so books open at the same time (workspaces) don't take each other's styles. */
+function useBookStyles(bundle: ReflowBundle, dark: boolean, scope: string) {
   useEffect(() => {
     const names = (bundle.meta.styles ?? []).filter((n) => n !== 'book-dark.css' || dark);
     const els = names.map((n) => {
       const el = document.createElement('style');
-      el.textContent = scopeCss(bundle.text(n) ?? '', '.reflow');
+      el.textContent = scopeCss(bundle.text(n) ?? '', `.${scope}`);
       document.head.appendChild(el);
       return el;
     });
     return () => els.forEach((el) => el.remove());
-  }, [bundle, dark]);
+  }, [bundle, dark, scope]);
 }
 
 export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection, onImage, highlights, seenWords, style, justify, dark }: Props) {
@@ -71,7 +74,8 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
   const contentRef = useRef<HTMLDivElement>(null);
   const chapters = bundle.meta.chapters;
   const html = useMemo(() => bundle.chapterHtml(target.chapter), [bundle, target.chapter]);
-  useBookStyles(bundle, dark);
+  const [scope] = useState(() => `reflow-book-${++opened}`);
+  useBookStyles(bundle, dark, scope);
   // after following a link: where it was, to go back (gone on any other move)
   const [back, setBack] = useState<ReflowTarget | null>(null);
   const byLink = useRef(false);
@@ -165,7 +169,7 @@ export function ReflowReader({ bundle, target, onNavigate, onScroll, onSelection
 
   return (
     <div ref={scrollRef} className="reflow-scroll" style={style}>
-      <div ref={contentRef} className={`reflow${justify ? ' justify' : ''}`} lang={bundle.meta.language} onClick={onClick} />
+      <div ref={contentRef} className={`reflow ${scope}${justify ? ' justify' : ''}`} lang={bundle.meta.language} onClick={onClick} />
       <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between', maxWidth: 'var(--r-measure)', mx: 'auto',
         px: 'var(--r-margin)', pb: 6 }}>
         <Box>
