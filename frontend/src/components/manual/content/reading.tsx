@@ -108,11 +108,12 @@ export const reading: ManualChapter = {
       body: (
         <>
           <p>Opening a book doesn't close the one you were reading: it joins it as a tab. With two books open or more, a
-            row under the reader's bar shows them. Tap a tab to switch, at once and at the same place; × closes one. Back
-            leaves the reader rather than going through the tabs.</p>
+            row under the reader's bar shows them; on a wide screen held sideways, like a laptop's, they're a column on the
+            left instead. Tap a tab to switch, at once and at the same place; × closes one. Back leaves the reader rather
+            than going through the tabs.</p>
           <ul>
             <li><strong>Workspaces</strong> are sets of open books with a name, say <em>Thesis</em> or <em>German</em>.
-              The first one is called <em>Reading</em>. Tap its name at the start of the row: switch to another,
+              The first one is called <em>Reading</em>. Tap its name, first in the tabs: switch to another,
               <Ui> New workspace…</Ui> (it starts with the book you're reading), <Ui>Rename…</Ui> or <Ui>Delete
               workspace</Ui> (the books stay in the library).</li>
             <li>A workspace holds up to 8 books. Up to 4 stay loaded; another one opens again in a moment, at its place.</li>

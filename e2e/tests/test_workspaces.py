@@ -86,3 +86,23 @@ def test_named_workspaces_follow_the_account_and_the_app_opens_where_it_was_left
         p.get_by_role("menuitem", name="Thesis").wait_for()
     finally:
         other.close()
+
+
+def test_on_a_wide_screen_held_sideways_the_tabs_are_a_column_on_the_left(page, book_id, second_book):
+    open_book(page, book_id)
+    page.evaluate("() => { document.querySelector('foliate-view').dataset.kept = 'yes'; }")
+    page.goto(f"{WEB}/#/read/{second_book}")
+    until(lambda: tabs(page).count() == 2, what="two tabs")
+    tabs(page).filter(has_text=TITLE).click()
+    page.set_viewport_size({"width": 1280, "height": 720})  # a laptop
+    tablist = page.get_by_role("tablist", name="Open books")
+    until(lambda: tablist.get_attribute("aria-orientation") == "vertical", what="the tabs as a column")
+    bar = page.locator("header:visible").bounding_box()
+    box = tablist.bounding_box()
+    book = page.locator("foliate-view:visible").bounding_box()
+    assert box["y"] >= bar["y"] + bar["height"] - 1  # under the bar, not in it
+    assert box["x"] + box["width"] <= book["x"] + 1  # left of the book
+    page.set_viewport_size({"width": 420, "height": 860})  # a phone upright: a row under the bar again
+    until(lambda: tablist.get_attribute("aria-orientation") == "horizontal", what="the tabs as a row")
+    # turning the screen didn't open the book again
+    assert page.evaluate("() => document.querySelector('foliate-view').dataset.kept") == "yes"

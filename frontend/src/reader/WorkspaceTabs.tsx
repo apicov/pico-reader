@@ -11,9 +11,11 @@ import type { Book } from '@/services/types';
 import { closeTab, createWorkspace, deleteWorkspace, currentWorkspace, frontBook, openInWorkspace, renameWorkspace,
   switchWorkspace, useWorkspaces } from '@/services/workspaces';
 
-/** Under the reader's bar, with two books open or more (or more than one workspace): the workspace's name (its menu:
- *  switch, new, rename, delete) and a tab per book. Switching replaces the address, so Back leaves the reader. */
-export function WorkspaceTabs({ bookId, books }: { bookId: string; books: Book[] | undefined }) {
+/** With two books open or more (or more than one workspace): the workspace's name (its menu: switch, new, rename,
+ *  delete) and a tab per book. A row under the reader's bar, or (`side`, on a wide screen held sideways) a column on
+ *  the left, so the book keeps its height. Switching replaces the address, so Back leaves the reader. */
+export function WorkspaceTabs({ bookId, books, side = false }: { bookId: string; books: Book[] | undefined;
+                                                                    side?: boolean }) {
   const { list, current } = useWorkspaces();
   const navigate = useNavigate();
   const [menu, setMenu] = useState<HTMLElement | null>(null);
@@ -59,21 +61,33 @@ export function WorkspaceTabs({ bookId, books }: { bookId: string; books: Book[]
   const title = (id: string) => books?.find((b) => b.id === id)?.title ?? '…';
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'stretch', minHeight: 36, borderTop: 1, borderColor: 'divider' }}>
+    <Box sx={side
+      ? { display: 'flex', flexDirection: 'column', width: 200, flexShrink: 0, borderRight: 1, borderColor: 'divider' }
+      : { display: 'flex', alignItems: 'stretch', minHeight: 36, borderTop: 1, borderColor: 'divider' }}>
       <Button color="inherit" endIcon={<ArrowDropDownIcon />} aria-label={`Workspace: ${current.name}`}
         onClick={(e) => setMenu(e.currentTarget)}
-        sx={{ flexShrink: 0, maxWidth: 140, px: 1.5, fontWeight: 600, textTransform: 'none', borderRadius: 0 }}>
+        sx={{ flexShrink: 0, px: 1.5, fontWeight: 600, textTransform: 'none', borderRadius: 0,
+          ...(side ? { minHeight: 40, justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }
+            : { maxWidth: 140 }) }}>
         <Typography noWrap sx={{ fontSize: 14, fontWeight: 600 }}>{current.name}</Typography>
       </Button>
-      <Box role="tablist" aria-label="Open books" sx={{ display: 'flex', overflowX: 'auto', flex: 1, scrollbarWidth: 'none' }}>
+      <Box role="tablist" aria-label="Open books" aria-orientation={side ? 'vertical' : 'horizontal'}
+        sx={side ? { display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }
+          : { display: 'flex', overflowX: 'auto', flex: 1, scrollbarWidth: 'none' }}>
         {tabs.map((id) => {
           const selected = id === bookId;
+          const mark = selected ? 'primary.main' : 'transparent';
           return (
-            <Box key={id} sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, borderLeft: 1, borderColor: 'divider',
-              borderBottom: 2, borderBottomColor: selected ? 'primary.main' : 'transparent' }}>
+            <Box key={id} sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, borderColor: 'divider',
+              ...(side ? { minHeight: 40, borderBottom: 1, borderLeft: 3, borderLeftColor: mark }
+                : { borderLeft: 1, borderBottom: 2, borderBottomColor: mark }) }}>
               <ButtonBase role="tab" aria-selected={selected} onClick={() => !selected && show(id)}
-                sx={{ pl: 1.5, pr: 0.5, height: '100%', maxWidth: { xs: 130, sm: 220 } }}>
-                <Typography noWrap sx={{ fontSize: 14, fontWeight: selected ? 600 : 400, opacity: selected ? 1 : 0.75 }}>
+                sx={side ? { pl: 1.25, pr: 0.5, py: 0.75, alignSelf: 'stretch', flex: 1, minWidth: 0, justifyContent: 'flex-start',
+                  textAlign: 'left' }
+                  : { pl: 1.5, pr: 0.5, height: '100%', maxWidth: { xs: 130, sm: 220 } }}>
+                <Typography noWrap={!side} sx={{ fontSize: 14, fontWeight: selected ? 600 : 400, opacity: selected ? 1 : 0.75,
+                  ...(side && { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    overflowWrap: 'anywhere' }) }}>
                   {title(id)}
                 </Typography>
               </ButtonBase>

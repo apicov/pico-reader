@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppBar, Box, Button, LinearProgress, Snackbar, Typography } from '@mui/material';
+import { Alert, AppBar, Box, Button, LinearProgress, Snackbar, Typography, useMediaQuery } from '@mui/material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ImageViewer, type ViewedImage } from '@/components/ImageViewer';
 import { useSendToComputer } from '@/components/SendToComputer';
@@ -178,6 +178,8 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
 
   const colors = READING_THEMES[settings.theme];
   const dark = colors.mode === 'dark';
+  // a wide screen held sideways (a laptop): the tabs go in a column on the left, keeping the book its height
+  const side = useMediaQuery('(orientation: landscape) and (min-width: 600px)');
   const viewProps = {
     onLocation: place.report, onToc: setToc, onCurrentToc: setCurrentToc, onSelection, settings,
     vars: readingVars(settings), dark, highlights, seenWords: settings.markLookedUp ? looked : null,
@@ -193,30 +195,34 @@ export default function ReaderPage({ bookId, active }: { bookId: string; active:
           formatLabel={formats.length > 1 && format ? FORMATS[format].label : undefined} onFormats={setFormatAnchor}
           bookmarked={!!bookmarkHere} canBookmark={!!place.place} onBookmark={toggleBookmark}
           onContents={openToc} onSettings={setSettingsAnchor} />
-        <WorkspaceTabs bookId={bookId} books={library?.books} />
+        {!side && <WorkspaceTabs bookId={bookId} books={library?.books} />}
       </AppBar>
-      <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        {!book && library && <Alert severity="warning" sx={{ m: 2 }}>This book is no longer in the library.</Alert>}
-        {book && formats.length === 0 && <Alert severity="info" sx={{ m: 2 }}>This book has no format the app can show.</Alert>}
-        {phase.kind === 'loading' && <LinearProgress />}
-        {phase.kind === 'downloading' && (
-          <Box sx={{ p: 3, maxWidth: 420, mx: 'auto' }}>
-            <Typography variant="body2" sx={{ mb: 1 }}>Downloading {book?.title} for offline reading…</Typography>
-            <LinearProgress variant="determinate" value={phase.fraction * 100} />
-          </Box>
-        )}
-        {phase.kind === 'error' && (
-          <Alert severity="info" sx={{ m: 2 }} action={<Button onClick={() => navigate('/')}>Library</Button>}>{phase.message}</Alert>
-        )}
-        {phase.kind === 'ready' && phase.opened.render({ ...viewProps, initial: phase.initial }, viewRef)}
-        {selection && book && (
-          <SelectionPanel selection={selection} language={book.language} dark={dark}
-            bookId={book.id} location={selection.anchor?.location ?? place.place?.location ?? ''}
-            onHighlight={selection.anchor ? highlightSelection : undefined} onSend={sendSelection}
-            onQuote={selection.anchor && format
-              ? () => quoteInPost({ format, ...selection.anchor!, text: selection.text }) : undefined}
-            onClose={clearSelection} />
-        )}
+      {/* the same tree either way (the tabs' slot stays), so turning the screen doesn't reload the book */}
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {side && <WorkspaceTabs side bookId={bookId} books={library?.books} />}
+        <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative' }}>
+          {!book && library && <Alert severity="warning" sx={{ m: 2 }}>This book is no longer in the library.</Alert>}
+          {book && formats.length === 0 && <Alert severity="info" sx={{ m: 2 }}>This book has no format the app can show.</Alert>}
+          {phase.kind === 'loading' && <LinearProgress />}
+          {phase.kind === 'downloading' && (
+            <Box sx={{ p: 3, maxWidth: 420, mx: 'auto' }}>
+              <Typography variant="body2" sx={{ mb: 1 }}>Downloading {book?.title} for offline reading…</Typography>
+              <LinearProgress variant="determinate" value={phase.fraction * 100} />
+            </Box>
+          )}
+          {phase.kind === 'error' && (
+            <Alert severity="info" sx={{ m: 2 }} action={<Button onClick={() => navigate('/')}>Library</Button>}>{phase.message}</Alert>
+          )}
+          {phase.kind === 'ready' && phase.opened.render({ ...viewProps, initial: phase.initial }, viewRef)}
+          {selection && book && (
+            <SelectionPanel selection={selection} language={book.language} dark={dark}
+              bookId={book.id} location={selection.anchor?.location ?? place.place?.location ?? ''}
+              onHighlight={selection.anchor ? highlightSelection : undefined} onSend={sendSelection}
+              onQuote={selection.anchor && format
+                ? () => quoteInPost({ format, ...selection.anchor!, text: selection.text }) : undefined}
+              onClose={clearSelection} />
+          )}
+        </Box>
       </Box>
       <TocDrawer open={tocOpen} onClose={() => setTocOpen(false)} title={book?.title ?? ''} items={toc}
         current={currentToc} onPick={(id) => viewRef.current?.goToToc(id)}

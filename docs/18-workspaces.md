@@ -8,6 +8,9 @@ as a tab to the current workspace (or brings its tab to the front); it no longer
 - With two tabs or more (or more than one workspace), a row under the reader's bar shows the workspace's name and
   a tab per book (`frontend/src/reader/WorkspaceTabs.tsx`). Tapping a tab switches at once; × closes it, and
   closing the last one goes back to the Library. Switching replaces the address, so Back leaves the reader.
+- On a screen held sideways and at least 600 px wide (a laptop, a tablet or phone turned), the tabs are a column on
+  the left instead (`side`, from `ReaderPage`'s media query), so the book keeps its height. Turning the screen moves
+  them without reloading the book: the page's tree stays the same, only the tabs' slot changes.
 - The name opens the workspace menu: switch to another, **New workspace…** (it starts with the book being read),
   **Rename…**, **Delete workspace** (the books are untouched). The first workspace, made when a book is first
   opened, is called *Reading*.
