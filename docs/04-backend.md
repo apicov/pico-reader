@@ -112,7 +112,7 @@ search and categories (`backend/app/llm/`):
     (thinking included) are passed back unchanged.
   - **Refusals:** a request the safety classifiers decline is retried on Anthropic's recommended fallback model
     (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). If that declines too, the reader sees
-    "Claude declined to answer this".
+    "Claude declined to answer this". Haiku has no such fallback, so its requests are sent without it.
 
 **A fallback for when the first is unavailable.** `LLM_FALLBACK_PROVIDER` (`groq`, `gemini` or `anthropic`) names a
 second AI. It can be another provider, or the same one with another key or model:

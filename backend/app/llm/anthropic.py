@@ -6,7 +6,8 @@ llm: messages and tools come in the chat-completions shape the app uses, and go 
   max_tokens, so calls get room for it. A tool step's content blocks, thinking included, are passed back unchanged
   under `_raw` (the history stays append-only, as Claude's thinking blocks require).
 - A request the safety classifiers decline is re-run on Anthropic's recommended fallback model (server-side
-  `fallbacks: "default"`); a refusal after that is an error for the caller.
+  `fallbacks: "default"`); a refusal after that is an error for the caller. Haiku has no such fallback (Anthropic's
+  docs: don't send it), so its requests go without, and its refusal is the error at once.
 """
 
 import json
@@ -69,8 +70,9 @@ def _tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _create(api_key: str, model: str, timeout: float, max_tokens: int, system: str, messages: list[dict[str, Any]],
             tools: list[dict[str, Any]] | None = None):
     s = get_settings()
-    kwargs: dict[str, Any] = {"model": model, "max_tokens": max_tokens + THINKING_ROOM, "messages": messages,
-                              "betas": [FALLBACK_BETA], "fallbacks": "default"}
+    kwargs: dict[str, Any] = {"model": model, "max_tokens": max_tokens + THINKING_ROOM, "messages": messages}
+    if not model.startswith("claude-haiku"):
+        kwargs |= {"betas": [FALLBACK_BETA], "fallbacks": "default"}
     if system:
         kwargs["system"] = system
     if tools:

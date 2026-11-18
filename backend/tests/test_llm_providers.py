@@ -159,6 +159,14 @@ def test_a_claude_refusal_and_effort(claude, use):
     assert claude.sent[0]["output_config"] == {"effort": "low"}
 
 
+def test_haiku_is_asked_without_the_refusal_fallback(claude, use):
+    use(ANTHROPIC_MODEL="claude-haiku-5-5")
+    claude.replies.append(([{"type": "text", "text": '{"ok": true}'}], "end_turn"))
+    llm.chat_json("system", "user")
+    assert claude.sent[0]["model"] == "claude-haiku-5-5"
+    assert "fallbacks" not in claude.sent[0] and "betas" not in claude.sent[0]
+
+
 # --- a fallback for when the first is unavailable ---
 
 def ok(content='{"ok": true}', model="m"):
