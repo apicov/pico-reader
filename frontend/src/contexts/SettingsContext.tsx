@@ -7,6 +7,7 @@ export interface Settings {
   fontScale: number; // 1 = 18px body text
   lineHeight: number;
   margin: 'narrow' | 'normal' | 'wide';
+  lineWidth: 'narrow' | 'normal' | 'wide'; // the longest line, on a wide screen (theme/readingThemes.ts LINE_WIDTHS)
   justify: boolean;
   targetLanguage: string; // translations go into this language (ISO 639-1)
   autoReview: boolean; // looked-up words become review cards
@@ -16,7 +17,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'paper', fontScale: 1, lineHeight: 1.6, margin: 'normal', justify: false, targetLanguage: 'es',
+  theme: 'paper', fontScale: 1, lineHeight: 1.6, margin: 'normal', lineWidth: 'normal', justify: false, targetLanguage: 'es',
   autoReview: true, markLookedUp: true, autoLookup: true, nightDim: 1,
 };
 

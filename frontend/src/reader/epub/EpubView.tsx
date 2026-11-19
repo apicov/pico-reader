@@ -4,7 +4,8 @@ import 'katex/dist/katex.min.css'; // math in a note's popup (the note is shown 
 import 'foliate-js/view.js';
 import type { FoliateRelocate, FoliateTocItem, FoliateView } from 'foliate-js/view.js';
 import { Overlayer } from 'foliate-js/overlayer.js';
-import { READING_FONT, READING_THEMES } from '@/theme/readingThemes';
+import type { Settings } from '@/contexts/SettingsContext';
+import { LINE_WIDTHS, READING_FONT, READING_THEMES } from '@/theme/readingThemes';
 import { seenWordRanges } from '../seenWords';
 import { highlightColor } from '../highlightColors';
 import { tappedImage } from '../images';
@@ -18,7 +19,16 @@ import { fitDisplayMath, refitDisplayMath } from './math';
 import { asElement, hiddenNote, isNoteRef, noteHtml } from './notes';
 
 /** foliate's page layout: a column at most this wide, this much space above and below, this gap between columns */
-const PAGE = { maxInlineSize: '720px', margin: '40px', gap: '6%' };
+const PAGE = { margin: '40px', gap: '6%' };
+/** Two columns side by side (an open book) only when both can be nearly as wide as the line width: a laptop gets one */
+const columnsFor = (width: number, lineWidth: number) => (width >= lineWidth * 1.8 ? '2' : '1');
+/** The column's width and how many, for the line width setting and the room there is */
+function layColumns(renderer: HTMLElement, width: number, s: Settings) {
+  const size = `${LINE_WIDTHS[s.lineWidth]}px`;
+  const columns = columnsFor(width, LINE_WIDTHS[s.lineWidth]);
+  if (renderer.getAttribute('max-inline-size') !== size) renderer.setAttribute('max-inline-size', size);
+  if (renderer.getAttribute('max-column-count') !== columns) renderer.setAttribute('max-column-count', columns);
+}
 
 /** Underline the looked-up words (a CSS highlight: the DOM stays as it is, so EPUB positions don't move).
  *  WebViews without the Custom Highlight API (Chromium < 105) show no underlines. */
@@ -81,6 +91,10 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     host.append(view);
     viewRef.current = view;
     let closed = false;
+    // a window made wider or narrower (or the tabs moving beside the book) may change one column to two or back
+    const resized = new ResizeObserver(() => {
+      if (view.renderer) layColumns(view.renderer, host.clientWidth, settingsRef.current);
+    });
     const sectionOf = new WeakMap<Document, number>();
     // per section: what stops its observers and timers, when the view closes or foliate has dropped the section
     const stops = new Map<Document, (() => void)[]>();
@@ -153,9 +167,10 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
       if (closed) return;
       const s = settingsRef.current;
       view.renderer.setAttribute('flow', 'paginated');
-      view.renderer.setAttribute('max-inline-size', PAGE.maxInlineSize);
       view.renderer.setAttribute('margin', PAGE.margin);
       view.renderer.setAttribute('gap', PAGE.gap);
+      layColumns(view.renderer, host.clientWidth, s);
+      resized.observe(host);
       view.renderer.style.setProperty('padding-inline', MARGIN_PX[s.margin]);
       view.renderer.setStyles?.(bookCss(s));
       view.renderer.style.background = READING_THEMES[s.theme].background;
@@ -166,6 +181,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     })();
     return () => {
       closed = true;
+      resized.disconnect();
       [...stops.keys()].forEach(stop);
       view.close?.();
       view.remove();
@@ -181,6 +197,7 @@ export const EpubView = forwardRef<ViewHandle, ViewProps & { blob: Blob; languag
     view.renderer.setStyles(bookCss(settings));
     view.renderer.style.background = READING_THEMES[settings.theme].background;
     view.renderer.style.setProperty('padding-inline', MARGIN_PX[settings.margin]);
+    if (hostRef.current) layColumns(view.renderer, hostRef.current.clientWidth, settings);
     const contents = view.renderer.getContents?.() ?? [];
     requestAnimationFrame(() => contents.forEach((c) => c.doc && refitDisplayMath(c.doc)));  // a new text size
   }, [settings]);

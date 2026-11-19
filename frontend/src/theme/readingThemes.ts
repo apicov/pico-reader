@@ -78,16 +78,18 @@ export function createAppTheme(name: ReadingThemeName): Theme {
 }
 
 const MARGINS = { narrow: '12px', normal: '20px', wide: '36px' } as const;
+/** The longest line (px), per setting: on a phone the screen is narrower anyway */
+export const LINE_WIDTHS = { narrow: 600, normal: 720, wide: 960 } as const;
 
 /** CSS variables for the book text (reflow.css, and later EPUB) from the reading settings. */
 export function readingVars(s: { theme: ReadingThemeName; fontScale: number; lineHeight: number;
-                                 margin: keyof typeof MARGINS }): React.CSSProperties {
+                                 margin: keyof typeof MARGINS; lineWidth: keyof typeof LINE_WIDTHS }): React.CSSProperties {
   const c = READING_THEMES[s.theme];
   return {
     '--r-bg': c.background, '--r-text': c.text, '--r-muted': c.muted, '--r-accent': c.accent,
     '--r-divider': c.divider, '--r-code-bg': c.code.bg, '--r-code-kw': c.code.kw, '--r-code-str': c.code.str,
     '--r-code-num': c.code.num, '--r-code-fn': c.code.fn, '--r-code-type': c.code.type,
     '--r-font': READING_FONT, '--r-font-size': `${18 * s.fontScale}px`, '--r-line-height': String(s.lineHeight),
-    '--r-margin': MARGINS[s.margin], '--r-measure': '42rem',
+    '--r-margin': MARGINS[s.margin], '--r-measure': `${LINE_WIDTHS[s.lineWidth]}px`,
   } as React.CSSProperties;
 }

@@ -60,7 +60,7 @@ export const reading: ManualChapter = {
             { icon: <SwapHorizIcon />, label: 'Format', text: 'Another format of the book (only when it has several).' },
             { icon: <BookmarkBorderIcon />, label: 'Bookmark', text: 'Bookmark this place, or remove the bookmark that\'s here.' },
             { icon: <TocIcon />, label: 'Contents', text: 'The chapters, your highlights and bookmarks, and the words you looked up (next section).' },
-            { icon: <FormatSizeIcon />, label: 'Text settings', text: <>Theme, text size, spacing, margins (<ManualLink to="themes">Text and themes</ManualLink>).</> },
+            { icon: <FormatSizeIcon />, label: 'Text settings', text: <>Theme, text size, spacing, margins, line width (<ManualLink to="themes">Text and themes</ManualLink>).</> },
           ]} />
           <p>Above it is the app's bar, as on every page: <strong>Library</strong> and the tools
             (<ManualLink to="around.topbar">The top bar</ManualLink>). A chat started from a book asks about that book.
@@ -144,6 +144,9 @@ export const themes: ManualChapter = {
             <li>The five themes (next section).</li>
             <li><strong>Text size</strong> and <strong>Line spacing</strong>: sliders.</li>
             <li>Margins: <Ui>Narrow</Ui>, <Ui>Normal</Ui>, <Ui>Wide</Ui>.</li>
+            <li>Line width: how long the lines may get on a wide screen, like a laptop's: <Ui>Narrow</Ui>,
+              <Ui> Normal</Ui>, <Ui>Wide</Ui>. A phone's screen is narrower anyway. EPUB books show two columns side by
+              side only on a screen wide enough for both.</li>
             <li><strong>Justify text</strong>: straight right edges, with hyphenation.</li>
             <li><strong>Underline words I looked up</strong>: a dotted line under words you looked up before, so you notice
               them coming back.</li>

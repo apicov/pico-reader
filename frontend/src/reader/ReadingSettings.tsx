@@ -14,7 +14,7 @@ export function NightDim() {
   );
 }
 
-/** The "Aa" panel: theme, text size, spacing, margins. */
+/** The "Aa" panel: theme, text size, spacing, margins, line width. */
 export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | null; onClose: () => void }) {
   const { settings, update } = useSettings();
   return (
@@ -51,6 +51,15 @@ export function ReadingSettings({ anchor, onClose }: { anchor: HTMLElement | nul
           <ToggleButton value="normal">Normal</ToggleButton>
           <ToggleButton value="wide">Wide</ToggleButton>
         </ToggleButtonGroup>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Line width</Typography>
+          <ToggleButtonGroup exclusive size="small" fullWidth value={settings.lineWidth} aria-label="Line width"
+            onChange={(_, v: Settings['lineWidth'] | null) => v && update({ lineWidth: v })}>
+            <ToggleButton value="narrow">Narrow</ToggleButton>
+            <ToggleButton value="normal">Normal</ToggleButton>
+            <ToggleButton value="wide">Wide</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
         <FormControlLabel control={<Switch checked={settings.justify} onChange={(e) => update({ justify: e.target.checked })} />}
           label="Justify text" />
         <FormControlLabel control={<Switch checked={settings.markLookedUp} onChange={(e) => update({ markLookedUp: e.target.checked })} />}
