@@ -38,7 +38,7 @@ const changed = () => changes.emit();
 export const subscribeTranslations = changes.subscribe;
 
 export async function translate(req: {
-  text: string; context: string; source_lang: string; target_lang: string; book_id: string; location: string;
+  text: string; context: string; source_lang: string; target_lang: string; book_id: string | null; location: string;
 }): Promise<Translation> {
   const t = await api<Translation>('/api/translate', { method: 'POST', body: req });
   await db.items.put(t);

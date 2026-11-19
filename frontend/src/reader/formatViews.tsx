@@ -14,7 +14,8 @@ export interface OpenedBook {
   close(): void;
 }
 
-export const OPEN: Record<BookFormat, (file: Blob, book: Book) => Promise<OpenedBook>> = {
+/** `book`: only its language is needed (a file opened just to read has no entry in the library) */
+export const OPEN: Record<BookFormat, (file: Blob, book: Pick<Book, 'language'>) => Promise<OpenedBook>> = {
   reflow: async (file) => {
     const bundle = await ReflowBundle.open(file);
     return { render: (props, ref) => <ReflowView key="reflow" ref={ref} bundle={bundle} {...props} />, close: () => bundle.close() };

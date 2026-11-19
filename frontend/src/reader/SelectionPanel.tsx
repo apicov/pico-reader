@@ -32,7 +32,7 @@ function Action({ label, name, icon, onClick }: { label: string; name: string; i
 /** Under the text while something is selected: one word → its dictionary entries (and its sentence's
  *  translation on request); more → the passage's translation. */
 export function SelectionPanel({ selection, language, dark, bookId, location, onClose, onHighlight, onQuote, onSend }: {
-  selection: TextSelection; language: string; dark: boolean; bookId: string; location: string; onClose: () => void;
+  selection: TextSelection; language: string; dark: boolean; bookId: string | null; location: string; onClose: () => void;
   /** Absent when the selection's place isn't known (it can't be highlighted) */
   onHighlight?: () => void;
   /** Quote the selection in a community post (absent like onHighlight) */
@@ -91,7 +91,7 @@ export function SelectionPanel({ selection, language, dark, bookId, location, on
         '& .MuiButton-root + .MuiButton-root': { ml: { xs: 1, sm: 2 } } }}>
         {showDict ? (
           <>
-            <DictResults word={showDict} language={language} dark={dark}
+            <DictResults word={showDict} language={language || undefined} dark={dark}
               record={term ? undefined : { bookId, location: selection.anchor?.location ?? location, context: selection.context }} />
             {word && !term && selection.context && selection.context !== selection.text && (
               <Button size="small" sx={{ mt: 1 }} onClick={() => setSentence(true)}>Translate the sentence</Button>

@@ -11,7 +11,7 @@ def test_a_folder_of_marker_projects_becomes_several_books(page, api, tmp_path):
     marker_project(books, "Erste Probe (Anna Autor) (Z-Library)", "Erstes Kapitel")
     marker_project(books, "Zweite Probe (Berg, Otto) (Z-Library)", "Anfang")
     page.goto(f"{WEB}/#/upload")
-    page.locator("input[webkitdirectory]").set_input_files(books)
+    page.get_by_label("Choose a folder").set_input_files(books)
     first, second = page.get_by_label("Title").nth(0), page.get_by_label("Title").nth(1)
     until(lambda: first.input_value() == "Erste Probe" and second.input_value() == "Zweite Probe", what="both books listed")
     assert page.get_by_label("Author").nth(1).input_value() == "Otto Berg"
@@ -23,7 +23,7 @@ def test_a_folder_of_marker_projects_becomes_several_books(page, api, tmp_path):
     assert library["Erste Probe"]["author"] == "Anna Autor" and library["Erste Probe"]["language"] == "de"
     assert "reflow" in library["Zweite Probe"]["formats"] and "epub" not in library["Zweite Probe"]["formats"]
 
-    page.get_by_role("button", name="Open").first.click()
+    page.get_by_role("button", name="Open", exact=True).first.click()
     page.get_by_text("Der Alarm kam am Vormittag").first.wait_for()
     body = page.locator(".reflow").inner_text()
     assert "------" not in body and "<packt>" in body  # the page lines are gone; the stray tag is text
@@ -31,7 +31,7 @@ def test_a_folder_of_marker_projects_becomes_several_books(page, api, tmp_path):
 
     # choosing the same folder again: they're in the library already, so nothing is selected
     page.goto(f"{WEB}/#/upload")
-    page.locator("input[webkitdirectory]").set_input_files(books)
+    page.get_by_label("Choose a folder").set_input_files(books)
     page.get_by_text(re.compile("in the library or the list already")).first.wait_for()
     assert page.get_by_role("button", name="Upload 0 books").is_disabled()
 

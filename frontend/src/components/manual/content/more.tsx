@@ -122,6 +122,21 @@ export const adding: ManualChapter = {
       ),
     },
     {
+      id: 'just-read',
+      title: 'Just reading a file',
+      body: (
+        <>
+          <p>To read a PDF, EPUB or Markdown file without adding it: the +, then <Ui>Open a file</Ui> (or <Ui>Open a
+            Markdown folder</Ui>, for one with its pictures). It opens like a book, from the device: nothing is
+            uploaded or indexed, and it doesn't join your tabs.</p>
+          <p>Selecting text works as in a book: copy, look words up, translate. Highlights and bookmarks aren't there, as
+            the file isn't kept. <Ui>×</Ui> closes it, and then it's gone; leaving it, or closing the app, too.</p>
+          <Callout kind="note">The words you look up and the translations still go into your statistics and history,
+            as on the Dictionary page.</Callout>
+        </>
+      ),
+    },
+    {
       id: 'marker',
       title: 'Markdown from PDF converters',
       body: (

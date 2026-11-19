@@ -3,6 +3,7 @@ import { Alert, Box, Button, Card, CardContent, Checkbox, Collapse, IconButton, 
   MenuItem, Stack, TextField, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +20,7 @@ import { epubMeta, pdfMeta } from '@/upload/metadata';
 import { uploadBook, type Kind } from '@/upload/upload';
 import { foldForSearch } from '@/utils/text';
 import { readerPath } from '@/reader/jump';
+import { viewFile } from '@/reader/viewedFile';
 
 interface Item {
   source: BookSource;
@@ -190,6 +192,7 @@ export default function UploadPage() {
         </Stack>
       </Box>
       {error && <Alert severity="warning" onClose={() => setError('')}>{error}</Alert>}
+      <JustRead onNone={() => setError('No PDF, EPUB or Markdown file there.')} />
 
       {items.length > 0 && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
@@ -224,6 +227,40 @@ export default function UploadPage() {
         </Box>
       )}
     </Stack>
+  );
+}
+
+/** Opening a file only to read it (pages/ViewFilePage): not uploaded, not kept, gone when closed. Works offline. */
+function JustRead({ onNone }: { onNone: () => void }) {
+  const navigate = useNavigate();
+  const read = (list: FileList | null) => {
+    const [book] = list ? groupBooks(pickedFiles(list)) : [];
+    if (!book) { onNone(); return; }
+    viewFile(book);
+    navigate('/view');
+  };
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Just read a file</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Opens a PDF, EPUB or Markdown file from this device without adding it: nothing is uploaded, indexed or
+          kept, and it's gone when you close it. Looking words up and translating work as in a book.
+        </Typography>
+        <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Button variant="outlined" component="label" startIcon={<MenuBookOutlinedIcon />}>
+            Open a file
+            <input hidden type="file" accept=".pdf,.epub,.md,.markdown"
+              onChange={(e) => { read(e.target.files); e.target.value = ''; }} />
+          </Button>
+          <Button variant="outlined" component="label" startIcon={<FolderOpenIcon />}>
+            Open a Markdown folder
+            <input hidden type="file" {...{ webkitdirectory: '' }}
+              onChange={(e) => { read(e.target.files); e.target.value = ''; }} />
+          </Button>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
 

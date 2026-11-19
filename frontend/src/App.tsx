@@ -33,6 +33,7 @@ const BookCommunityPage = lazy(() => import('@/pages/BookCommunityPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const MyProfilePage = lazy(() => import('@/pages/MyProfilePage'));
 const CategoriesPage = lazy(() => import('@/pages/CategoriesPage'));
+const ViewFilePage = lazy(() => import('@/pages/ViewFilePage'));
 const ListPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListPage })));
 const ListEditorPage = lazy(() => import('@/pages/ListPage').then((m) => ({ default: m.ListEditorPage })));
 
@@ -96,6 +97,8 @@ function Routed() {
       ))}
       {/* the translations are the Dictionary page's second tab */}
       <Route path="/translations" element={<Navigate to="/dictionary?tab=history" replace />} />
+      {/* a file opened just to read: full screen, as a book */}
+      <Route path="/view" element={<Suspense fallback={spinner}><ViewFilePage /></Suspense>} />
       {/* the chat has its own full-screen layout */}
       <Route path="/ask" element={<AskPage />} />
       <Route path="/ask/:conversationId" element={<AskPage />} />

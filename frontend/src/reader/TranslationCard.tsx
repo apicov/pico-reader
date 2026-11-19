@@ -12,7 +12,7 @@ import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 
 /** Translate a passage on request; shows a stored translation of the same passage at once. */
 export function TranslationCard({ text, context, language, bookId, location, onTerm }: {
-  text: string; context: string; language: string; bookId: string; location: string;
+  text: string; context: string; language: string; bookId: string | null; location: string;
   onTerm?: (term: string) => void;
 }) {
   const { settings } = useSettings();
@@ -76,7 +76,7 @@ export function TranslationCard({ text, context, language, bookId, location, onT
       )}
       {result.vocabulary.length > 0 && (
         <Button size="small" startIcon={<SchoolOutlinedIcon />} sx={{ mt: 1 }} disabled={added !== null}
-          onClick={() => void Promise.all(result.vocabulary.map((v) => addCard({ language, term: v.term, meaning: v.meaning,
+          onClick={() => void Promise.all(result.vocabulary.map((v) => addCard({ language: language || result.source_lang, term: v.term, meaning: v.meaning,
             example: text, source: 'translation', book_id: bookId }))).then((r) => setAdded(r.filter(Boolean).length))}>
           {added === null ? 'Add words to review' : `${added} added to review`}
         </Button>

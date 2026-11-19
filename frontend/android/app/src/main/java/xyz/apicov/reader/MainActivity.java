@@ -17,7 +17,7 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * Selecting text in the book opens the app's own panel (translate, highlight, copy, …), so while a book is open
-     * (the #/read/… page) Android's floating menu over the selection (Copy, Share, Select all) is left empty: with no
+     * (the #/read/… page, or #/view: a file opened just to read) Android's floating menu over the selection (Copy, Share, Select all) is left empty: with no
      * items it doesn't show. The selection and its handles stay. Elsewhere in the app the menu is Android's own. The
      * WebView sits in a holder that hands its own menu callback to Android: the activity's onWindowStartingActionMode
      * can't, Android builds a floating menu from the original callback when it returns nothing. The WebView fills the menu when preparing it, not when creating it, so both are emptied.
@@ -46,7 +46,7 @@ public class MainActivity extends BridgeActivity {
         @Override
         public ActionMode startActionModeForChild(View originalView, ActionMode.Callback callback, int type) {
             String url = web.getUrl();
-            boolean reading = url != null && url.contains("#/read/");
+            boolean reading = url != null && (url.contains("#/read/") || url.contains("#/view"));
             return super.startActionModeForChild(originalView,
                     type == ActionMode.TYPE_FLOATING && reading ? new EmptyMenu(callback) : callback, type);
         }

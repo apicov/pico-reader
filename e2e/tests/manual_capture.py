@@ -330,6 +330,6 @@ def test_more_pages(world, phone, tmp_path):
     marker_project(books, "Concrete Mathematics (Graham, Knuth, Patashnik) (Z-Library)", "Recurrent Problems")
     marker_project(books, "How to Solve It (George Polya) (Z-Library)", "In the Classroom")
     phone.goto(f"{WEB}/#/upload")
-    phone.locator("input[webkitdirectory]").set_input_files(books)
+    phone.get_by_label("Choose a folder").set_input_files(books)
     until(lambda: phone.get_by_role("button", name="Upload 2 books").is_enabled(), what="both listed")
     shot(phone, "upload")
