@@ -19,9 +19,10 @@ import { fitDisplayMath, refitDisplayMath } from './math';
 import { asElement, hiddenNote, isNoteRef, noteHtml } from './notes';
 
 /** foliate's page layout: a column at most this wide, this much space above and below, this gap between columns */
-const PAGE = { margin: '40px', gap: '6%' };
-/** Two columns side by side (an open book) only when both can be nearly as wide as the line width: a laptop gets one */
-const columnsFor = (width: number, lineWidth: number) => (width >= lineWidth * 1.8 ? '2' : '1');
+const PAGE = { margin: '40px', gap: '4%' };
+/** Two columns side by side (an open book) only when both can be nearly as wide as the line width, and never on a
+ *  laptop: it gets one wide column */
+const columnsFor = (width: number, lineWidth: number) => (width >= Math.max(1300, lineWidth * 1.8) ? '2' : '1');
 /** The column's width and how many, for the line width setting and the room there is */
 function layColumns(renderer: HTMLElement, width: number, s: Settings) {
   const size = `${LINE_WIDTHS[s.lineWidth]}px`;

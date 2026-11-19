@@ -79,7 +79,7 @@ export function createAppTheme(name: ReadingThemeName): Theme {
 
 const MARGINS = { narrow: '12px', normal: '20px', wide: '36px' } as const;
 /** The longest line (px), per setting: on a phone the screen is narrower anyway */
-export const LINE_WIDTHS = { narrow: 600, normal: 720, wide: 960 } as const;
+export const LINE_WIDTHS = { narrow: 720, normal: 960, wide: 1200 } as const;
 
 /** CSS variables for the book text (reflow.css, and later EPUB) from the reading settings. */
 export function readingVars(s: { theme: ReadingThemeName; fontScale: number; lineHeight: number;

@@ -371,13 +371,13 @@ def test_a_laptop_gets_one_column_as_wide_as_the_line_width_setting_and_a_big_sc
     page.get_by_label("Text settings").click()
     page.get_by_role("group", name="Line width").get_by_role("button", name="Wide").click()
     page.keyboard.press("Escape")
-    until(lambda: page.evaluate(f"() => {renderer}.getAttribute('max-inline-size')") == "960px", what="wide lines")
+    until(lambda: page.evaluate(f"() => {renderer}.getAttribute('max-inline-size')") == "1200px", what="wide lines")
     assert page.evaluate(f"() => {renderer}.columnCount") == 1
-    page.set_viewport_size({"width": 2200, "height": 1200})
+    page.set_viewport_size({"width": 2400, "height": 1200})
     until(lambda: page.evaluate(f"() => {renderer}.columnCount") == 2, what="two columns on a big screen")
     # a Markdown book (reflow) takes the same line width
     page.set_viewport_size({"width": 1280, "height": 720})
     page.goto(f"{WEB}/#/read/{reflow_book_id}")
     text = page.locator(".reflow:visible")
     text.wait_for(timeout=30_000)
-    until(lambda: text.bounding_box()["width"] == 960, what="the Markdown book's lines as wide")
+    until(lambda: text.evaluate("el => getComputedStyle(el).maxWidth") == "1200px", what="the Markdown book's lines as wide")
